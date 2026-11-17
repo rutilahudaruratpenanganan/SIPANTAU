@@ -224,6 +224,13 @@ service cloud.firestore {
                 'perihalSuratKeluar', 'statusSelesai', 'tanggalSelesai',
                 'riwayatTindakLanjut', 'updatedAt'
               ])
+              ||
+              // Action 6: Update Registrasi Surat Masuk
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
+                'asalSurat', 'perihal', 'sifat', 'fileSuratMasuk',
+                'riwayatTindakLanjut', 'updatedAt'
+              ])
             )
           )
           || (

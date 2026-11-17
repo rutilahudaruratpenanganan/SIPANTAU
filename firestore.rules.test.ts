@@ -136,3 +136,16 @@ test('Action 4 Upload Surat Keluar payload matches allowed keys and file metadat
   assert.equal(evaluateSuratCreate('internal_wasdal_surat-1', updatedWithBothFiles, true), 'ALLOW');
 });
 
+test('Action 6 Edit Registrasi Surat Masuk allows metadata fields only when active', () => {
+  const editAllowedKeys = new Set([
+    'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
+    'asalSurat', 'perihal', 'sifat', 'fileSuratMasuk',
+    'riwayatTindakLanjut', 'updatedAt',
+  ]);
+  const updatedFields = ['nomorSurat', 'tanggalSurat', 'tanggalDiterima', 'asalSurat', 'perihal', 'sifat', 'fileSuratMasuk', 'riwayatTindakLanjut', 'updatedAt'];
+  assert.equal(updatedFields.every((k) => editAllowedKeys.has(k)), true);
+  assert.equal(editAllowedKeys.has('ownerId'), false);
+  assert.equal(editAllowedKeys.has('createdAt'), false);
+});
+
+

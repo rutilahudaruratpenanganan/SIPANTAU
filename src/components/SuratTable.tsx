@@ -14,7 +14,8 @@ import {
   AlertCircle,
   FileEdit,
   ArrowRight,
-  Calendar
+  Calendar,
+  Pencil
 } from 'lucide-react';
 import { SuratMasuk, Role, Personel, TahapTindakLanjutId } from '../types';
 import { TAHAP_TINDAK_LANJUT } from '../utils/disposisiLogic';
@@ -32,6 +33,7 @@ interface SuratTableProps {
   selectedStatus: 'all' | 'aktif' | 'selesai';
   onStatusChange: (s: 'all' | 'aktif' | 'selesai') => void;
   onOpenDetail: (surat: SuratMasuk) => void;
+  onOpenEditSurat: (surat: SuratMasuk) => void;
   onOpenDisposisi: (surat: SuratMasuk) => void;
   onOpenUploadSuratKeluar: (surat: SuratMasuk) => void;
   onOpenPdfViewer: (file: { nama: string; ukuran: string; tipe: string; tanggalUnggah: string; pengunggah: string; dataUrl?: string }) => void;
@@ -53,6 +55,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
   selectedStatus,
   onStatusChange,
   onOpenDetail,
+  onOpenEditSurat,
   onOpenDisposisi,
   onOpenUploadSuratKeluar,
   onOpenPdfViewer,
@@ -178,14 +181,14 @@ export const SuratTable: React.FC<SuratTableProps> = ({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-100/75 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-              <th className="py-3 px-4 w-12 text-center">No.</th>
-              <th className="py-3 px-4 w-36">Tanggal Surat</th>
-              <th className="py-3 px-4 w-52">Asal Surat</th>
-              <th className="py-3 px-4 min-w-[280px]">Perihal & Arahan</th>
-              <th className="py-3 px-4 w-52">Disposisi Personel</th>
-              <th className="py-3 px-4 w-48">Status Tindak Lanjut</th>
-              <th className="py-3 px-4 w-36 text-center">Berkas PDF</th>
-              <th className="py-3 px-4 w-44 text-right">Aksi</th>
+              <th className="py-3 px-2.5 w-10 text-center">No.</th>
+              <th className="py-3 px-3 w-28">Tanggal Surat</th>
+              <th className="py-3 px-3 w-44">Asal Surat</th>
+              <th className="py-3 px-3 min-w-[220px]">Perihal & Arahan</th>
+              <th className="py-3 px-3 w-40">Disposisi Personel</th>
+              <th className="py-3 px-3 w-40">Status Tindak Lanjut</th>
+              <th className="py-3 px-2.5 w-28 text-center">Berkas PDF</th>
+              <th className="py-3 px-3 text-right whitespace-nowrap">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-xs">
@@ -212,32 +215,32 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                   >
                     
                     {/* Index */}
-                    <td className="py-3.5 px-4 text-center font-mono font-medium text-slate-600">
+                    <td className="py-3.5 px-2.5 text-center font-mono font-medium text-slate-600">
                       {index + 1}
                     </td>
 
                     {/* Tanggal Surat */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <div className="font-semibold text-slate-900 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                         <span>{item.tanggalSurat}</span>
                       </div>
                     </td>
 
                     {/* Asal Surat */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-3">
                       <div className="font-semibold text-slate-900 line-clamp-2">
                         {item.asalSurat}
                       </div>
                       {item.nomorSurat && (
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[200px]" title={item.nomorSurat}>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[165px]" title={item.nomorSurat}>
                           {item.nomorSurat}
                         </div>
                       )}
                     </td>
 
                     {/* Perihal & Instruksi Disposisi */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-3">
                       <div className="text-slate-900 font-medium leading-relaxed">
                         {item.perihal}
                       </div>
@@ -262,7 +265,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                     </td>
 
                     {/* Disposisi (NEVER using 'dispo') */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-3">
                       {hasDisposisi ? (
                         <div className="space-y-1">
                           <div className="flex flex-wrap gap-1">
@@ -309,7 +312,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                     </td>
 
                     {/* Tindak Lanjut - Clean without stage clutters */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-3">
                       {item.statusSelesai ? (
                         <div className="space-y-1">
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
@@ -338,7 +341,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                     </td>
 
                     {/* Berkas PDF (Surat Masuk & Surat Keluar) */}
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-3.5 px-2.5 text-center">
                       <div className="flex flex-col items-center gap-1.5">
                         
                         {/* PDF Surat Masuk */}
@@ -382,18 +385,31 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                     </td>
 
                     {/* Aksi */}
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-1">
                         
                         {/* Detail & Tindak Lanjut */}
                         <button
                           onClick={() => onOpenDetail(item)}
-                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md font-medium text-xs transition-colors flex items-center gap-1"
+                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md font-medium text-xs transition-colors inline-flex items-center gap-1 whitespace-nowrap"
                           title="Lihat alur tindak lanjut dan perbarui status"
                         >
                           <span>Tindak Lanjut</span>
                           <ArrowRight className="w-3 h-3" />
                         </button>
+
+                        {/* Edit Registrasi Surat Masuk */}
+                        {!item.statusSelesai && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenEditSurat(item)}
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-md transition-colors"
+                            title="Edit Registrasi Surat Masuk"
+                            aria-label="Edit Registrasi Surat Masuk"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
 
                         {/* Disposisi button (Edit / Atur) */}
                         {!item.statusSelesai && (

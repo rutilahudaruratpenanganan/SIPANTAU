@@ -48,6 +48,7 @@ import {
   updatePersonelDb,
   updateStageOrCatatanDb,
   updateStatusSelesaiDb,
+  updateSuratMasukDb,
   updateWorkspacePejabatDb,
   uploadSuratKeluarDb,
 } from './services/firestoreService';
@@ -94,6 +95,7 @@ export default function App() {
 
   // Modals state
   const [isModalSuratMasukOpen, setIsModalSuratMasukOpen] = useState(false);
+  const [selectedSuratForEditId, setSelectedSuratForEditId] = useState<string | null>(null);
   const [isModalDisposisiOpen, setIsModalDisposisiOpen] = useState(false);
   const [selectedSuratForDisposisiId, setSelectedSuratForDisposisiId] = useState<string | null>(null);
 
@@ -114,6 +116,7 @@ export default function App() {
   const [isModalDeleteOpen, setIsModalDeleteOpen] = useState(false);
   const [selectedSuratForDeleteId, setSelectedSuratForDeleteId] = useState<string | null>(null);
 
+  const selectedSuratForEdit = suratList.find((s) => s.id === selectedSuratForEditId) || null;
   const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
   const selectedSuratForTindakLanjut = suratList.find((s) => s.id === selectedSuratForTindakLanjutId) || null;
   const selectedSuratForSuratKeluar = suratList.find((s) => s.id === selectedSuratForSuratKeluarId) || null;
@@ -190,6 +193,35 @@ export default function App() {
     try {
       await createSuratMasukDb(suratData, pejabatConfig);
       showToast(`Surat Masuk dari "${suratData.asalSurat || '-'}" berhasil disimpan ke database.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
+  };
+
+  // Handler: Edit Registrasi Surat Masuk
+  const handleUpdateSuratMasuk = async (suratId: string, suratData: Partial<SuratMasuk>) => {
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengubah data registrasi.');
+      return;
+    }
+
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: item.tahapSaatIni,
+        tahapNama: 'Pembaruan Data Registrasi Surat Masuk',
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan: `Data registrasi surat masuk diperbarui (No. ${suratData.nomorSurat || item.nomorSurat}, Asal: ${suratData.asalSurat || item.asalSurat}).`,
+      },
+    ];
+
+    try {
+      await updateSuratMasukDb(suratId, suratData, newRiwayat);
+      showToast(`Data registrasi surat dari "${suratData.asalSurat || item.asalSurat}" berhasil diperbarui.`);
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -678,6 +710,7 @@ export default function App() {
                   setSelectedSuratForTindakLanjutId(s.id);
                   setIsModalTindakLanjutOpen(true);
                 }}
+                onOpenEditSurat={(s) => setSelectedSuratForEditId(s.id)}
                 onOpenDisposisi={(s) => {
                   setSelectedSuratForDisposisiId(s.id);
                   setIsModalDisposisiOpen(true);
@@ -741,6 +774,7 @@ export default function App() {
                 setSelectedSuratForTindakLanjutId(s.id);
                 setIsModalTindakLanjutOpen(true);
               }}
+              onOpenEditSurat={(s) => setSelectedSuratForEditId(s.id)}
               onOpenDisposisi={(s) => {
                 setSelectedSuratForDisposisiId(s.id);
                 setIsModalDisposisiOpen(true);
@@ -870,12 +904,22 @@ export default function App() {
 
       {/* ALL MODALS */}
 
-      {/* 1. Modal Registrasi Surat Masuk */}
-      {isModalSuratMasukOpen && (
+      {/* 1. Modal Registrasi & Edit Surat Masuk */}
+      {(isModalSuratMasukOpen || selectedSuratForEdit) && (
         <ModalSuratMasuk
-          isOpen={isModalSuratMasukOpen}
-          onClose={() => setIsModalSuratMasukOpen(false)}
-          onSave={handleAddSuratMasuk}
+          isOpen={isModalSuratMasukOpen || Boolean(selectedSuratForEdit)}
+          initialSurat={selectedSuratForEdit}
+          onClose={() => {
+            setIsModalSuratMasukOpen(false);
+            setSelectedSuratForEditId(null);
+          }}
+          onSave={(suratData) => {
+            if (selectedSuratForEdit) {
+              handleUpdateSuratMasuk(selectedSuratForEdit.id, suratData);
+            } else {
+              handleAddSuratMasuk(suratData);
+            }
+          }}
           currentPengunggah={currentUser.nama}
         />
       )}
@@ -921,6 +965,7 @@ export default function App() {
             setSelectedSuratForDisposisiId(s.id);
             setIsModalDisposisiOpen(true);
           }}
+          onOpenEditSurat={(s) => setSelectedSuratForEditId(s.id)}
         />
       )}
 

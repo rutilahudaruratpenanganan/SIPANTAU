@@ -427,6 +427,42 @@ export async function createSuratMasukDb(
   }
 }
 
+export async function updateSuratMasukDb(
+  suratId: string,
+  suratData: Partial<SuratMasuk>,
+  riwayatTindakLanjut: RiwayatTindakLanjut[]
+): Promise<void> {
+  const path = `suratMasuk/${suratId}`;
+  const tanggalSurat =
+    clampStr(suratData.tanggalSurat, LIMITS.DATE_STR) ||
+    new Date().toISOString().split('T')[0];
+
+  const updatePayload: Record<string, unknown> = {
+    nomorSurat: clampStr(suratData.nomorSurat, LIMITS.NOMOR_SURAT) || 'SM/DPKP',
+    tanggalSurat,
+    tanggalDiterima: clampStr(suratData.tanggalDiterima, LIMITS.DATE_STR) || tanggalSurat,
+    asalSurat: clampStr(suratData.asalSurat, LIMITS.ASAL_SURAT) || '-',
+    perihal: clampStr(suratData.perihal, LIMITS.PERIHAL) || '-',
+    sifat: suratData.sifat || 'Biasa',
+    riwayatTindakLanjut: sanitizeRiwayat(riwayatTindakLanjut),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (suratData.fileSuratMasuk) {
+    updatePayload.fileSuratMasuk = sanitizeDokumenFile(
+      suratData.fileSuratMasuk,
+      suratId,
+      'masuk'
+    );
+  }
+
+  try {
+    await updateDoc(doc(db, 'suratMasuk', suratId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
 export async function updateDisposisiDb(
   suratId: string,
   penerimaIds: string[],

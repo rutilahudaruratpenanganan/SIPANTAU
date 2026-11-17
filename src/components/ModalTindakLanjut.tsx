@@ -15,7 +15,8 @@ import {
   Check,
   ChevronRight,
   FileEdit,
-  Send
+  Send,
+  Pencil
 } from 'lucide-react';
 import { SuratMasuk, Role, Personel, TahapTindakLanjutId } from '../types';
 import { TAHAP_TINDAK_LANJUT, LIST_TAHAP, getNextStage, canAdvanceStage, canUploadSuratKeluar } from '../utils/disposisiLogic';
@@ -33,6 +34,7 @@ interface ModalTindakLanjutProps {
   onOpenUploadSuratKeluar: (surat: SuratMasuk) => void;
   onOpenPdfViewer: (file: any) => void;
   onOpenDisposisi: (surat: SuratMasuk) => void;
+  onOpenEditSurat?: (surat: SuratMasuk) => void;
 }
 
 export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
@@ -48,6 +50,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
   onOpenUploadSuratKeluar,
   onOpenPdfViewer,
   onOpenDisposisi,
+  onOpenEditSurat,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -168,11 +171,29 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
           {/* Top Info Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div>
-              <span className="text-slate-500 font-medium block">Asal Surat & Pengirim:</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 font-medium block">Asal Surat & Pengirim:</span>
+                {!surat.statusSelesai && onOpenEditSurat && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenEditSurat(surat)}
+                    className="text-amber-700 hover:text-amber-900 font-bold underline text-[11px] inline-flex items-center gap-1"
+                    title="Edit data registrasi surat masuk"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit Surat</span>
+                  </button>
+                )}
+              </div>
               <span className="font-bold text-slate-900 text-sm">{surat.asalSurat}</span>
               <span className="text-[11px] text-slate-500 block font-mono mt-0.5">
-                No. {surat.nomorSurat}
+                No. {surat.nomorSurat} · Sifat: {surat.sifat}
               </span>
+              {surat.tanggalDiterima && (
+                <span className="text-[11px] text-slate-500 block font-mono">
+                  Diterima: {surat.tanggalDiterima}
+                </span>
+              )}
             </div>
             <div>
               <div className="flex items-center justify-between">
