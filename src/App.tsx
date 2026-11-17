@@ -664,7 +664,7 @@ export default function App() {
               onClick={() => setIsModalPersonelOpen(true)}
               className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
             >
-              Ubah Data Personel & Penandatangan (Kadis)
+              Ubah Data Personel & Penandatangan
             </button>
           </div>
         </div>
