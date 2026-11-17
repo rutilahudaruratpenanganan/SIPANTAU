@@ -173,7 +173,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
 
           <div className="text-center">
             <div className="text-slate-500">
-              Kota, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+              Bandung, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
             </div>
             <div className="font-bold text-slate-900">Ketua Tim Pengawasan dan Pengendalian Perumahan</div>
             <div className="h-16"></div>
