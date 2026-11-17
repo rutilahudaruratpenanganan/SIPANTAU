@@ -1,0 +1,270 @@
+{
+  "entities": {
+    "WorkspaceConfig": {
+      "title": "WorkspaceConfig",
+      "description": "Konfigurasi pejabat penandatangan dan status inisialisasi workspace per pengguna",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID pemilik workspace"
+        },
+        "seeded": {
+          "type": "boolean",
+          "description": "Penanda apakah data awal sudah pernah disemai"
+        },
+        "kepalaDinas": {
+          "type": "object",
+          "description": "Data pejabat Kepala Dinas"
+        },
+        "kepalaBidang": {
+          "type": "object",
+          "description": "Data pejabat Kepala Bidang"
+        },
+        "ketuaTim": {
+          "type": "object",
+          "description": "Data pejabat Ketua Tim"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp pembuatan"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp pembaruan"
+        }
+      },
+      "required": ["ownerId", "seeded", "kepalaDinas", "kepalaBidang", "ketuaTim", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Informasi profil pribadi pengguna (PII terisolasi)",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "Personel": {
+      "title": "Personel",
+      "description": "Data personel tim pengawasan dan pengendalian perumahan",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nama": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "nip": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "jabatan": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "peran": {
+          "type": "string",
+          "enum": ["ketua_tim", "staf"]
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "isKetuaTim": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "nama", "jabatan", "peran", "createdAt", "updatedAt"]
+    },
+    "SuratMasuk": {
+      "title": "SuratMasuk",
+      "description": "Catatan surat masuk, disposisi Ketua Tim, progres tindak lanjut 7 tahap, dan lampiran surat",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nomorAgenda": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "nomorSurat": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "tanggalSurat": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "tanggalDiterima": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "asalSurat": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "perihal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "sifat": {
+          "type": "string",
+          "enum": ["Biasa", "Penting", "Segera", "Sangat Segera", "Rahasia"]
+        },
+        "tanggalDisposisi": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "penerimaDisposisiIds": {
+          "type": "array",
+          "description": "Maksimal 30 ID personel penerima disposisi"
+        },
+        "penerimaDisposisiNama": {
+          "type": "array",
+          "description": "Maksimal 30 nama personel penerima disposisi"
+        },
+        "instruksiDisposisi": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "catatanDisposisiKetuaTim": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "tenggatWaktu": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "tahapSaatIni": {
+          "type": "integer",
+          "enum": [1, 2, 3, 4, 5, 6, 7]
+        },
+        "statusSelesai": {
+          "type": "boolean"
+        },
+        "tanggalSelesai": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "riwayatTindakLanjut": {
+          "type": "array",
+          "description": "Riwayat tindak lanjut maksimal 50 entri"
+        },
+        "fileSuratMasuk": {
+          "type": "object",
+          "description": "Metadata berkas PDF surat masuk"
+        },
+        "fileSuratKeluar": {
+          "type": "object",
+          "description": "Metadata berkas PDF surat keluar"
+        },
+        "nomorSuratKeluar": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "tanggalSuratKeluar": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "perihalSuratKeluar": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "nomorSurat",
+        "tanggalSurat",
+        "tanggalDiterima",
+        "asalSurat",
+        "perihal",
+        "sifat",
+        "penerimaDisposisiIds",
+        "penerimaDisposisiNama",
+        "tahapSaatIni",
+        "statusSelesai",
+        "riwayatTindakLanjut",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/WorkspaceConfig" },
+      "description": "Konfigurasi pejabat struktural dan status seeding per workspace pengguna"
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Data profil PII pengguna yang terisolasi"
+    },
+    "/personel/{personelId}": {
+      "schema": { "$ref": "#/entities/Personel" },
+      "description": "Daftar personel pengawasan dan pengendalian perumahan milik workspace"
+    },
+    "/suratMasuk/{suratId}": {
+      "schema": { "$ref": "#/entities/SuratMasuk" },
+      "description": "Daftar surat masuk, disposisi, dan tindak lanjut"
+    }
+  }
+}

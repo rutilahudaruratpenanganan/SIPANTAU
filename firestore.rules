@@ -1,0 +1,299 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Global Hardened Primitives
+    // ------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isVerified() && request.auth.uid == uid;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified() && request.auth.token.email == 'rutilahudaruratpenanganan@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isRequiredString(data, key, minLen, maxLen) {
+      return (key in data) && (data[key] is string) && data[key].size() >= minLen && data[key].size() <= maxLen;
+    }
+
+    function isValidPejabatEntry(entry, requireInstansi) {
+      return entry is map
+        && entry.keys().hasAll(requireInstansi ? ['nama', 'nip', 'jabatan', 'instansi'] : ['nama', 'nip', 'jabatan'])
+        && entry.keys().hasOnly(requireInstansi ? ['nama', 'nip', 'jabatan', 'instansi'] : ['nama', 'nip', 'jabatan'])
+        && isRequiredString(entry, 'nama', 1, 150)
+        && isRequiredString(entry, 'nip', 0, 60)
+        && isRequiredString(entry, 'jabatan', 1, 200)
+        && (!requireInstansi || isRequiredString(entry, 'instansi', 1, 200));
+    }
+
+    function isValidDokumenFile(docMap) {
+      return docMap is map
+        && docMap.keys().hasAll(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah'])
+        && docMap.keys().hasOnly(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah', 'dataUrl'])
+        && isRequiredString(docMap, 'nama', 1, 255)
+        && isRequiredString(docMap, 'ukuran', 1, 40)
+        && isRequiredString(docMap, 'tipe', 1, 100)
+        && isRequiredString(docMap, 'tanggalUnggah', 1, 40)
+        && isRequiredString(docMap, 'pengunggah', 1, 150)
+        && isOptionalString(docMap, 'dataUrl', 250000);
+    }
+
+    // ------------------------------------------------------------------
+    // Entity Validation Blueprints (Anti-Update-Gap)
+    // ------------------------------------------------------------------
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && isRequiredString(data, 'email', 3, 200)
+        && isOptionalString(data, 'displayName', 150)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspaceConfig(data, workspaceId) {
+      return data.keys().hasAll(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && data.ownerId == workspaceId
+        && data.seeded is bool
+        && isValidPejabatEntry(data.kepalaDinas, true)
+        && isValidPejabatEntry(data.kepalaBidang, false)
+        && isValidPejabatEntry(data.ketuaTim, false)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPersonel(data) {
+      return data.keys().hasAll(['ownerId', 'nama', 'jabatan', 'peran', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isRequiredString(data, 'nama', 1, 150)
+        && isOptionalString(data, 'nip', 60)
+        && isRequiredString(data, 'jabatan', 1, 200)
+        && (data.peran in ['ketua_tim', 'staf'])
+        && isOptionalString(data, 'email', 150)
+        && (!('isKetuaTim' in data) || data.isKetuaTim is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSuratMasuk(data) {
+      return data.keys().hasAll([
+          'ownerId', 'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
+          'asalSurat', 'perihal', 'sifat',
+          'penerimaDisposisiIds', 'penerimaDisposisiNama',
+          'tahapSaatIni', 'statusSelesai', 'riwayatTindakLanjut',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'nomorAgenda', 'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
+          'asalSurat', 'perihal', 'sifat', 'tanggalDisposisi',
+          'penerimaDisposisiIds', 'penerimaDisposisiNama',
+          'instruksiDisposisi', 'catatanDisposisiKetuaTim', 'tenggatWaktu',
+          'tahapSaatIni', 'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut',
+          'fileSuratMasuk', 'fileSuratKeluar', 'nomorSuratKeluar',
+          'tanggalSuratKeluar', 'perihalSuratKeluar',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isOptionalString(data, 'nomorAgenda', 100)
+        && isRequiredString(data, 'nomorSurat', 1, 150)
+        && isRequiredString(data, 'tanggalSurat', 4, 40)
+        && isRequiredString(data, 'tanggalDiterima', 4, 40)
+        && isRequiredString(data, 'asalSurat', 1, 250)
+        && isRequiredString(data, 'perihal', 1, 1500)
+        && (data.sifat in ['Biasa', 'Penting', 'Segera', 'Sangat Segera', 'Rahasia'])
+        && isOptionalString(data, 'tanggalDisposisi', 40)
+        && data.penerimaDisposisiIds is list
+        && data.penerimaDisposisiIds.size() <= 30
+        && (data.penerimaDisposisiIds.size() == 0 || (data.penerimaDisposisiIds[0] is string && data.penerimaDisposisiIds[0].size() <= 128))
+        && data.penerimaDisposisiNama is list
+        && data.penerimaDisposisiNama.size() <= 30
+        && (data.penerimaDisposisiNama.size() == 0 || (data.penerimaDisposisiNama[0] is string && data.penerimaDisposisiNama[0].size() <= 150))
+        && isOptionalString(data, 'instruksiDisposisi', 1500)
+        && isOptionalString(data, 'catatanDisposisiKetuaTim', 1500)
+        && isOptionalString(data, 'tenggatWaktu', 40)
+        && (data.tahapSaatIni is int && data.tahapSaatIni >= 1 && data.tahapSaatIni <= 7)
+        && data.statusSelesai is bool
+        && isOptionalString(data, 'tanggalSelesai', 40)
+        && data.riwayatTindakLanjut is list
+        && data.riwayatTindakLanjut.size() <= 50
+        && (data.riwayatTindakLanjut.size() == 0 || data.riwayatTindakLanjut[0] is map)
+        && (!('fileSuratMasuk' in data) || isValidDokumenFile(data.fileSuratMasuk))
+        && (!('fileSuratKeluar' in data) || isValidDokumenFile(data.fileSuratKeluar))
+        && isOptionalString(data, 'nomorSuratKeluar', 150)
+        && isOptionalString(data, 'tanggalSuratKeluar', 40)
+        && isOptionalString(data, 'perihalSuratKeluar', 1000)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // ------------------------------------------------------------------
+    // Collection Rules
+    // ------------------------------------------------------------------
+
+    // 1. User Private Profile (PII strictly isolated to owner or admin)
+    match /users/{userId}/private/{docId} {
+      allow get: if isValidId(userId) && docId == 'info' && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && docId == 'info'
+        && isOwner(userId)
+        && isValidUserPrivateInfo(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && docId == 'info'
+        && isOwner(userId)
+        && isValidUserPrivateInfo(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // 2. Workspace Config (Pejabat Struktural & Seed State)
+    match /workspaces/{workspaceId} {
+      allow get: if isValidId(workspaceId) && (isOwner(workspaceId) || isAdmin());
+      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(workspaceId)
+        && isOwner(workspaceId)
+        && isValidWorkspaceConfig(incoming(), workspaceId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(workspaceId)
+        && (isOwner(workspaceId) || isAdmin())
+        && isValidWorkspaceConfig(incoming(), workspaceId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly(['kepalaDinas', 'kepalaBidang', 'ketuaTim', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['seeded', 'updatedAt'])
+        );
+      allow delete: if false;
+    }
+
+    // 3. Personel Tim
+    match /personel/{personelId} {
+      allow get: if isValidId(personelId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(personelId)
+        && isVerified()
+        && isValidPersonel(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(personelId)
+        && isVerified()
+        && isValidPersonel(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && (
+          isAdmin()
+          || incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'updatedAt'])
+        );
+      allow delete: if isValidId(personelId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // 4. Surat Masuk & Disposisi
+    match /suratMasuk/{suratId} {
+      allow get: if isValidId(suratId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(suratId)
+        && isVerified()
+        && isValidSuratMasuk(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(suratId)
+        && isVerified()
+        && isValidSuratMasuk(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && (
+          isAdmin()
+          || (
+            // Terminal state lock: once statusSelesai == true, only explicit reopen allowed
+            existing().statusSelesai == false && (
+              // Action 1: Update Disposisi & Instruksi
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'penerimaDisposisiIds', 'penerimaDisposisiNama', 'instruksiDisposisi',
+                'catatanDisposisiKetuaTim', 'tanggalDisposisi', 'tenggatWaktu',
+                'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
+              ])
+              ||
+              // Action 2: Advance / Set Stage or Add Catatan
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
+              ])
+              ||
+              // Action 3: Complete Tindak Lanjut
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
+              ])
+              ||
+              // Action 4: Upload Surat Keluar
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'fileSuratKeluar', 'nomorSuratKeluar', 'tanggalSuratKeluar',
+                'perihalSuratKeluar', 'statusSelesai', 'tanggalSelesai',
+                'riwayatTindakLanjut', 'updatedAt'
+              ])
+            )
+          )
+          || (
+            // Action 5: Reopen / Change Status Selesai from Terminal State
+            existing().statusSelesai == true
+            && incoming().statusSelesai == false
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(suratId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}

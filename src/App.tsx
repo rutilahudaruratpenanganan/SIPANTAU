@@ -34,56 +34,51 @@ import {
   calculateDashboardStats, 
   TAHAP_TINDAK_LANJUT 
 } from './utils/disposisiLogic';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
-
-const STORAGE_KEYS = {
-  SURAT: 'sipantau_wasdal_surat_v2',
-  PERSONEL: 'sipantau_wasdal_personel_v2',
-  PEJABAT: 'sipantau_wasdal_pejabat_v2',
-};
+import { CheckCircle2, AlertCircle, Building2, ShieldCheck, Loader2, LogIn } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { auth, googleProvider } from './firebase';
+import {
+  createPersonelDb,
+  createSuratMasukDb,
+  deletePersonelDb,
+  deleteSuratDb,
+  ensureWorkspaceInitialized,
+  subscribePersonel,
+  subscribeSuratMasuk,
+  subscribeWorkspace,
+  updateDisposisiDb,
+  updatePersonelDb,
+  updateStageOrCatatanDb,
+  updateStatusSelesaiDb,
+  updateWorkspacePejabatDb,
+  uploadSuratKeluarDb,
+} from './services/firestoreService';
 
 export default function App() {
-  // Load state from localStorage or initial seed
-  const [suratList, setSuratList] = useState<SuratMasuk[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SURAT);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved surat', e);
-      }
-    }
-    return INITIAL_SURAT_MASUK;
-  });
+  // Firebase Authentication & Workspace Loading State
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [asyncError, setAsyncError] = useState<Error | null>(null);
 
-  const [personelList, setPersonelList] = useState<Personel[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PERSONEL);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved personel', e);
-      }
-    }
-    return INITIAL_PERSONEL;
-  });
+  if (asyncError) {
+    throw asyncError;
+  }
 
-  const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PEJABAT);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved pejabat', e);
-      }
-    }
-    return INITIAL_PEJABAT;
-  });
+  // Real-time Firestore-backed state
+  const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
+  const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
+  const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
 
-  // Current session user and role
-  const [currentUser, setCurrentUser] = useState<Personel>(() => {
-    return personelList.find((p) => p.isKetuaTim) || personelList[0];
-  });
+  // Active simulated role/personel inside workspace
+  const [activePersonelId, setActivePersonelId] = useState<string>('');
+  const currentUser: Personel =
+    personelList.find((p) => p.id === activePersonelId) ||
+    personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim') ||
+    personelList[0] ||
+    INITIAL_PERSONEL[0];
   const currentRole: Role = currentUser.peran;
 
   // Active navigation tab
@@ -98,13 +93,13 @@ export default function App() {
   // Modals state
   const [isModalSuratMasukOpen, setIsModalSuratMasukOpen] = useState(false);
   const [isModalDisposisiOpen, setIsModalDisposisiOpen] = useState(false);
-  const [selectedSuratForDisposisi, setSelectedSuratForDisposisi] = useState<SuratMasuk | null>(null);
+  const [selectedSuratForDisposisiId, setSelectedSuratForDisposisiId] = useState<string | null>(null);
 
   const [isModalTindakLanjutOpen, setIsModalTindakLanjutOpen] = useState(false);
-  const [selectedSuratForTindakLanjut, setSelectedSuratForTindakLanjut] = useState<SuratMasuk | null>(null);
+  const [selectedSuratForTindakLanjutId, setSelectedSuratForTindakLanjutId] = useState<string | null>(null);
 
   const [isModalUploadSuratKeluarOpen, setIsModalUploadSuratKeluarOpen] = useState(false);
-  const [selectedSuratForSuratKeluar, setSelectedSuratForSuratKeluar] = useState<SuratMasuk | null>(null);
+  const [selectedSuratForSuratKeluarId, setSelectedSuratForSuratKeluarId] = useState<string | null>(null);
 
   const [isModalPersonelOpen, setIsModalPersonelOpen] = useState(false);
 
@@ -112,10 +107,16 @@ export default function App() {
   const [selectedFileForViewer, setSelectedFileForViewer] = useState<DokumenFile | null>(null);
 
   const [isModalLembarDisposisiOpen, setIsModalLembarDisposisiOpen] = useState(false);
-  const [selectedSuratForLembar, setSelectedSuratForLembar] = useState<SuratMasuk | null>(null);
+  const [selectedSuratForLembarId, setSelectedSuratForLembarId] = useState<string | null>(null);
 
   const [isModalDeleteOpen, setIsModalDeleteOpen] = useState(false);
-  const [selectedSuratForDelete, setSelectedSuratForDelete] = useState<SuratMasuk | null>(null);
+  const [selectedSuratForDeleteId, setSelectedSuratForDeleteId] = useState<string | null>(null);
+
+  const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
+  const selectedSuratForTindakLanjut = suratList.find((s) => s.id === selectedSuratForTindakLanjutId) || null;
+  const selectedSuratForSuratKeluar = suratList.find((s) => s.id === selectedSuratForSuratKeluarId) || null;
+  const selectedSuratForLembar = suratList.find((s) => s.id === selectedSuratForLembarId) || null;
+  const selectedSuratForDelete = suratList.find((s) => s.id === selectedSuratForDeleteId) || null;
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -125,55 +126,108 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Sync to localStorage
+  // Track Firebase Auth State
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SURAT, JSON.stringify(suratList));
-  }, [suratList]);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setAuthReady(true);
+      if (!user) {
+        setDbReady(false);
+        setSuratList([]);
+        setPersonelList(INITIAL_PERSONEL);
+        setPejabatConfig(INITIAL_PEJABAT);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
+  // Initialize workspace and attach Firestore listeners only when authenticated
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PERSONEL, JSON.stringify(personelList));
-  }, [personelList]);
+    if (!authReady || !firebaseUser) return;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PEJABAT, JSON.stringify(pejabatConfig));
-  }, [pejabatConfig]);
+    let cancelled = false;
+    let unsubWorkspace: (() => void) | undefined;
+    let unsubPersonel: (() => void) | undefined;
+    let unsubSurat: (() => void) | undefined;
+
+    (async () => {
+      try {
+        await ensureWorkspaceInitialized(firebaseUser);
+        if (cancelled) return;
+
+        unsubWorkspace = subscribeWorkspace(
+          firebaseUser.uid,
+          (cfg) => setPejabatConfig(cfg),
+          (err) => setAsyncError(err)
+        );
+        unsubPersonel = subscribePersonel(
+          firebaseUser.uid,
+          (list) => {
+            if (list.length > 0) setPersonelList(list);
+          },
+          (err) => setAsyncError(err)
+        );
+        unsubSurat = subscribeSuratMasuk(
+          firebaseUser.uid,
+          (list) => {
+            setSuratList(list);
+            setDbReady(true);
+          },
+          (err) => setAsyncError(err)
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setAsyncError(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubWorkspace?.();
+      unsubPersonel?.();
+      unsubSurat?.();
+    };
+  }, [authReady, firebaseUser]);
+
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code || '';
+      if (code === 'auth/unauthorized-domain') {
+        setAuthError(
+          'Domain ini belum terdaftar di Firebase Console (Authentication → Settings → Authorized domains). Tambahkan domain Vercel Anda terlebih dahulu.'
+        );
+      } else if (code === 'auth/popup-closed-by-user') {
+        setAuthError('Login dibatalkan sebelum selesai. Silakan coba lagi.');
+      } else {
+        setAuthError(err instanceof Error ? err.message : 'Gagal masuk dengan Google.');
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+  };
 
   // Handler: Tambah Surat Masuk
-  const handleAddSuratMasuk = (suratData: Partial<SuratMasuk>) => {
-    const newSurat: SuratMasuk = {
-      id: `surat-${Date.now()}`,
-      nomorAgenda: suratData.nomorAgenda || '',
-      nomorSurat: suratData.nomorSurat || 'SM/DPKP',
-      tanggalSurat: suratData.tanggalSurat || new Date().toISOString().split('T')[0],
-      tanggalDiterima: suratData.tanggalDiterima || suratData.tanggalSurat || new Date().toISOString().split('T')[0],
-      asalSurat: suratData.asalSurat || '',
-      perihal: suratData.perihal || '',
-      sifat: suratData.sifat || 'Biasa',
-      penerimaDisposisiIds: [],
-      penerimaDisposisiNama: [],
-      tahapSaatIni: 1, // Stage 1: Disposisi Diterima Dari Kepala Bidang Perumahan
-      statusSelesai: false,
-      fileSuratMasuk: suratData.fileSuratMasuk,
-      riwayatTindakLanjut: [
-        {
-          id: `r-${Date.now()}-1`,
-          tahapId: 1,
-          tahapNama: TAHAP_TINDAK_LANJUT[1].nama,
-          tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          aktor: pejabatConfig.kepalaBidang.nama,
-          catatan: 'Disposisi naskah dinas masuk diterima dari Kepala Bidang Perumahan.',
-        },
-      ],
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-    };
-
-    setSuratList([newSurat, ...suratList]);
-    showToast(`Surat Masuk dari "${newSurat.asalSurat}" berhasil diregistrasi.`);
+  const handleAddSuratMasuk = async (suratData: Partial<SuratMasuk>) => {
+    if (!firebaseUser) return;
+    try {
+      await createSuratMasukDb(firebaseUser.uid, suratData, pejabatConfig);
+      showToast(`Surat Masuk dari "${suratData.asalSurat || '-'}" berhasil disimpan ke database.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Disposisi Surat & Edit Disposisi (by Ketua Tim)
-  const handleSaveDisposisi = (
+  const handleSaveDisposisi = async (
     suratId: string,
     penerimaIds: string[],
     penerimaNama: string[],
@@ -182,113 +236,101 @@ export default function App() {
     tanggalDisposisi: string,
     tenggatWaktu: string
   ) => {
-    let wasEditing = false;
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengubah disposisi.');
+      return;
+    }
 
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          wasEditing = Boolean(
-            (item.penerimaDisposisiIds && item.penerimaDisposisiIds.length > 0) ||
-            item.instruksiDisposisi
-          );
-
-          // If stage was 1 or 2, advance to Stage 3: Disposisi Tim
-          const newTahap = item.tahapSaatIni < 3 ? 3 : item.tahapSaatIni;
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: (item.tahapSaatIni < 3 ? 3 : item.tahapSaatIni) as TahapTindakLanjutId,
-              tahapNama: wasEditing ? 'Pembaruan Disposisi & Instruksi' : TAHAP_TINDAK_LANJUT[3].nama,
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan: wasEditing
-                ? `Disposisi dan instruksi diperbarui. Personel: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`
-                : `Didisposisikan kepada: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`,
-            },
-          ];
-
-          const updated: SuratMasuk = {
-            ...item,
-            penerimaDisposisiIds: penerimaIds,
-            penerimaDisposisiNama: penerimaNama,
-            instruksiDisposisi: instruksi,
-            catatanDisposisiKetuaTim: catatan,
-            tanggalDisposisi,
-            tenggatWaktu,
-            tahapSaatIni: newTahap,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
-
-          if (selectedSuratForTindakLanjut?.id === suratId) {
-            setSelectedSuratForTindakLanjut(updated);
-          }
-          if (selectedSuratForDisposisi?.id === suratId) {
-            setSelectedSuratForDisposisi(updated);
-          }
-
-          return updated;
-        }
-        return item;
-      })
+    const wasEditing = Boolean(
+      (item.penerimaDisposisiIds && item.penerimaDisposisiIds.length > 0) ||
+      item.instruksiDisposisi
     );
+    const newTahap = (item.tahapSaatIni < 3 ? 3 : item.tahapSaatIni) as TahapTindakLanjutId;
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: newTahap,
+        tahapNama: wasEditing ? 'Pembaruan Disposisi & Instruksi' : TAHAP_TINDAK_LANJUT[3].nama,
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan: wasEditing
+          ? `Disposisi dan instruksi diperbarui. Personel: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`
+          : `Didisposisikan kepada: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`,
+      },
+    ];
 
-    showToast(
-      wasEditing
-        ? `Perubahan disposisi & instruksi untuk ${penerimaNama.join(', ')} berhasil disimpan.`
-        : `Disposisi berhasil diteruskan kepada ${penerimaNama.join(', ')}.`
-    );
+    try {
+      await updateDisposisiDb(
+        suratId,
+        penerimaIds,
+        penerimaNama,
+        instruksi,
+        catatan,
+        tanggalDisposisi,
+        tenggatWaktu,
+        newTahap,
+        newRiwayat
+      );
+      showToast(
+        wasEditing
+          ? `Perubahan disposisi & instruksi untuk ${penerimaNama.join(', ')} berhasil disimpan.`
+          : `Disposisi berhasil diteruskan kepada ${penerimaNama.join(', ')}.`
+      );
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Advance Tahap Tindak Lanjut (1-7)
-  const handleAdvanceStage = (
+  const handleAdvanceStage = async (
     suratId: string,
     nextStage: TahapTindakLanjutId,
     catatan: string
   ) => {
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: nextStage,
-              tahapNama: TAHAP_TINDAK_LANJUT[nextStage].nama,
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan,
-            },
-          ];
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengubah tahapan.');
+      return;
+    }
 
-          const updated = {
-            ...item,
-            tahapSaatIni: nextStage,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: nextStage,
+        tahapNama: TAHAP_TINDAK_LANJUT[nextStage].nama,
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan,
+      },
+    ];
 
-          if (selectedSuratForTindakLanjut?.id === suratId) {
-            setSelectedSuratForTindakLanjut(updated);
-          }
-
-          return updated;
-        }
-        return item;
-      })
-    );
-
-    showToast(`Status berhasil beralih ke Tahap ${nextStage}: ${TAHAP_TINDAK_LANJUT[nextStage].nama}`);
+    try {
+      await updateStageOrCatatanDb(suratId, nextStage, newRiwayat);
+      showToast(`Status berhasil beralih ke Tahap ${nextStage}: ${TAHAP_TINDAK_LANJUT[nextStage].nama}`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Update Status Selesai Tindak Lanjut
-  const handleUpdateStatusSelesai = (
+  const handleUpdateStatusSelesai = async (
     suratId: string,
     statusSelesai: boolean,
     catatan?: string,
     tanggalSelesai?: string
   ) => {
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai && statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Klik "Buka Kembali" terlebih dahulu jika ingin memperbarui data.');
+      return;
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const finalDate = tanggalSelesai || today;
     const defaultNote = statusSelesai
@@ -296,122 +338,91 @@ export default function App() {
       : 'Status tindak lanjut dibuka kembali ke status proses berjalan.';
     const finalNote = catatan?.trim() || defaultNote;
 
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: item.tahapSaatIni,
-              tahapNama: statusSelesai ? 'Selesai Tindak Lanjut' : `Tahap ${item.tahapSaatIni}: ${TAHAP_TINDAK_LANJUT[item.tahapSaatIni]?.nama}`,
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan: finalNote,
-            },
-          ];
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: item.tahapSaatIni,
+        tahapNama: statusSelesai ? 'Selesai Tindak Lanjut' : `Tahap ${item.tahapSaatIni}: ${TAHAP_TINDAK_LANJUT[item.tahapSaatIni]?.nama}`,
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan: finalNote,
+      },
+    ];
 
-          const updated: SuratMasuk = {
-            ...item,
-            statusSelesai,
-            tanggalSelesai: statusSelesai ? finalDate : undefined,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
-
-          if (selectedSuratForTindakLanjut?.id === suratId) {
-            setSelectedSuratForTindakLanjut(updated);
-          }
-
-          return updated;
-        }
-        return item;
-      })
-    );
-
-    showToast(
-      statusSelesai
-        ? 'Status tindak lanjut berhasil ditetapkan: Selesai Tindak Lanjut.'
-        : 'Status tindak lanjut berhasil dibuka kembali: Sedang Berjalan.'
-    );
+    try {
+      await updateStatusSelesaiDb(suratId, statusSelesai, finalDate, newRiwayat);
+      showToast(
+        statusSelesai
+          ? 'Status tindak lanjut berhasil ditetapkan: Selesai Tindak Lanjut.'
+          : 'Status tindak lanjut berhasil dibuka kembali: Sedang Berjalan.'
+      );
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Set Tahap Direct
-  const handleSetTahapDirect = (suratId: string, tahap: TahapTindakLanjutId, catatan?: string) => {
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          const note = catatan?.trim() || `Tahapan disesuaikan ke Tahap ${tahap}: ${TAHAP_TINDAK_LANJUT[tahap].nama}`;
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: tahap,
-              tahapNama: TAHAP_TINDAK_LANJUT[tahap].nama,
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan: note,
-            },
-          ];
+  const handleSetTahapDirect = async (suratId: string, tahap: TahapTindakLanjutId, catatan?: string) => {
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengubah tahapan.');
+      return;
+    }
 
-          const updated: SuratMasuk = {
-            ...item,
-            tahapSaatIni: tahap,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
+    const note = catatan?.trim() || `Tahapan disesuaikan ke Tahap ${tahap}: ${TAHAP_TINDAK_LANJUT[tahap].nama}`;
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: tahap,
+        tahapNama: TAHAP_TINDAK_LANJUT[tahap].nama,
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan: note,
+      },
+    ];
 
-          if (selectedSuratForTindakLanjut?.id === suratId) {
-            setSelectedSuratForTindakLanjut(updated);
-          }
-
-          return updated;
-        }
-        return item;
-      })
-    );
-
-    showToast(`Tahapan tindak lanjut berhasil diubah ke Tahap ${tahap}: ${TAHAP_TINDAK_LANJUT[tahap].nama}`);
+    try {
+      await updateStageOrCatatanDb(suratId, tahap, newRiwayat);
+      showToast(`Tahapan tindak lanjut berhasil diubah ke Tahap ${tahap}: ${TAHAP_TINDAK_LANJUT[tahap].nama}`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Tambah Catatan Tindak Lanjut
-  const handleAddCatatan = (suratId: string, catatan: string) => {
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: item.tahapSaatIni,
-              tahapNama: TAHAP_TINDAK_LANJUT[item.tahapSaatIni].nama,
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan,
-            },
-          ];
+  const handleAddCatatan = async (suratId: string, catatan: string) => {
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk menambah catatan.');
+      return;
+    }
 
-          const updated = {
-            ...item,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: item.tahapSaatIni,
+        tahapNama: TAHAP_TINDAK_LANJUT[item.tahapSaatIni].nama,
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan,
+      },
+    ];
 
-          if (selectedSuratForTindakLanjut?.id === suratId) {
-            setSelectedSuratForTindakLanjut(updated);
-          }
-
-          return updated;
-        }
-        return item;
-      })
-    );
-
-    showToast('Catatan tindak lanjut berhasil ditambahkan.');
+    try {
+      await updateStageOrCatatanDb(suratId, item.tahapSaatIni, newRiwayat);
+      showToast('Catatan tindak lanjut berhasil ditambahkan.');
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Upload Surat Keluar
-  const handleSaveSuratKeluar = (
+  const handleSaveSuratKeluar = async (
     suratId: string,
     fileData: DokumenFile,
     nomorSuratKeluar: string,
@@ -419,132 +430,113 @@ export default function App() {
     perihalSuratKeluar: string,
     tandaiSelesai: boolean
   ) => {
-    setSuratList((prev) =>
-      prev.map((item) => {
-        if (item.id === suratId) {
-          const newRiwayat = [
-            ...item.riwayatTindakLanjut,
-            {
-              id: `r-${Date.now()}`,
-              tahapId: item.tahapSaatIni,
-              tahapNama: 'Penerbitan Surat Keluar (TTE PESONA)',
-              tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              aktor: currentUser.nama,
-              catatan: `Surat Keluar nomor ${nomorSuratKeluar} telah diunggah dan terbit.`,
-              fileLampiran: {
-                nama: fileData.nama,
-                ukuran: fileData.ukuran,
-              },
-            },
-          ];
+    const item = suratList.find((s) => s.id === suratId);
+    if (!item) return;
+    if (item.statusSelesai) {
+      showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengunggah Surat Keluar.');
+      return;
+    }
 
-          return {
-            ...item,
-            fileSuratKeluar: fileData,
-            nomorSuratKeluar,
-            tanggalSuratKeluar,
-            perihalSuratKeluar,
-            statusSelesai: tandaiSelesai ? true : item.statusSelesai,
-            tanggalSelesai: tandaiSelesai ? new Date().toISOString().split('T')[0] : item.tanggalSelesai,
-            riwayatTindakLanjut: newRiwayat,
-            updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          };
-        }
-        return item;
-      })
-    );
+    const newRiwayat = [
+      ...item.riwayatTindakLanjut,
+      {
+        id: `r-${Date.now()}`,
+        tahapId: item.tahapSaatIni,
+        tahapNama: 'Penerbitan Surat Keluar (TTE PESONA)',
+        tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        aktor: currentUser.nama,
+        catatan: `Surat Keluar nomor ${nomorSuratKeluar} telah diunggah dan terbit.`,
+        fileLampiran: {
+          nama: fileData.nama,
+          ukuran: fileData.ukuran,
+        },
+      },
+    ];
 
-    showToast(`Berkas Surat Keluar untuk ${nomorSuratKeluar} berhasil diunggah.`);
+    const finalStatusSelesai = tandaiSelesai ? true : item.statusSelesai;
+    const finalTanggalSelesai = tandaiSelesai
+      ? new Date().toISOString().split('T')[0]
+      : item.tanggalSelesai;
+
+    try {
+      await uploadSuratKeluarDb(
+        suratId,
+        fileData,
+        nomorSuratKeluar,
+        tanggalSuratKeluar,
+        perihalSuratKeluar,
+        finalStatusSelesai,
+        finalTanggalSelesai,
+        newRiwayat
+      );
+      showToast(`Berkas Surat Keluar untuk ${nomorSuratKeluar} berhasil diunggah.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Hapus Surat (Ketua Tim)
-  const handleConfirmDeleteSurat = (suratId: string) => {
-    setSuratList((prev) => prev.filter((s) => s.id !== suratId));
-    showToast('Surat berhasil dihapus dari sistem persuratan.');
+  const handleConfirmDeleteSurat = async (suratId: string) => {
+    try {
+      await deleteSuratDb(suratId);
+      showToast('Surat berhasil dihapus dari database.');
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Personel Management & Dynamic Active User Sync
-  const handleUpdatePejabat = (newPejabat: PejabatConfig) => {
-    setPejabatConfig(newPejabat);
-
-    // Update Ketua Tim in personelList if exists
-    let updatedKetua: Personel | null = null;
-    const updatedPersonelList = personelList.map((p) => {
-      if (p.isKetuaTim || p.peran === 'ketua_tim') {
-        const u = {
-          ...p,
+  const handleUpdatePejabat = async (newPejabat: PejabatConfig) => {
+    if (!firebaseUser) return;
+    try {
+      await updateWorkspacePejabatDb(firebaseUser.uid, newPejabat);
+      const ketua = personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim');
+      if (ketua) {
+        await updatePersonelDb(ketua.id, {
           nama: newPejabat.ketuaTim.nama,
           nip: newPejabat.ketuaTim.nip,
           jabatan: newPejabat.ketuaTim.jabatan,
-        };
-        updatedKetua = u;
-        return u;
+          peran: 'ketua_tim',
+          isKetuaTim: true,
+        });
       }
-      return p;
-    });
-    setPersonelList(updatedPersonelList);
-
-    // Directly update active user if current active user is Ketua Tim
-    if (currentUser.isKetuaTim || currentUser.peran === 'ketua_tim') {
-      if (updatedKetua) {
-        setCurrentUser(updatedKetua);
-      } else {
-        setCurrentUser((prev) => ({
-          ...prev,
-          nama: newPejabat.ketuaTim.nama,
-          nip: newPejabat.ketuaTim.nip,
-          jabatan: newPejabat.ketuaTim.jabatan,
-        }));
-      }
+      showToast('Data penandatangan & Ketua Tim disimpan ke database.');
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
     }
-
-    showToast('Data penandatangan & Ketua Tim disimpan. Akses pengguna aktif langsung diperbarui.');
   };
 
-  const handleAddPersonel = (pData: Omit<Personel, 'id'>) => {
-    const newP: Personel = {
-      ...pData,
-      id: `p-${Date.now()}`,
-    };
-    setPersonelList([...personelList, newP]);
-    // Automatically switch active user to newly added personel
-    setCurrentUser(newP);
-    showToast(`Personel baru ${newP.nama} berhasil ditambahkan dan akses pengguna aktif langsung beralih.`);
+  const handleAddPersonel = async (pData: Omit<Personel, 'id'>) => {
+    if (!firebaseUser) return;
+    try {
+      const created = await createPersonelDb(firebaseUser.uid, pData);
+      setActivePersonelId(created.id);
+      showToast(`Personel baru ${created.nama} berhasil ditambahkan dan akses pengguna aktif langsung beralih.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
-  const handleUpdatePersonel = (id: string, updated: Partial<Personel>) => {
-    setPersonelList((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-    );
-
-    // Directly update active user if the updated person is the current user or selected
-    setCurrentUser((prev) => {
-      if (prev.id === id) {
-        return {
-          ...prev,
-          ...updated,
-        };
-      }
-      return prev;
-    });
-
-    showToast(`Data personel berhasil diperbarui dan akses pengguna aktif langsung disinkronkan.`);
+  const handleUpdatePersonel = async (id: string, updated: Partial<Personel>) => {
+    try {
+      await updatePersonelDb(id, updated);
+      showToast('Data personel berhasil diperbarui di database.');
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
-  const handleDeletePersonel = (id: string) => {
+  const handleDeletePersonel = async (id: string) => {
     const target = personelList.find((p) => p.id === id);
-    setPersonelList((prev) => {
-      const remaining = prev.filter((p) => p.id !== id);
-      if (currentUser.id === id) {
-        const fallback =
-          remaining.find((p) => p.isKetuaTim || p.peran === 'ketua_tim') ||
-          remaining[0] ||
-          INITIAL_PERSONEL[0];
-        setCurrentUser(fallback);
+    try {
+      await deletePersonelDb(id);
+      if (activePersonelId === id) {
+        setActivePersonelId('');
       }
-      return remaining;
-    });
-    showToast(`Data personel ${target ? `"${target.nama}"` : ''} berhasil dihapus.`);
+      showToast(`Data personel ${target ? `"${target.nama}"` : ''} berhasil dihapus.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
   };
 
   // Handler: Export CSV
@@ -610,6 +602,86 @@ export default function App() {
 
   const dashboardStats = calculateDashboardStats(suratList, personelList);
 
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="flex flex-col items-center gap-3 text-slate-600 text-xs">
+          <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+          <span>Menghubungkan ke layanan autentikasi & database...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!firebaseUser) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="font-bold text-base tracking-tight">SIPANTAU-WASDAL</div>
+                <div className="text-[11px] text-blue-200">
+                  Tim Pengawasan dan Pengendalian Perumahan · DPKP
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-5">
+            <div className="space-y-1.5">
+              <h1 className="text-base font-bold text-slate-900">
+                Masuk ke Database Persuratan
+              </h1>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Gunakan akun Google untuk mengakses dan menyinkronkan data surat masuk, disposisi, serta progres tindak lanjut secara aman di Cloud Firestore.
+              </p>
+            </div>
+
+            {authError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={isSigningIn}
+              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              {isSigningIn ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4" />
+              )}
+              <span>{isSigningIn ? 'Memproses Login...' : 'Masuk dengan Google'}</span>
+            </button>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center gap-2 text-[11px] text-slate-500">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Data persuratan tersimpan otomatis di Firebase Firestore.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dbReady) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="flex flex-col items-center gap-3 text-slate-600 text-xs">
+          <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+          <span>Memuat data persuratan dari Cloud Firestore...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       
@@ -627,12 +699,14 @@ export default function App() {
         currentUser={currentUser}
         personelList={personelList}
         onSwitchUser={(user) => {
-          setCurrentUser(user);
+          setActivePersonelId(user.id);
           showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'})`);
         }}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onOpenTambahSurat={() => setIsModalSuratMasukOpen(true)}
+        authEmail={firebaseUser.email}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Container */}
@@ -705,15 +779,15 @@ export default function App() {
                 selectedStatus={selectedStatus}
                 onStatusChange={setSelectedStatus}
                 onOpenDetail={(s) => {
-                  setSelectedSuratForTindakLanjut(s);
+                  setSelectedSuratForTindakLanjutId(s.id);
                   setIsModalTindakLanjutOpen(true);
                 }}
                 onOpenDisposisi={(s) => {
-                  setSelectedSuratForDisposisi(s);
+                  setSelectedSuratForDisposisiId(s.id);
                   setIsModalDisposisiOpen(true);
                 }}
                 onOpenUploadSuratKeluar={(s) => {
-                  setSelectedSuratForSuratKeluar(s);
+                  setSelectedSuratForSuratKeluarId(s.id);
                   setIsModalUploadSuratKeluarOpen(true);
                 }}
                 onOpenPdfViewer={(f) => {
@@ -721,11 +795,11 @@ export default function App() {
                   setIsModalPdfViewerOpen(true);
                 }}
                 onOpenLembarDisposisi={(s) => {
-                  setSelectedSuratForLembar(s);
+                  setSelectedSuratForLembarId(s.id);
                   setIsModalLembarDisposisiOpen(true);
                 }}
                 onDeleteSurat={(s) => {
-                  setSelectedSuratForDelete(s);
+                  setSelectedSuratForDeleteId(s.id);
                   setIsModalDeleteOpen(true);
                 }}
                 onExportCsv={handleExportCsv}
@@ -768,15 +842,15 @@ export default function App() {
               selectedStatus={selectedStatus}
               onStatusChange={setSelectedStatus}
               onOpenDetail={(s) => {
-                setSelectedSuratForTindakLanjut(s);
+                setSelectedSuratForTindakLanjutId(s.id);
                 setIsModalTindakLanjutOpen(true);
               }}
               onOpenDisposisi={(s) => {
-                setSelectedSuratForDisposisi(s);
+                setSelectedSuratForDisposisiId(s.id);
                 setIsModalDisposisiOpen(true);
               }}
               onOpenUploadSuratKeluar={(s) => {
-                setSelectedSuratForSuratKeluar(s);
+                setSelectedSuratForSuratKeluarId(s.id);
                 setIsModalUploadSuratKeluarOpen(true);
               }}
               onOpenPdfViewer={(f) => {
@@ -784,11 +858,11 @@ export default function App() {
                 setIsModalPdfViewerOpen(true);
               }}
               onOpenLembarDisposisi={(s) => {
-                setSelectedSuratForLembar(s);
+                setSelectedSuratForLembarId(s.id);
                 setIsModalLembarDisposisiOpen(true);
               }}
               onDeleteSurat={(s) => {
-                setSelectedSuratForDelete(s);
+                setSelectedSuratForDeleteId(s.id);
                 setIsModalDeleteOpen(true);
               }}
               onExportCsv={handleExportCsv}
@@ -916,7 +990,7 @@ export default function App() {
           isOpen={isModalDisposisiOpen}
           onClose={() => {
             setIsModalDisposisiOpen(false);
-            setSelectedSuratForDisposisi(null);
+            setSelectedSuratForDisposisiId(null);
           }}
           surat={selectedSuratForDisposisi}
           personelList={personelList}
@@ -930,7 +1004,7 @@ export default function App() {
           isOpen={isModalTindakLanjutOpen}
           onClose={() => {
             setIsModalTindakLanjutOpen(false);
-            setSelectedSuratForTindakLanjut(null);
+            setSelectedSuratForTindakLanjutId(null);
           }}
           surat={selectedSuratForTindakLanjut}
           currentRole={currentRole}
@@ -940,7 +1014,7 @@ export default function App() {
           onSetTahapDirect={handleSetTahapDirect}
           onAddCatatan={handleAddCatatan}
           onOpenUploadSuratKeluar={(s) => {
-            setSelectedSuratForSuratKeluar(s);
+            setSelectedSuratForSuratKeluarId(s.id);
             setIsModalUploadSuratKeluarOpen(true);
           }}
           onOpenPdfViewer={(f) => {
@@ -948,7 +1022,7 @@ export default function App() {
             setIsModalPdfViewerOpen(true);
           }}
           onOpenDisposisi={(s) => {
-            setSelectedSuratForDisposisi(s);
+            setSelectedSuratForDisposisiId(s.id);
             setIsModalDisposisiOpen(true);
           }}
         />
@@ -960,7 +1034,7 @@ export default function App() {
           isOpen={isModalUploadSuratKeluarOpen}
           onClose={() => {
             setIsModalUploadSuratKeluarOpen(false);
-            setSelectedSuratForSuratKeluar(null);
+            setSelectedSuratForSuratKeluarId(null);
           }}
           surat={selectedSuratForSuratKeluar}
           onSaveSuratKeluar={handleSaveSuratKeluar}
@@ -978,7 +1052,7 @@ export default function App() {
           currentRole={currentRole}
           currentUser={currentUser}
           onSwitchUser={(user) => {
-            setCurrentUser(user);
+            setActivePersonelId(user.id);
             showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'})`);
           }}
           onUpdatePejabat={handleUpdatePejabat}
@@ -1006,7 +1080,7 @@ export default function App() {
           isOpen={isModalLembarDisposisiOpen}
           onClose={() => {
             setIsModalLembarDisposisiOpen(false);
-            setSelectedSuratForLembar(null);
+            setSelectedSuratForLembarId(null);
           }}
           surat={selectedSuratForLembar}
           pejabatConfig={pejabatConfig}
@@ -1020,7 +1094,7 @@ export default function App() {
           isOpen={isModalDeleteOpen}
           onClose={() => {
             setIsModalDeleteOpen(false);
-            setSelectedSuratForDelete(null);
+            setSelectedSuratForDeleteId(null);
           }}
           surat={selectedSuratForDelete}
           onConfirmDelete={handleConfirmDeleteSurat}
