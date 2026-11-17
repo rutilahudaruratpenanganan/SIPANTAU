@@ -13,7 +13,6 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   DokumenFile,
@@ -29,6 +28,8 @@ import {
   INITIAL_PERSONEL,
   INITIAL_SURAT_MASUK,
 } from '../data/initialData';
+
+export const INTERNAL_WORKSPACE_ID = 'internal_wasdal';
 
 // Volumetric bounds synchronized verbatim with firebase-blueprint.json & firestore.rules
 const LIMITS = {
@@ -197,32 +198,8 @@ function docToSuratMasuk(id: string, data: Record<string, unknown>): SuratMasuk 
   };
 }
 
-export async function ensureWorkspaceInitialized(user: User): Promise<void> {
-  const uid = user.uid;
-  const userInfoPath = `users/${uid}/private/info`;
-  const userInfoRef = doc(db, 'users', uid, 'private', 'info');
-
-  try {
-    const existingInfo = await getDoc(userInfoRef);
-    if (!existingInfo.exists()) {
-      await setDoc(userInfoRef, {
-        uid,
-        email: clampStr(user.email || 'user@dpkp.go.id', 200),
-        displayName: clampStr(user.displayName || 'Pengguna', LIMITS.NAMA),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      await updateDoc(userInfoRef, {
-        email: clampStr(user.email || 'user@dpkp.go.id', 200),
-        displayName: clampStr(user.displayName || 'Pengguna', LIMITS.NAMA),
-        updatedAt: serverTimestamp(),
-      });
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, userInfoPath);
-  }
-
+export async function ensureWorkspaceInitialized(): Promise<void> {
+  const uid = INTERNAL_WORKSPACE_ID;
   const workspacePath = `workspaces/${uid}`;
   const workspaceRef = doc(db, 'workspaces', uid);
 
@@ -230,7 +207,7 @@ export async function ensureWorkspaceInitialized(user: User): Promise<void> {
     const wsSnap = await getDoc(workspaceRef);
     if (!wsSnap.exists() || wsSnap.data()?.seeded !== true) {
       const batch = writeBatch(db);
-      const idPrefix = uid.slice(0, 20);
+      const idPrefix = uid;
       const cleanPejabat = sanitizePejabatConfig(INITIAL_PEJABAT);
 
       batch.set(workspaceRef, {
@@ -307,13 +284,12 @@ export async function ensureWorkspaceInitialized(user: User): Promise<void> {
 }
 
 export function subscribeWorkspace(
-  uid: string,
   onData: (config: PejabatConfig) => void,
   onError: (err: Error) => void
 ) {
-  const path = `workspaces/${uid}`;
+  const path = `workspaces/${INTERNAL_WORKSPACE_ID}`;
   return onSnapshot(
-    doc(db, 'workspaces', uid),
+    doc(db, 'workspaces', INTERNAL_WORKSPACE_ID),
     (snapshot) => {
       if (snapshot.exists()) {
         const d = snapshot.data();
@@ -337,12 +313,11 @@ export function subscribeWorkspace(
 }
 
 export function subscribePersonel(
-  uid: string,
   onData: (list: Personel[]) => void,
   onError: (err: Error) => void
 ) {
   const path = 'personel';
-  const q = query(collection(db, path), where('ownerId', '==', uid));
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -376,12 +351,11 @@ export function subscribePersonel(
 }
 
 export function subscribeSuratMasuk(
-  uid: string,
   onData: (list: SuratMasuk[]) => void,
   onError: (err: Error) => void
 ) {
   const path = 'suratMasuk';
-  const q = query(collection(db, path), where('ownerId', '==', uid));
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -406,7 +380,6 @@ export function subscribeSuratMasuk(
 }
 
 export async function createSuratMasukDb(
-  uid: string,
   suratData: Partial<SuratMasuk>,
   pejabatConfig: PejabatConfig
 ): Promise<string> {
@@ -417,7 +390,7 @@ export async function createSuratMasukDb(
     new Date().toISOString().split('T')[0];
 
   const payload: Record<string, unknown> = {
-    ownerId: uid,
+    ownerId: INTERNAL_WORKSPACE_ID,
     nomorSurat: clampStr(suratData.nomorSurat, LIMITS.NOMOR_SURAT) || 'SM/DPKP',
     tanggalSurat,
     tanggalDiterima: clampStr(suratData.tanggalDiterima, LIMITS.DATE_STR) || tanggalSurat,
@@ -563,12 +536,11 @@ export async function deleteSuratDb(suratId: string): Promise<void> {
 }
 
 export async function updateWorkspacePejabatDb(
-  uid: string,
   newPejabat: PejabatConfig
 ): Promise<void> {
-  const path = `workspaces/${uid}`;
+  const path = `workspaces/${INTERNAL_WORKSPACE_ID}`;
   try {
-    await updateDoc(doc(db, 'workspaces', uid), {
+    await updateDoc(doc(db, 'workspaces', INTERNAL_WORKSPACE_ID), {
       ...sanitizePejabatConfig(newPejabat),
       updatedAt: serverTimestamp(),
     });
@@ -578,13 +550,12 @@ export async function updateWorkspacePejabatDb(
 }
 
 export async function createPersonelDb(
-  uid: string,
   pData: Omit<Personel, 'id'>
 ): Promise<Personel> {
   const id = `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const path = `personel/${id}`;
   const payload: Record<string, unknown> = {
-    ownerId: uid,
+    ownerId: INTERNAL_WORKSPACE_ID,
     nama: clampStr(pData.nama, LIMITS.NAMA) || '-',
     jabatan: clampStr(pData.jabatan, LIMITS.JABATAN) || 'Staf Tim',
     peran: pData.peran,

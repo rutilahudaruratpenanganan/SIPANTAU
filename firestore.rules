@@ -9,7 +9,7 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // Global Hardened Primitives
+    // Global Hardened Primitives (Internal Shared Workspace)
     // ------------------------------------------------------------------
     function incoming() {
       return request.resource.data;
@@ -19,24 +19,12 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
+    function internalWorkspaceId() {
+      return 'internal_wasdal';
     }
 
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
-    function isOwner(uid) {
-      return isVerified() && request.auth.uid == uid;
-    }
-
-    function isBootstrappedAdmin() {
-      return isVerified() && request.auth.token.email == 'rutilahudaruratpenanganan@gmail.com';
-    }
-
-    function isAdmin() {
-      return isBootstrappedAdmin() || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    function isInternalWorkspaceDoc(data) {
+      return ('ownerId' in data) && data.ownerId == internalWorkspaceId();
     }
 
     function isValidId(id) {
@@ -76,22 +64,12 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     // Entity Validation Blueprints (Anti-Update-Gap)
     // ------------------------------------------------------------------
-    function isValidUserPrivateInfo(data, userId) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
-        && isValidId(data.uid)
-        && data.uid == userId
-        && isRequiredString(data, 'email', 3, 200)
-        && isOptionalString(data, 'displayName', 150)
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
     function isValidWorkspaceConfig(data, workspaceId) {
       return data.keys().hasAll(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
         && data.ownerId == workspaceId
+        && data.ownerId == internalWorkspaceId()
         && data.seeded is bool
         && isValidPejabatEntry(data.kepalaDinas, true)
         && isValidPejabatEntry(data.kepalaBidang, false)
@@ -104,6 +82,7 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerId', 'nama', 'jabatan', 'peran', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerId', 'nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && data.ownerId == internalWorkspaceId()
         && isRequiredString(data, 'nama', 1, 150)
         && isOptionalString(data, 'nip', 60)
         && isRequiredString(data, 'jabatan', 1, 200)
@@ -133,6 +112,7 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
+        && data.ownerId == internalWorkspaceId()
         && isOptionalString(data, 'nomorAgenda', 100)
         && isRequiredString(data, 'nomorSurat', 1, 150)
         && isRequiredString(data, 'tanggalSurat', 4, 40)
@@ -166,48 +146,32 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // Collection Rules
+    // Collection Rules (Internal Shared Workspace)
     // ------------------------------------------------------------------
 
-    // 1. User Private Profile (PII strictly isolated to owner or admin)
+    // 1. User Private Profile (Locked)
     match /users/{userId}/private/{docId} {
-      allow get: if isValidId(userId) && docId == 'info' && (isOwner(userId) || isAdmin());
-      allow list: if false;
-      allow create: if isValidId(userId)
-        && docId == 'info'
-        && isOwner(userId)
-        && isValidUserPrivateInfo(incoming(), userId)
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
-      allow update: if isValidId(userId)
-        && docId == 'info'
-        && isOwner(userId)
-        && isValidUserPrivateInfo(incoming(), userId)
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
-      allow delete: if false;
+      allow read, write: if false;
     }
 
     // 2. Workspace Config (Pejabat Struktural & Seed State)
     match /workspaces/{workspaceId} {
-      allow get: if isValidId(workspaceId) && (isOwner(workspaceId) || isAdmin());
-      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow get: if isValidId(workspaceId) && workspaceId == internalWorkspaceId();
+      allow list: if isInternalWorkspaceDoc(existing());
       allow create: if isValidId(workspaceId)
-        && isOwner(workspaceId)
+        && workspaceId == internalWorkspaceId()
         && isValidWorkspaceConfig(incoming(), workspaceId)
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(workspaceId)
-        && (isOwner(workspaceId) || isAdmin())
+        && workspaceId == internalWorkspaceId()
+        && isInternalWorkspaceDoc(existing())
         && isValidWorkspaceConfig(incoming(), workspaceId)
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          isAdmin()
-          || incoming().diff(existing()).affectedKeys().hasOnly(['kepalaDinas', 'kepalaBidang', 'ketuaTim', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['kepalaDinas', 'kepalaBidang', 'ketuaTim', 'updatedAt'])
           || incoming().diff(existing()).affectedKeys().hasOnly(['seeded', 'updatedAt'])
         );
       allow delete: if false;
@@ -215,48 +179,38 @@ service cloud.firestore {
 
     // 3. Personel Tim
     match /personel/{personelId} {
-      allow get: if isValidId(personelId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
-      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow get: if isValidId(personelId) && isInternalWorkspaceDoc(existing());
+      allow list: if isInternalWorkspaceDoc(existing());
       allow create: if isValidId(personelId)
-        && isVerified()
         && isValidPersonel(incoming())
-        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(personelId)
-        && isVerified()
+        && isInternalWorkspaceDoc(existing())
         && isValidPersonel(incoming())
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && (existing().ownerId == request.auth.uid || isAdmin())
-        && (
-          isAdmin()
-          || incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'updatedAt'])
-        );
-      allow delete: if isValidId(personelId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+        && incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'updatedAt']);
+      allow delete: if isValidId(personelId) && isInternalWorkspaceDoc(existing());
     }
 
     // 4. Surat Masuk & Disposisi
     match /suratMasuk/{suratId} {
-      allow get: if isValidId(suratId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
-      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow get: if isValidId(suratId) && isInternalWorkspaceDoc(existing());
+      allow list: if isInternalWorkspaceDoc(existing());
       allow create: if isValidId(suratId)
-        && isVerified()
         && isValidSuratMasuk(incoming())
-        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(suratId)
-        && isVerified()
+        && isInternalWorkspaceDoc(existing())
         && isValidSuratMasuk(incoming())
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && (existing().ownerId == request.auth.uid || isAdmin())
         && (
-          isAdmin()
-          || (
+          (
             // Terminal state lock: once statusSelesai == true, only explicit reopen allowed
             existing().statusSelesai == false && (
               // Action 1: Update Disposisi & Instruksi
@@ -293,7 +247,7 @@ service cloud.firestore {
             ])
           )
         );
-      allow delete: if isValidId(suratId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow delete: if isValidId(suratId) && isInternalWorkspaceDoc(existing());
     }
   }
 }

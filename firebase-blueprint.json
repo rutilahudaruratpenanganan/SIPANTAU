@@ -2,7 +2,7 @@
   "entities": {
     "WorkspaceConfig": {
       "title": "WorkspaceConfig",
-      "description": "Konfigurasi pejabat penandatangan dan status inisialisasi workspace per pengguna",
+      "description": "Konfigurasi pejabat penandatangan dan status inisialisasi workspace internal bersama",
       "type": "object",
       "properties": {
         "ownerId": {
@@ -10,7 +10,7 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "description": "UID pemilik workspace"
+          "description": "ID workspace internal bersama (internal_wasdal)"
         },
         "seeded": {
           "type": "boolean",
@@ -40,37 +40,6 @@
         }
       },
       "required": ["ownerId", "seeded", "kepalaDinas", "kepalaBidang", "ketuaTim", "createdAt", "updatedAt"]
-    },
-    "UserPrivateInfo": {
-      "title": "UserPrivateInfo",
-      "description": "Informasi profil pribadi pengguna (PII terisolasi)",
-      "type": "object",
-      "properties": {
-        "uid": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "email": {
-          "type": "string",
-          "format": "email",
-          "maxLength": 200
-        },
-        "displayName": {
-          "type": "string",
-          "maxLength": 150
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["uid", "email", "createdAt", "updatedAt"]
     },
     "Personel": {
       "title": "Personel",
@@ -252,19 +221,15 @@
   "firestore": {
     "/workspaces/{workspaceId}": {
       "schema": { "$ref": "#/entities/WorkspaceConfig" },
-      "description": "Konfigurasi pejabat struktural dan status seeding per workspace pengguna"
-    },
-    "/users/{userId}/private/{docId}": {
-      "schema": { "$ref": "#/entities/UserPrivateInfo" },
-      "description": "Data profil PII pengguna yang terisolasi"
+      "description": "Konfigurasi pejabat struktural dan status seeding workspace internal bersama"
     },
     "/personel/{personelId}": {
       "schema": { "$ref": "#/entities/Personel" },
-      "description": "Daftar personel pengawasan dan pengendalian perumahan milik workspace"
+      "description": "Daftar personel pengawasan dan pengendalian perumahan milik workspace internal"
     },
     "/suratMasuk/{suratId}": {
       "schema": { "$ref": "#/entities/SuratMasuk" },
-      "description": "Daftar surat masuk, disposisi, dan tindak lanjut"
+      "description": "Daftar surat masuk, disposisi, dan tindak lanjut workspace internal"
     }
   }
 }

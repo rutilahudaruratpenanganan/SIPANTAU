@@ -8,8 +8,7 @@ import {
   UserCheck, 
   Printer,
   ChevronDown,
-  LayoutDashboard,
-  LogOut
+  LayoutDashboard
 } from 'lucide-react';
 import { Personel, Role } from '../types';
 
@@ -21,8 +20,6 @@ interface NavbarProps {
   activeTab: 'dashboard' | 'surat' | 'personel' | 'rekap';
   onChangeTab: (tab: 'dashboard' | 'surat' | 'personel' | 'rekap') => void;
   onOpenTambahSurat: () => void;
-  authEmail?: string | null;
-  onSignOut?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,8 +30,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onChangeTab,
   onOpenTambahSurat,
-  authEmail,
-  onSignOut,
 }) => {
   const [showUserDropdown, setShowUserDropdown] = React.useState(false);
 
@@ -57,17 +52,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   v2.0
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 whitespace-nowrap hidden sm:block">
+              <p className="text-[11px] text-slate-400 whitespace-nowrap hidden 2xl:block">
                 Tim Pengawasan dan Pengendalian Perumahan · DPKP
               </p>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
+          <nav className="hidden lg:flex items-center gap-1 text-xs font-medium shrink-0">
             <button
               onClick={() => onChangeTab('dashboard')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                 activeTab === 'dashboard'
                   ? 'bg-slate-800 text-white font-semibold'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -78,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => onChangeTab('surat')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                 activeTab === 'surat'
                   ? 'bg-slate-800 text-white font-semibold'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -89,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => onChangeTab('personel')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                 activeTab === 'personel'
                   ? 'bg-slate-800 text-white font-semibold'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -100,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => onChangeTab('rekap')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                 activeTab === 'rekap'
                   ? 'bg-slate-800 text-white font-semibold'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -155,11 +150,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-2 text-xs">
                     <div className="px-3.5 py-2 border-b border-slate-800 text-slate-400">
                       <div className="font-semibold text-slate-200">Hak Akses & Pengguna Aktif</div>
-                      {authEmail && (
-                        <div className="text-[11px] text-blue-300 truncate mt-0.5">{authEmail}</div>
-                      )}
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Pilih profil untuk menguji hak akses (Ketua Tim vs Staf)
+                        Pilih profil untuk beralih hak akses internal (Ketua Tim vs Staf)
                       </div>
                     </div>
 
@@ -195,23 +187,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       })}
                     </div>
 
-                    <div className="px-3 py-2 border-t border-slate-800 text-[11px] text-slate-400 bg-slate-950/40 space-y-2">
+                    <div className="px-3 py-2 border-t border-slate-800 text-[11px] text-slate-400 bg-slate-950/40">
                       <div>
                         <span className="font-medium text-slate-300">Ketua Tim:</span> Disposisi & hapus surat. <br/>
                         <span className="font-medium text-slate-300">Staf:</span> Update draft & upload surat keluar.
                       </div>
-                      {onSignOut && (
-                        <button
-                          onClick={() => {
-                            setShowUserDropdown(false);
-                            onSignOut();
-                          }}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-600/20 hover:text-rose-300 text-slate-300 border border-slate-700 flex items-center justify-center gap-1.5 font-medium transition-colors"
-                        >
-                          <LogOut className="w-3.5 h-3.5" />
-                          <span>Keluar Akun Google</span>
-                        </button>
-                      )}
                     </div>
                   </div>
                 </>

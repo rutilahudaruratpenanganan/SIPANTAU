@@ -34,10 +34,7 @@ import {
   calculateDashboardStats, 
   TAHAP_TINDAK_LANJUT 
 } from './utils/disposisiLogic';
-import { CheckCircle2, AlertCircle, Building2, ShieldCheck, Loader2, LogIn, Copy, Check, ExternalLink } from 'lucide-react';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
-import firebaseConfig from '../firebase-applet-config.json';
+import { CheckCircle2 } from 'lucide-react';
 import {
   createPersonelDb,
   createSuratMasukDb,
@@ -55,15 +52,11 @@ import {
   uploadSuratKeluarDb,
 } from './services/firestoreService';
 
+const ACTIVE_PERSONEL_STORAGE_KEY = 'sipantau_active_personel_id';
+
 export default function App() {
-  // Firebase Authentication & Workspace Loading State
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  // Firestore Workspace Loading State
   const [dbReady, setDbReady] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
-  const [copiedDomain, setCopiedDomain] = useState(false);
-  const [isSigningIn, setIsSigningIn] = useState(false);
   const [asyncError, setAsyncError] = useState<Error | null>(null);
 
   if (asyncError) {
@@ -75,8 +68,14 @@ export default function App() {
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
 
-  // Active simulated role/personel inside workspace
-  const [activePersonelId, setActivePersonelId] = useState<string>('');
+  // Active simulated role/personel inside internal workspace
+  const [activePersonelId, setActivePersonelId] = useState<string>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_PERSONEL_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const currentUser: Personel =
     personelList.find((p) => p.id === activePersonelId) ||
     personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim') ||
@@ -129,25 +128,21 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Track Firebase Auth State
+  // Persist selected active internal user locally
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
-      setAuthReady(true);
-      if (!user) {
-        setDbReady(false);
-        setSuratList([]);
-        setPersonelList(INITIAL_PERSONEL);
-        setPejabatConfig(INITIAL_PEJABAT);
+    try {
+      if (activePersonelId) {
+        localStorage.setItem(ACTIVE_PERSONEL_STORAGE_KEY, activePersonelId);
+      } else {
+        localStorage.removeItem(ACTIVE_PERSONEL_STORAGE_KEY);
       }
-    });
-    return () => unsubscribe();
-  }, []);
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [activePersonelId]);
 
-  // Initialize workspace and attach Firestore listeners only when authenticated
+  // Initialize shared internal workspace and attach Firestore listeners directly on mount
   useEffect(() => {
-    if (!authReady || !firebaseUser) return;
-
     let cancelled = false;
     let unsubWorkspace: (() => void) | undefined;
     let unsubPersonel: (() => void) | undefined;
@@ -155,23 +150,20 @@ export default function App() {
 
     (async () => {
       try {
-        await ensureWorkspaceInitialized(firebaseUser);
+        await ensureWorkspaceInitialized();
         if (cancelled) return;
 
         unsubWorkspace = subscribeWorkspace(
-          firebaseUser.uid,
           (cfg) => setPejabatConfig(cfg),
           (err) => setAsyncError(err)
         );
         unsubPersonel = subscribePersonel(
-          firebaseUser.uid,
           (list) => {
             if (list.length > 0) setPersonelList(list);
           },
           (err) => setAsyncError(err)
         );
         unsubSurat = subscribeSuratMasuk(
-          firebaseUser.uid,
           (list) => {
             setSuratList(list);
             setDbReady(true);
@@ -191,53 +183,12 @@ export default function App() {
       unsubPersonel?.();
       unsubSurat?.();
     };
-  }, [authReady, firebaseUser]);
-
-  const handleGoogleSignIn = async () => {
-    setAuthError(null);
-    setUnauthorizedDomain(null);
-    setCopiedDomain(false);
-    setIsSigningIn(true);
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code || '';
-      if (code === 'auth/unauthorized-domain') {
-        const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-        setUnauthorizedDomain(hostname);
-        setAuthError(
-          'Domain ini belum terdaftar di Firebase Console (Authentication → Settings → Authorized domains).'
-        );
-      } else if (code === 'auth/popup-closed-by-user') {
-        setAuthError('Login dibatalkan sebelum selesai. Silakan coba lagi.');
-      } else {
-        setAuthError(err instanceof Error ? err.message : 'Gagal masuk dengan Google.');
-      }
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  const handleCopyDomain = async () => {
-    if (!unauthorizedDomain) return;
-    try {
-      await navigator.clipboard.writeText(unauthorizedDomain);
-      setCopiedDomain(true);
-      setTimeout(() => setCopiedDomain(false), 2000);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-
-  const handleSignOut = async () => {
-    await signOut(auth);
-  };
+  }, []);
 
   // Handler: Tambah Surat Masuk
   const handleAddSuratMasuk = async (suratData: Partial<SuratMasuk>) => {
-    if (!firebaseUser) return;
     try {
-      await createSuratMasukDb(firebaseUser.uid, suratData, pejabatConfig);
+      await createSuratMasukDb(suratData, pejabatConfig);
       showToast(`Surat Masuk dari "${suratData.asalSurat || '-'}" berhasil disimpan ke database.`);
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));
@@ -505,9 +456,8 @@ export default function App() {
 
   // Handler: Personel Management & Dynamic Active User Sync
   const handleUpdatePejabat = async (newPejabat: PejabatConfig) => {
-    if (!firebaseUser) return;
     try {
-      await updateWorkspacePejabatDb(firebaseUser.uid, newPejabat);
+      await updateWorkspacePejabatDb(newPejabat);
       const ketua = personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim');
       if (ketua) {
         await updatePersonelDb(ketua.id, {
@@ -525,9 +475,8 @@ export default function App() {
   };
 
   const handleAddPersonel = async (pData: Omit<Personel, 'id'>) => {
-    if (!firebaseUser) return;
     try {
-      const created = await createPersonelDb(firebaseUser.uid, pData);
+      const created = await createPersonelDb(pData);
       setActivePersonelId(created.id);
       showToast(`Personel baru ${created.nama} berhasil ditambahkan dan akses pengguna aktif langsung beralih.`);
     } catch (err) {
@@ -620,122 +569,11 @@ export default function App() {
 
   const dashboardStats = calculateDashboardStats(suratList, personelList);
 
-  if (!authReady) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
-        <div className="flex flex-col items-center gap-3 text-slate-600 text-xs">
-          <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
-          <span>Menghubungkan ke layanan autentikasi & database...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!firebaseUser) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-6 text-white">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-                <Building2 className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="font-bold text-base tracking-tight">SIPANTAU-WASDAL</div>
-                <div className="text-[11px] text-blue-200">
-                  Tim Pengawasan dan Pengendalian Perumahan · DPKP
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-5">
-            <div className="space-y-1.5">
-              <h1 className="text-base font-bold text-slate-900">
-                Masuk ke Database Persuratan
-              </h1>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Gunakan akun Google untuk mengakses dan menyinkronkan data surat masuk, disposisi, serta progres tindak lanjut secara aman di Cloud Firestore.
-              </p>
-            </div>
-
-            {authError && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs space-y-2.5">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span className="font-medium leading-relaxed">{authError}</span>
-                </div>
-
-                {unauthorizedDomain && (
-                  <div className="space-y-2 pt-2 border-t border-rose-200/80">
-                    <div className="text-[11px] text-rose-800">
-                      Salin domain berikut dan tambahkan ke <strong>Authorized domains</strong> pada proyek{' '}
-                      <span className="font-mono font-semibold">{firebaseConfig.projectId}</span>:
-                    </div>
-                    <div className="flex items-center gap-2 bg-white border border-rose-200 rounded-lg px-2.5 py-1.5">
-                      <code className="flex-1 text-[11px] font-mono text-slate-800 truncate">
-                        {unauthorizedDomain}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={handleCopyDomain}
-                        className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold flex items-center gap-1 shrink-0 transition-colors"
-                      >
-                        {copiedDomain ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Tersalin</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Salin</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <a
-                      href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 underline"
-                    >
-                      <span>Buka Firebase Console → Authorized domains</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={isSigningIn}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
-            >
-              {isSigningIn ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <LogIn className="w-4 h-4" />
-              )}
-              <span>{isSigningIn ? 'Memproses Login...' : 'Masuk dengan Google'}</span>
-            </button>
-
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-2 text-[11px] text-slate-500">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Data persuratan tersimpan otomatis di Firebase Firestore.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (!dbReady) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
         <div className="flex flex-col items-center gap-3 text-slate-600 text-xs">
-          <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+          <div className="w-7 h-7 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
           <span>Memuat data persuratan dari Cloud Firestore...</span>
         </div>
       </div>
@@ -765,8 +603,6 @@ export default function App() {
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onOpenTambahSurat={() => setIsModalSuratMasukOpen(true)}
-        authEmail={firebaseUser.email}
-        onSignOut={handleSignOut}
       />
 
       {/* Main Container */}
