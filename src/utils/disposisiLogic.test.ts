@@ -9,8 +9,8 @@ import {
   canManagePersonel,
   filterSurat,
   calculateDashboardStats,
-} from './disposisiLogic';
-import { SuratMasuk, Personel } from '../types';
+} from './disposisiLogic.ts';
+import type { SuratMasuk, Personel } from '../types/index.ts';
 
 const mockPersonel: Personel[] = [
   { id: '1', nama: 'Ir. H. Budi Santoso, S.T., M.T.', jabatan: 'Ketua Tim Wasdal', peran: 'ketua_tim', isKetuaTim: true },

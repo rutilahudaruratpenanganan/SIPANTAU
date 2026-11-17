@@ -1,4 +1,4 @@
-import { SuratMasuk, TahapConfig, TahapTindakLanjutId, Role, Personel } from '../types';
+import type { SuratMasuk, TahapConfig, TahapTindakLanjutId, Role, Personel } from '../types/index.ts';
 
 export const TAHAP_TINDAK_LANJUT: Record<TahapTindakLanjutId, TahapConfig> = {
   1: {
