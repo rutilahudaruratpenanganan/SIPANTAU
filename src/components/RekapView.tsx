@@ -62,7 +62,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
         {/* Kop Resmi Surat Laporan */}
         <div className="text-center border-b-2 border-slate-900 pb-4 mb-6">
           <h3 className="text-xs uppercase font-bold tracking-widest text-slate-600 font-sans">
-            Pemerintah Daerah Kota
+            Pemerintah Kota Bandung
           </h3>
           <h1 className="text-base font-extrabold uppercase tracking-wide text-slate-900 mt-0.5">
             {pejabatConfig.kepalaDinas.instansi}
