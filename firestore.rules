@@ -11,65 +11,33 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     // Global Hardened Primitives (Internal Shared Workspace)
     // ------------------------------------------------------------------
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function internalWorkspaceId() {
-      return 'internal_wasdal';
-    }
-
     function isInternalWorkspaceDoc(data) {
-      return ('ownerId' in data) && data.ownerId == internalWorkspaceId();
+      return ('ownerId' in data) && data.ownerId == 'internal_wasdal';
     }
 
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isOptionalString(data, key, maxLen) {
-      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
-    }
-
-    function isRequiredString(data, key, minLen, maxLen) {
-      return (key in data) && (data[key] is string) && data[key].size() >= minLen && data[key].size() <= maxLen;
-    }
-
     function isValidPejabatEntry(entry, requireInstansi) {
       return entry is map
         && entry.keys().hasAll(requireInstansi ? ['nama', 'nip', 'jabatan', 'instansi'] : ['nama', 'nip', 'jabatan'])
         && entry.keys().hasOnly(requireInstansi ? ['nama', 'nip', 'jabatan', 'instansi'] : ['nama', 'nip', 'jabatan'])
-        && isRequiredString(entry, 'nama', 1, 150)
-        && isRequiredString(entry, 'nip', 0, 60)
-        && isRequiredString(entry, 'jabatan', 1, 200)
-        && (!requireInstansi || isRequiredString(entry, 'instansi', 1, 200));
-    }
-
-    function isValidDokumenFile(docMap) {
-      return docMap is map
-        && docMap.keys().hasAll(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah'])
-        && docMap.keys().hasOnly(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah', 'dataUrl'])
-        && isRequiredString(docMap, 'nama', 1, 255)
-        && isRequiredString(docMap, 'ukuran', 1, 40)
-        && isRequiredString(docMap, 'tipe', 1, 100)
-        && isRequiredString(docMap, 'tanggalUnggah', 1, 40)
-        && isRequiredString(docMap, 'pengunggah', 1, 150)
-        && isOptionalString(docMap, 'dataUrl', 250000);
+        && ('nama' in entry) && entry.nama is string && entry.nama.size() >= 1 && entry.nama.size() <= 150
+        && ('nip' in entry) && entry.nip is string && entry.nip.size() <= 60
+        && ('jabatan' in entry) && entry.jabatan is string && entry.jabatan.size() >= 1 && entry.jabatan.size() <= 200
+        && (!requireInstansi || (('instansi' in entry) && entry.instansi is string && entry.instansi.size() >= 1 && entry.instansi.size() <= 200));
     }
 
     // ------------------------------------------------------------------
-    // Entity Validation Blueprints (Anti-Update-Gap)
+    // Entity Validation Blueprints (Anti-Update-Gap & Low Call Depth)
     // ------------------------------------------------------------------
     function isValidWorkspaceConfig(data, workspaceId) {
       return data.keys().hasAll(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerId', 'seeded', 'kepalaDinas', 'kepalaBidang', 'ketuaTim', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
         && data.ownerId == workspaceId
-        && data.ownerId == internalWorkspaceId()
+        && data.ownerId == 'internal_wasdal'
         && data.seeded is bool
         && isValidPejabatEntry(data.kepalaDinas, true)
         && isValidPejabatEntry(data.kepalaBidang, false)
@@ -82,12 +50,12 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerId', 'nama', 'jabatan', 'peran', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerId', 'nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
-        && data.ownerId == internalWorkspaceId()
-        && isRequiredString(data, 'nama', 1, 150)
-        && isOptionalString(data, 'nip', 60)
-        && isRequiredString(data, 'jabatan', 1, 200)
+        && data.ownerId == 'internal_wasdal'
+        && data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 150
+        && (!('nip' in data) || (data.nip is string && data.nip.size() <= 60))
+        && data.jabatan is string && data.jabatan.size() >= 1 && data.jabatan.size() <= 200
         && (data.peran in ['ketua_tim', 'staf'])
-        && isOptionalString(data, 'email', 150)
+        && (!('email' in data) || (data.email is string && data.email.size() <= 150))
         && (!('isKetuaTim' in data) || data.isKetuaTim is bool)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -112,35 +80,55 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
-        && data.ownerId == internalWorkspaceId()
-        && isOptionalString(data, 'nomorAgenda', 100)
-        && isRequiredString(data, 'nomorSurat', 1, 150)
-        && isRequiredString(data, 'tanggalSurat', 4, 40)
-        && isRequiredString(data, 'tanggalDiterima', 4, 40)
-        && isRequiredString(data, 'asalSurat', 1, 250)
-        && isRequiredString(data, 'perihal', 1, 1500)
+        && data.ownerId == 'internal_wasdal'
+        && (!('nomorAgenda' in data) || (data.nomorAgenda is string && data.nomorAgenda.size() <= 100))
+        && data.nomorSurat is string && data.nomorSurat.size() >= 1 && data.nomorSurat.size() <= 150
+        && data.tanggalSurat is string && data.tanggalSurat.size() >= 4 && data.tanggalSurat.size() <= 40
+        && data.tanggalDiterima is string && data.tanggalDiterima.size() >= 4 && data.tanggalDiterima.size() <= 40
+        && data.asalSurat is string && data.asalSurat.size() >= 1 && data.asalSurat.size() <= 250
+        && data.perihal is string && data.perihal.size() >= 1 && data.perihal.size() <= 1500
         && (data.sifat in ['Biasa', 'Penting', 'Segera', 'Sangat Segera', 'Rahasia'])
-        && isOptionalString(data, 'tanggalDisposisi', 40)
+        && (!('tanggalDisposisi' in data) || (data.tanggalDisposisi is string && data.tanggalDisposisi.size() <= 40))
         && data.penerimaDisposisiIds is list
         && data.penerimaDisposisiIds.size() <= 30
         && (data.penerimaDisposisiIds.size() == 0 || (data.penerimaDisposisiIds[0] is string && data.penerimaDisposisiIds[0].size() <= 128))
         && data.penerimaDisposisiNama is list
         && data.penerimaDisposisiNama.size() <= 30
         && (data.penerimaDisposisiNama.size() == 0 || (data.penerimaDisposisiNama[0] is string && data.penerimaDisposisiNama[0].size() <= 150))
-        && isOptionalString(data, 'instruksiDisposisi', 1500)
-        && isOptionalString(data, 'catatanDisposisiKetuaTim', 1500)
-        && isOptionalString(data, 'tenggatWaktu', 40)
+        && (!('instruksiDisposisi' in data) || (data.instruksiDisposisi is string && data.instruksiDisposisi.size() <= 1500))
+        && (!('catatanDisposisiKetuaTim' in data) || (data.catatanDisposisiKetuaTim is string && data.catatanDisposisiKetuaTim.size() <= 1500))
+        && (!('tenggatWaktu' in data) || (data.tenggatWaktu is string && data.tenggatWaktu.size() <= 40))
         && (data.tahapSaatIni is int && data.tahapSaatIni >= 1 && data.tahapSaatIni <= 7)
         && data.statusSelesai is bool
-        && isOptionalString(data, 'tanggalSelesai', 40)
+        && (!('tanggalSelesai' in data) || (data.tanggalSelesai is string && data.tanggalSelesai.size() <= 40))
         && data.riwayatTindakLanjut is list
         && data.riwayatTindakLanjut.size() <= 50
         && (data.riwayatTindakLanjut.size() == 0 || data.riwayatTindakLanjut[0] is map)
-        && (!('fileSuratMasuk' in data) || isValidDokumenFile(data.fileSuratMasuk))
-        && (!('fileSuratKeluar' in data) || isValidDokumenFile(data.fileSuratKeluar))
-        && isOptionalString(data, 'nomorSuratKeluar', 150)
-        && isOptionalString(data, 'tanggalSuratKeluar', 40)
-        && isOptionalString(data, 'perihalSuratKeluar', 1000)
+        && (!('fileSuratMasuk' in data) || (
+          data.fileSuratMasuk is map
+          && data.fileSuratMasuk.keys().hasAll(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah'])
+          && data.fileSuratMasuk.keys().hasOnly(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah', 'dataUrl'])
+          && data.fileSuratMasuk.nama is string && data.fileSuratMasuk.nama.size() >= 1 && data.fileSuratMasuk.nama.size() <= 255
+          && data.fileSuratMasuk.ukuran is string && data.fileSuratMasuk.ukuran.size() >= 1 && data.fileSuratMasuk.ukuran.size() <= 40
+          && data.fileSuratMasuk.tipe is string && data.fileSuratMasuk.tipe.size() >= 1 && data.fileSuratMasuk.tipe.size() <= 100
+          && data.fileSuratMasuk.tanggalUnggah is string && data.fileSuratMasuk.tanggalUnggah.size() >= 1 && data.fileSuratMasuk.tanggalUnggah.size() <= 40
+          && data.fileSuratMasuk.pengunggah is string && data.fileSuratMasuk.pengunggah.size() >= 1 && data.fileSuratMasuk.pengunggah.size() <= 150
+          && (!('dataUrl' in data.fileSuratMasuk) || (data.fileSuratMasuk.dataUrl is string && data.fileSuratMasuk.dataUrl.size() <= 250000))
+        ))
+        && (!('fileSuratKeluar' in data) || (
+          data.fileSuratKeluar is map
+          && data.fileSuratKeluar.keys().hasAll(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah'])
+          && data.fileSuratKeluar.keys().hasOnly(['nama', 'ukuran', 'tipe', 'tanggalUnggah', 'pengunggah', 'dataUrl'])
+          && data.fileSuratKeluar.nama is string && data.fileSuratKeluar.nama.size() >= 1 && data.fileSuratKeluar.nama.size() <= 255
+          && data.fileSuratKeluar.ukuran is string && data.fileSuratKeluar.ukuran.size() >= 1 && data.fileSuratKeluar.ukuran.size() <= 40
+          && data.fileSuratKeluar.tipe is string && data.fileSuratKeluar.tipe.size() >= 1 && data.fileSuratKeluar.tipe.size() <= 100
+          && data.fileSuratKeluar.tanggalUnggah is string && data.fileSuratKeluar.tanggalUnggah.size() >= 1 && data.fileSuratKeluar.tanggalUnggah.size() <= 40
+          && data.fileSuratKeluar.pengunggah is string && data.fileSuratKeluar.pengunggah.size() >= 1 && data.fileSuratKeluar.pengunggah.size() <= 150
+          && (!('dataUrl' in data.fileSuratKeluar) || (data.fileSuratKeluar.dataUrl is string && data.fileSuratKeluar.dataUrl.size() <= 250000))
+        ))
+        && (!('nomorSuratKeluar' in data) || (data.nomorSuratKeluar is string && data.nomorSuratKeluar.size() <= 150))
+        && (!('tanggalSuratKeluar' in data) || (data.tanggalSuratKeluar is string && data.tanggalSuratKeluar.size() <= 40))
+        && (!('perihalSuratKeluar' in data) || (data.perihalSuratKeluar is string && data.perihalSuratKeluar.size() <= 1000))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -156,82 +144,82 @@ service cloud.firestore {
 
     // 2. Workspace Config (Pejabat Struktural & Seed State)
     match /workspaces/{workspaceId} {
-      allow get: if isValidId(workspaceId) && workspaceId == internalWorkspaceId();
-      allow list: if isInternalWorkspaceDoc(existing());
+      allow get: if isValidId(workspaceId) && workspaceId == 'internal_wasdal';
+      allow list: if isInternalWorkspaceDoc(resource.data);
       allow create: if isValidId(workspaceId)
-        && workspaceId == internalWorkspaceId()
-        && isValidWorkspaceConfig(incoming(), workspaceId)
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && workspaceId == 'internal_wasdal'
+        && isValidWorkspaceConfig(request.resource.data, workspaceId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
       allow update: if isValidId(workspaceId)
-        && workspaceId == internalWorkspaceId()
-        && isInternalWorkspaceDoc(existing())
-        && isValidWorkspaceConfig(incoming(), workspaceId)
-        && incoming().ownerId == existing().ownerId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && workspaceId == 'internal_wasdal'
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidWorkspaceConfig(request.resource.data, workspaceId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
         && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['kepalaDinas', 'kepalaBidang', 'ketuaTim', 'updatedAt'])
-          || incoming().diff(existing()).affectedKeys().hasOnly(['seeded', 'updatedAt'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['kepalaDinas', 'kepalaBidang', 'ketuaTim', 'updatedAt'])
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seeded', 'updatedAt'])
         );
       allow delete: if false;
     }
 
     // 3. Personel Tim
     match /personel/{personelId} {
-      allow get: if isValidId(personelId) && isInternalWorkspaceDoc(existing());
-      allow list: if isInternalWorkspaceDoc(existing());
+      allow get: if isValidId(personelId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
       allow create: if isValidId(personelId)
-        && isValidPersonel(incoming())
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && isValidPersonel(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
       allow update: if isValidId(personelId)
-        && isInternalWorkspaceDoc(existing())
-        && isValidPersonel(incoming())
-        && incoming().ownerId == existing().ownerId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'updatedAt']);
-      allow delete: if isValidId(personelId) && isInternalWorkspaceDoc(existing());
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidPersonel(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nama', 'nip', 'jabatan', 'peran', 'email', 'isKetuaTim', 'updatedAt']);
+      allow delete: if isValidId(personelId) && isInternalWorkspaceDoc(resource.data);
     }
 
     // 4. Surat Masuk & Disposisi
     match /suratMasuk/{suratId} {
-      allow get: if isValidId(suratId) && isInternalWorkspaceDoc(existing());
-      allow list: if isInternalWorkspaceDoc(existing());
+      allow get: if isValidId(suratId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
       allow create: if isValidId(suratId)
-        && isValidSuratMasuk(incoming())
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && isValidSuratMasuk(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
       allow update: if isValidId(suratId)
-        && isInternalWorkspaceDoc(existing())
-        && isValidSuratMasuk(incoming())
-        && incoming().ownerId == existing().ownerId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidSuratMasuk(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
         && (
           (
             // Terminal state lock: once statusSelesai == true, only explicit reopen allowed
-            existing().statusSelesai == false && (
+            resource.data.statusSelesai == false && (
               // Action 1: Update Disposisi & Instruksi
-              incoming().diff(existing()).affectedKeys().hasOnly([
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'penerimaDisposisiIds', 'penerimaDisposisiNama', 'instruksiDisposisi',
                 'catatanDisposisiKetuaTim', 'tanggalDisposisi', 'tenggatWaktu',
                 'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
               ])
               ||
               // Action 2: Advance / Set Stage or Add Catatan
-              incoming().diff(existing()).affectedKeys().hasOnly([
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
               ])
               ||
               // Action 3: Complete Tindak Lanjut
-              incoming().diff(existing()).affectedKeys().hasOnly([
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
               ])
               ||
               // Action 4: Upload Surat Keluar
-              incoming().diff(existing()).affectedKeys().hasOnly([
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'fileSuratKeluar', 'nomorSuratKeluar', 'tanggalSuratKeluar',
                 'perihalSuratKeluar', 'statusSelesai', 'tanggalSelesai',
                 'riwayatTindakLanjut', 'updatedAt'
@@ -240,14 +228,14 @@ service cloud.firestore {
           )
           || (
             // Action 5: Reopen / Change Status Selesai from Terminal State
-            existing().statusSelesai == true
-            && incoming().statusSelesai == false
-            && incoming().diff(existing()).affectedKeys().hasOnly([
+            resource.data.statusSelesai == true
+            && request.resource.data.statusSelesai == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
             ])
           )
         );
-      allow delete: if isValidId(suratId) && isInternalWorkspaceDoc(existing());
+      allow delete: if isValidId(suratId) && isInternalWorkspaceDoc(resource.data);
     }
   }
 }

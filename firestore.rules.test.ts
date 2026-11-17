@@ -102,3 +102,37 @@ test('Internal workspace security checks enforce PERMISSION_DENIED on invalid pa
   // 8. Invalid Role Enum
   assert.equal(VALID_ROLES.has('superadmin'), false);
 });
+
+test('Action 4 Upload Surat Keluar payload matches allowed keys and file metadata bounds', () => {
+  const filePayload = {
+    nama: 'Surat_Keluar_001.pdf',
+    ukuran: '1.2 MB',
+    tipe: 'application/pdf',
+    tanggalUnggah: '2026-11-17 07:45',
+    pengunggah: 'Yuliani, ST',
+  };
+  const updatedWithBothFiles: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    nomorSurat: '042/SS-DIR/X/2026',
+    tanggalSurat: '2026-11-02',
+    tanggalDiterima: '2026-11-03',
+    asalSurat: 'Sudirman Suite',
+    perihal: 'Permohonan Penegasan Status Hukum PPPSRS',
+    sifat: 'Penting',
+    penerimaDisposisiIds: ['internal_wasdal_p-chafidz'],
+    penerimaDisposisiNama: ['Chafidz'],
+    tahapSaatIni: 7,
+    statusSelesai: true,
+    tanggalSelesai: '2026-11-17',
+    riwayatTindakLanjut: [{ id: 'r1', tahapId: 7 }],
+    fileSuratMasuk: filePayload,
+    fileSuratKeluar: filePayload,
+    nomorSuratKeluar: '503/WASDAL/1102/DPKP',
+    tanggalSuratKeluar: '2026-11-17',
+    perihalSuratKeluar: 'Jawaban resmi atas permohonan',
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+  assert.equal(evaluateSuratCreate('internal_wasdal_surat-1', updatedWithBothFiles, true), 'ALLOW');
+});
+
