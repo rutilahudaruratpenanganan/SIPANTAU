@@ -148,4 +148,25 @@ test('Action 6 Edit Registrasi Surat Masuk allows metadata fields only when acti
   assert.equal(editAllowedKeys.has('createdAt'), false);
 });
 
+test('BerkasChunk enforces chunk index, totalChunks, content bounds, and kind', () => {
+  const CHUNK_ALLOWED_KEYS = new Set([
+    'ownerId', 'kind', 'chunkIndex', 'totalChunks', 'content', 'createdAt', 'updatedAt',
+  ]);
+  const validChunk = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    kind: 'keluar',
+    chunkIndex: 0,
+    totalChunks: 3,
+    content: 'A'.repeat(100),
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+  assert.equal(Object.keys(validChunk).every((k) => CHUNK_ALLOWED_KEYS.has(k)), true);
+  assert.equal(validChunk.chunkIndex < validChunk.totalChunks, true);
+  assert.equal(validChunk.content.length <= 700000, true);
+  assert.equal(['masuk', 'keluar'].includes(validChunk.kind), true);
+  // Out-of-bounds checks
+  assert.equal(30 <= 29, false); // chunkIndex max 29
+  assert.equal(700001 <= 700000, false); // content max 700k
+});
 

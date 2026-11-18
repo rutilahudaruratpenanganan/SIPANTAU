@@ -38,10 +38,12 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
   const [filePreviewData, setFilePreviewData] = useState<DokumenFile | null>(
     initialSurat?.fileSuratMasuk || null
   );
+  const [isReadingFile, setIsReadingFile] = useState(false);
 
   // Sync form fields whenever modal opens or target surat changes
   useEffect(() => {
     if (!isOpen) return;
+    setIsReadingFile(false);
     if (initialSurat) {
       setNomorSurat(initialSurat.nomorSurat || '');
       setTanggalSurat(initialSurat.tanggalSurat || todayStr);
@@ -72,10 +74,17 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSelectedFile(file);
+      if (file.size > 12 * 1024 * 1024) {
+        setErrorMessage('Ukuran berkas PDF maksimal 12 MB agar dapat tersimpan penuh di database.');
+        e.target.value = '';
+        return;
+      }
 
-      // Create previewable representation
-      const sizeFormatted = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+      setErrorMessage('');
+      setSelectedFile(file);
+      setIsReadingFile(true);
+
+      const sizeFormatted = Math.max(0.1, file.size / (1024 * 1024)).toFixed(1) + ' MB';
       const fileData: DokumenFile = {
         nama: file.name,
         ukuran: sizeFormatted,
@@ -88,6 +97,11 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
       reader.onload = () => {
         fileData.dataUrl = reader.result as string;
         setFilePreviewData(fileData);
+        setIsReadingFile(false);
+      };
+      reader.onerror = () => {
+        setErrorMessage('Gagal membaca berkas PDF yang dipilih. Silakan coba pilih ulang.');
+        setIsReadingFile(false);
       };
       reader.readAsDataURL(file);
     }
@@ -95,6 +109,10 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadingFile) {
+      setErrorMessage('Mohon tunggu hingga proses pembacaan berkas PDF selesai.');
+      return;
+    }
     if (!asalSurat.trim() || !perihal.trim()) {
       setErrorMessage('Mohon lengkapi asal surat dan perihal surat.');
       return;
@@ -285,8 +303,8 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
             </label>
             <p className="text-[11px] text-slate-500 mb-3">
               {isEditing
-                ? 'Biarkan jika tidak mengganti berkas PDF yang sudah tersimpan, atau pilih file PDF baru (maks. 25MB).'
-                : 'Unggah file dokumen resmi naskah dinas masuk dalam format PDF (maks. 25MB)'}
+                ? 'Biarkan jika tidak mengganti berkas PDF yang sudah tersimpan, atau pilih file PDF baru (maks. 12MB).'
+                : 'Unggah file dokumen resmi naskah dinas masuk dalam format PDF (maks. 12MB)'}
             </p>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -301,14 +319,19 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
                 />
               </label>
 
-              {(selectedFile || filePreviewData) && (
+              {isReadingFile ? (
+                <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                  <span className="font-medium">Memproses berkas PDF...</span>
+                </div>
+              ) : (selectedFile || filePreviewData) && (
                 <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span className="font-semibold truncate max-w-xs">
                     {selectedFile ? selectedFile.name : filePreviewData?.nama}
                   </span>
                   <span className="text-[11px] text-emerald-600">
-                    ({selectedFile ? (selectedFile.size / (1024 * 1024)).toFixed(1) + ' MB' : filePreviewData?.ukuran})
+                    ({selectedFile ? Math.max(0.1, selectedFile.size / (1024 * 1024)).toFixed(1) + ' MB' : filePreviewData?.ukuran})
                   </span>
                 </div>
               )}
@@ -326,13 +349,18 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
             </button>
             <button
               type="submit"
-              className={`px-4 py-2 text-xs font-semibold text-white rounded-lg shadow-sm transition-colors ${
+              disabled={isReadingFile}
+              className={`px-4 py-2 text-xs font-semibold text-white rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                 isEditing
                   ? 'bg-amber-600 hover:bg-amber-500'
                   : 'bg-blue-600 hover:bg-blue-500'
               }`}
             >
-              {isEditing ? 'Simpan Perubahan Surat' : 'Simpan Surat Masuk'}
+              {isReadingFile
+                ? 'Memproses PDF...'
+                : isEditing
+                ? 'Simpan Perubahan Surat'
+                : 'Simpan Surat Masuk'}
             </button>
           </div>
 

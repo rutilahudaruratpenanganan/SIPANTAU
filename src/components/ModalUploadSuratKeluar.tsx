@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, FileCheck, CheckCircle2 } from 'lucide-react';
+import { X, Upload, FileCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import { SuratMasuk, DokumenFile } from '../types';
 
 interface ModalUploadSuratKeluarProps {
@@ -39,32 +39,43 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
   const [filePreviewData, setFilePreviewData] = useState<DokumenFile | null>(
     surat?.fileSuratKeluar || null
   );
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // Sync state whenever surat changes
+  // Sync only when modal opens or active surat ID changes (avoid wiping selectedFile during snapshot updates)
   useEffect(() => {
-    if (surat) {
-      setNomorSuratKeluar(
-        surat.nomorSuratKeluar || `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
-      );
-      setTanggalSuratKeluar(
-        surat.tanggalSuratKeluar || new Date().toISOString().split('T')[0]
-      );
-      setPerihalSuratKeluar(
-        surat.perihalSuratKeluar || `Jawaban / Tanggapan atas ${surat.perihal}`
-      );
-      setFilePreviewData(surat.fileSuratKeluar || null);
-      setSelectedFile(null);
-    }
-  }, [surat]);
+    if (!isOpen || !surat) return;
+    setNomorSuratKeluar(
+      surat.nomorSuratKeluar || `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
+    );
+    setTanggalSuratKeluar(
+      surat.tanggalSuratKeluar || new Date().toISOString().split('T')[0]
+    );
+    setPerihalSuratKeluar(
+      surat.perihalSuratKeluar || `Jawaban / Tanggapan atas ${surat.perihal}`
+    );
+    setFilePreviewData(surat.fileSuratKeluar || null);
+    setSelectedFile(null);
+    setIsReadingFile(false);
+    setErrorMessage('');
+  }, [isOpen, surat?.id]);
 
   if (!isOpen || !surat) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSelectedFile(file);
+      if (file.size > 12 * 1024 * 1024) {
+        setErrorMessage('Ukuran berkas PDF maksimal 12 MB agar dapat tersimpan penuh di database.');
+        e.target.value = '';
+        return;
+      }
 
-      const sizeFormatted = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+      setErrorMessage('');
+      setSelectedFile(file);
+      setIsReadingFile(true);
+
+      const sizeFormatted = Math.max(0.1, file.size / (1024 * 1024)).toFixed(1) + ' MB';
       const fileData: DokumenFile = {
         nama: file.name,
         ukuran: sizeFormatted,
@@ -77,6 +88,11 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
       reader.onload = () => {
         fileData.dataUrl = reader.result as string;
         setFilePreviewData(fileData);
+        setIsReadingFile(false);
+      };
+      reader.onerror = () => {
+        setErrorMessage('Gagal membaca berkas PDF yang dipilih. Silakan coba lagi.');
+        setIsReadingFile(false);
       };
       reader.readAsDataURL(file);
     }
@@ -84,6 +100,10 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadingFile) {
+      setErrorMessage('Mohon tunggu hingga proses pembacaan berkas PDF selesai.');
+      return;
+    }
 
     const fileToSave: DokumenFile = filePreviewData || {
       nama: `Surat_Keluar_Resmi_${(surat.nomorSurat || surat.id).replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
@@ -105,7 +125,7 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8">
         
         {/* Header */}
@@ -120,6 +140,7 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
@@ -139,6 +160,13 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 flex items-center gap-2 font-semibold">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -188,13 +216,13 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
               Unggah File PDF Surat Keluar (TTE PESONA) <span className="text-rose-500">*</span>
             </label>
             <p className="text-[11px] text-slate-500 mb-3">
-              Format dokumen PDF resmi yang telah disahkan dan siap didistribusikan
+              Format dokumen PDF resmi yang telah disahkan dan siap didistribusikan (maks. 12MB)
             </p>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:border-emerald-500 rounded-lg font-medium text-slate-700 shadow-xs transition-colors">
                 <Upload className="w-4 h-4 text-emerald-600" />
-                <span>Pilih Berkas PDF</span>
+                <span>{filePreviewData ? 'Ganti Berkas PDF' : 'Pilih Berkas PDF'}</span>
                 <input
                   type="file"
                   accept="application/pdf"
@@ -203,9 +231,14 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
                 />
               </label>
 
-              {(selectedFile || filePreviewData) && (
+              {isReadingFile ? (
+                <div className="flex items-center gap-2 text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                  <span className="font-medium">Memproses berkas PDF...</span>
+                </div>
+              ) : (selectedFile || filePreviewData) && (
                 <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                  <CheckCircle2 className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span className="font-semibold truncate max-w-xs">
                     {selectedFile ? selectedFile.name : filePreviewData?.nama}
                   </span>
@@ -243,10 +276,11 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              disabled={isReadingFile}
+              className="px-4 py-2 font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <FileCheck className="w-4 h-4" />
-              <span>Simpan & Terbitkan Surat Keluar</span>
+              <span>{isReadingFile ? 'Memproses PDF...' : 'Simpan & Terbitkan Surat Keluar'}</span>
             </button>
           </div>
 

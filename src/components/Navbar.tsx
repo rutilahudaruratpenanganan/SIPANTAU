@@ -35,20 +35,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-slate-900 border-b border-slate-800 text-white shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
           
           {/* Brand Wordmark & Department */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-inner font-bold text-lg">
-              <Building2 className="w-5 h-5 text-blue-100" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-inner font-bold text-lg shrink-0">
+              <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-base tracking-tight text-white whitespace-nowrap">
+                <span className="font-bold text-sm sm:text-base tracking-tight text-white whitespace-nowrap truncate">
                   SIPANTAU-WASDAL
                 </span>
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium border border-blue-400/20">
+                <span className="hidden sm:inline-block text-[11px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium border border-blue-400/20">
                   v2.0
                 </span>
               </div>
@@ -107,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Actions: Add Surat + Active User / Role Switcher */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={onOpenTambahSurat}
               className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all whitespace-nowrap"
@@ -121,7 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-left transition-colors text-xs"
+                className="flex items-center gap-1.5 sm:gap-2.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-left transition-colors text-xs"
                 title="Ganti Pengguna Aktif (Ketua Tim / Staf)"
               >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${

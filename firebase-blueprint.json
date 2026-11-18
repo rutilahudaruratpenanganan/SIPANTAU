@@ -216,6 +216,51 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "BerkasChunk": {
+      "title": "BerkasChunk",
+      "description": "Potongan data dokumen PDF berukuran besar (> 250KB base64) yang disimpan permanen di Cloud Firestore",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["masuk", "keluar"]
+        },
+        "chunkIndex": {
+          "type": "integer"
+        },
+        "totalChunks": {
+          "type": "integer"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 700000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "kind",
+        "chunkIndex",
+        "totalChunks",
+        "content",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -230,6 +275,10 @@
     "/suratMasuk/{suratId}": {
       "schema": { "$ref": "#/entities/SuratMasuk" },
       "description": "Daftar surat masuk, disposisi, dan tindak lanjut workspace internal"
+    },
+    "/suratMasuk/{suratId}/berkasChunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/BerkasChunk" },
+      "description": "Potongan berkas PDF surat masuk dan surat keluar milik dokumen induk suratMasuk"
     }
   }
 }

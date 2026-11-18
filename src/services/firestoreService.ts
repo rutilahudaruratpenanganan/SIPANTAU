@@ -4,6 +4,7 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -48,9 +49,13 @@ const LIMITS = {
   PERIHAL_KELUAR: 1000,
   FILE_NAMA: 255,
   FILE_DATA_URL: 250000,
+  PDF_CHUNK_CHARS: 600000,
+  PDF_MAX_CHUNKS: 30,
   MAX_DISPOSISI_ARRAY: 30,
   MAX_RIWAYAT_ARRAY: 50,
 };
+
+const pdfMemoryCache = new Map<string, string>();
 
 function clampStr(val: string | undefined, maxLen: number): string {
   if (!val) return '';
@@ -65,27 +70,147 @@ function formatTimestamp(ts: unknown): string {
   return new Date().toISOString().replace('T', ' ').substring(0, 16);
 }
 
-function cacheLargePdfLocally(suratId: string, kind: 'masuk' | 'keluar', dataUrl?: string) {
+function cacheLargePdfLocally(cacheKey: string, dataUrl?: string) {
   if (!dataUrl) return;
+  pdfMemoryCache.set(cacheKey, dataUrl);
   try {
-    localStorage.setItem(`sipantau_pdf_${kind}_${suratId}`, dataUrl);
+    localStorage.setItem(cacheKey, dataUrl);
   } catch {
     // ignore localStorage quota overflow
   }
 }
 
 function getCachedPdfLocally(suratId: string, kind: 'masuk' | 'keluar'): string | undefined {
+  const legacyKey = `sipantau_pdf_${kind}_${suratId}`;
+  const inMem = pdfMemoryCache.get(legacyKey);
+  if (inMem) return inMem;
   try {
-    return localStorage.getItem(`sipantau_pdf_${kind}_${suratId}`) || undefined;
+    return localStorage.getItem(legacyKey) || undefined;
   } catch {
     return undefined;
   }
 }
 
+function buildChunkPointer(
+  suratId: string,
+  kind: 'masuk' | 'keluar',
+  totalChunks: number,
+  uploadToken: string
+): string {
+  return `chunked://${suratId}/${kind}/${totalChunks}/${uploadToken}`;
+}
+
+export function isChunkedPdfUrl(url?: string): boolean {
+  return Boolean(url && url.startsWith('chunked://'));
+}
+
+async function persistLargePdfChunks(
+  suratId: string,
+  kind: 'masuk' | 'keluar',
+  dataUrl: string,
+  uploadToken: string
+): Promise<string> {
+  const totalChunks = Math.ceil(dataUrl.length / LIMITS.PDF_CHUNK_CHARS);
+  if (totalChunks > LIMITS.PDF_MAX_CHUNKS) {
+    throw new Error(
+      'Ukuran berkas PDF terlalu besar untuk disimpan ke Cloud Firestore (maksimal 12 MB).'
+    );
+  }
+
+  const pointer = buildChunkPointer(suratId, kind, totalChunks, uploadToken);
+  const chunksCol = collection(db, 'suratMasuk', suratId, 'berkasChunks');
+  const existingSnap = await getDocs(
+    query(chunksCol, where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+  );
+
+  const batch = writeBatch(db);
+  for (const oldDoc of existingSnap.docs) {
+    if (oldDoc.data().kind === kind) {
+      batch.delete(oldDoc.ref);
+    }
+  }
+
+  for (let idx = 0; idx < totalChunks; idx++) {
+    const start = idx * LIMITS.PDF_CHUNK_CHARS;
+    const content = dataUrl.slice(start, start + LIMITS.PDF_CHUNK_CHARS);
+    const chunkId = `${kind}_${uploadToken}_${idx}`;
+    batch.set(doc(db, 'suratMasuk', suratId, 'berkasChunks', chunkId), {
+      ownerId: INTERNAL_WORKSPACE_ID,
+      kind,
+      chunkIndex: idx,
+      totalChunks,
+      content,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+  cacheLargePdfLocally(pointer, dataUrl);
+  cacheLargePdfLocally(`sipantau_pdf_${kind}_${suratId}`, dataUrl);
+  return pointer;
+}
+
+export async function loadPdfDataUrlFromFirestore(chunkPointer: string): Promise<string> {
+  const memHit = pdfMemoryCache.get(chunkPointer);
+  if (memHit) return memHit;
+
+  try {
+    const localHit = localStorage.getItem(chunkPointer);
+    if (localHit && localHit.startsWith('data:')) {
+      pdfMemoryCache.set(chunkPointer, localHit);
+      return localHit;
+    }
+  } catch {
+    // ignore storage access issues
+  }
+
+  // Parse chunked://<suratId>/<kind>/<totalChunks>/<token>
+  const stripped = chunkPointer.replace('chunked://', '');
+  const parts = stripped.split('/');
+  const suratId = parts[0];
+  const kind = parts[1] as 'masuk' | 'keluar';
+  const expectedTotal = Number(parts[2] || '0');
+  const token = parts[3] || '';
+
+  if (!suratId || !kind) {
+    throw new Error('Referensi dokumen PDF tidak valid.');
+  }
+
+  const chunksCol = collection(db, 'suratMasuk', suratId, 'berkasChunks');
+  const snap = await getDocs(
+    query(chunksCol, where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+  );
+
+  const matchingDocs = snap.docs
+    .filter((d) => {
+      const data = d.data();
+      if (data.kind !== kind) return false;
+      if (token && snap.docs.some((x) => x.id.startsWith(`${kind}_${token}_`))) {
+        return d.id.startsWith(`${kind}_${token}_`);
+      }
+      return true;
+    })
+    .sort((a, b) => Number(a.data().chunkIndex) - Number(b.data().chunkIndex));
+
+  if (matchingDocs.length === 0 || (expectedTotal > 0 && matchingDocs.length < expectedTotal)) {
+    throw new Error('Sebagian atau seluruh potongan berkas PDF tidak ditemukan di Cloud Firestore.');
+  }
+
+  const assembled = matchingDocs.map((d) => String(d.data().content || '')).join('');
+  if (!assembled) {
+    throw new Error('Isi berkas PDF kosong.');
+  }
+
+  cacheLargePdfLocally(chunkPointer, assembled);
+  return assembled;
+}
+
 function sanitizeDokumenFile(
   file: DokumenFile,
   suratId: string,
-  kind: 'masuk' | 'keluar'
+  kind: 'masuk' | 'keluar',
+  overrideDataUrl?: string
 ): Record<string, string> {
   const clean: Record<string, string> = {
     nama: clampStr(file.nama || 'Dokumen.pdf', LIMITS.FILE_NAMA) || 'Dokumen.pdf',
@@ -97,11 +222,12 @@ function sanitizeDokumenFile(
     pengunggah: clampStr(file.pengunggah || 'Staf', LIMITS.NAMA) || 'Staf',
   };
 
-  if (file.dataUrl) {
-    if (file.dataUrl.length <= LIMITS.FILE_DATA_URL) {
-      clean.dataUrl = file.dataUrl;
+  const finalUrl = overrideDataUrl !== undefined ? overrideDataUrl : file.dataUrl;
+  if (finalUrl) {
+    if (finalUrl.length <= LIMITS.FILE_DATA_URL) {
+      clean.dataUrl = finalUrl;
     } else {
-      cacheLargePdfLocally(suratId, kind, file.dataUrl);
+      cacheLargePdfLocally(`sipantau_pdf_${kind}_${suratId}`, finalUrl);
     }
   }
 
@@ -415,12 +541,43 @@ export async function createSuratMasukDb(
     updatedAt: serverTimestamp(),
   };
 
+  const rawMasukDataUrl = suratData.fileSuratMasuk?.dataUrl;
+  const needsMasukChunking = Boolean(
+    rawMasukDataUrl &&
+      rawMasukDataUrl.startsWith('data:') &&
+      rawMasukDataUrl.length > LIMITS.FILE_DATA_URL
+  );
+  const uploadToken = Date.now().toString(36);
+  const totalMasukChunks = needsMasukChunking && rawMasukDataUrl
+    ? Math.ceil(rawMasukDataUrl.length / LIMITS.PDF_CHUNK_CHARS)
+    : 0;
+
+  if (needsMasukChunking && totalMasukChunks > LIMITS.PDF_MAX_CHUNKS) {
+    throw new Error('Ukuran berkas PDF melebihi batas maksimal 12 MB.');
+  }
+
   if (suratData.fileSuratMasuk) {
-    payload.fileSuratMasuk = sanitizeDokumenFile(suratData.fileSuratMasuk, id, 'masuk');
+    const pointer = needsMasukChunking
+      ? buildChunkPointer(id, 'masuk', totalMasukChunks, uploadToken)
+      : undefined;
+    payload.fileSuratMasuk = sanitizeDokumenFile(
+      suratData.fileSuratMasuk,
+      id,
+      'masuk',
+      pointer
+    );
   }
 
   try {
     await setDoc(doc(db, 'suratMasuk', id), payload);
+    if (needsMasukChunking && rawMasukDataUrl) {
+      try {
+        await persistLargePdfChunks(id, 'masuk', rawMasukDataUrl, uploadToken);
+      } catch (chunkErr) {
+        await deleteDoc(doc(db, 'suratMasuk', id)).catch(() => {});
+        throw chunkErr;
+      }
+    }
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
@@ -448,15 +605,26 @@ export async function updateSuratMasukDb(
     updatedAt: serverTimestamp(),
   };
 
-  if (suratData.fileSuratMasuk) {
-    updatePayload.fileSuratMasuk = sanitizeDokumenFile(
-      suratData.fileSuratMasuk,
-      suratId,
-      'masuk'
-    );
-  }
-
   try {
+    if (suratData.fileSuratMasuk) {
+      const rawUrl = suratData.fileSuratMasuk.dataUrl;
+      let overrideUrl: string | undefined;
+      if (rawUrl && rawUrl.startsWith('data:') && rawUrl.length > LIMITS.FILE_DATA_URL) {
+        overrideUrl = await persistLargePdfChunks(
+          suratId,
+          'masuk',
+          rawUrl,
+          Date.now().toString(36)
+        );
+      }
+      updatePayload.fileSuratMasuk = sanitizeDokumenFile(
+        suratData.fileSuratMasuk,
+        suratId,
+        'masuk',
+        overrideUrl
+      );
+    }
+
     await updateDoc(doc(db, 'suratMasuk', suratId), updatePayload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
@@ -544,8 +712,22 @@ export async function uploadSuratKeluarDb(
 ): Promise<void> {
   const path = `suratMasuk/${suratId}`;
   try {
+    let overrideUrl: string | undefined;
+    if (
+      fileData.dataUrl &&
+      fileData.dataUrl.startsWith('data:') &&
+      fileData.dataUrl.length > LIMITS.FILE_DATA_URL
+    ) {
+      overrideUrl = await persistLargePdfChunks(
+        suratId,
+        'keluar',
+        fileData.dataUrl,
+        Date.now().toString(36)
+      );
+    }
+
     const updatePayload: Record<string, unknown> = {
-      fileSuratKeluar: sanitizeDokumenFile(fileData, suratId, 'keluar'),
+      fileSuratKeluar: sanitizeDokumenFile(fileData, suratId, 'keluar', overrideUrl),
       nomorSuratKeluar: clampStr(nomorSuratKeluar, LIMITS.NOMOR_SURAT),
       tanggalSuratKeluar: clampStr(tanggalSuratKeluar, LIMITS.DATE_STR),
       perihalSuratKeluar: clampStr(perihalSuratKeluar, LIMITS.PERIHAL_KELUAR),
@@ -565,6 +747,17 @@ export async function uploadSuratKeluarDb(
 export async function deleteSuratDb(suratId: string): Promise<void> {
   const path = `suratMasuk/${suratId}`;
   try {
+    const chunksCol = collection(db, 'suratMasuk', suratId, 'berkasChunks');
+    const chunksSnap = await getDocs(
+      query(chunksCol, where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+    );
+    if (!chunksSnap.empty) {
+      const batch = writeBatch(db);
+      for (const c of chunksSnap.docs) {
+        batch.delete(c.ref);
+      }
+      await batch.commit();
+    }
     await deleteDoc(doc(db, 'suratMasuk', suratId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);

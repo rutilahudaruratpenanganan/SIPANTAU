@@ -133,6 +133,20 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidBerkasChunk(data) {
+      return data.keys().hasAll(['ownerId', 'kind', 'chunkIndex', 'totalChunks', 'content', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'kind', 'chunkIndex', 'totalChunks', 'content', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && (data.kind in ['masuk', 'keluar'])
+        && (data.chunkIndex is int && data.chunkIndex >= 0 && data.chunkIndex <= 29)
+        && (data.totalChunks is int && data.totalChunks >= 1 && data.totalChunks <= 30)
+        && data.chunkIndex < data.totalChunks
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 700000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // ------------------------------------------------------------------
     // Collection Rules (Internal Shared Workspace)
     // ------------------------------------------------------------------
@@ -243,6 +257,42 @@ service cloud.firestore {
           )
         );
       allow delete: if isValidId(suratId) && isInternalWorkspaceDoc(resource.data);
+
+      // 4a. Multi-chunk PDF Attachment Subcollection
+      match /berkasChunks/{chunkId} {
+        allow get: if isValidId(suratId)
+          && isValidId(chunkId)
+          && isInternalWorkspaceDoc(resource.data)
+          && exists(/databases/$(database)/documents/suratMasuk/$(suratId))
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.ownerId == 'internal_wasdal';
+        allow list: if isInternalWorkspaceDoc(resource.data);
+        allow create: if isValidId(suratId)
+          && isValidId(chunkId)
+          && isValidBerkasChunk(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && exists(/databases/$(database)/documents/suratMasuk/$(suratId))
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.ownerId == 'internal_wasdal'
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.statusSelesai == false;
+        allow update: if isValidId(suratId)
+          && isValidId(chunkId)
+          && isInternalWorkspaceDoc(resource.data)
+          && isValidBerkasChunk(request.resource.data)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'kind', 'chunkIndex', 'totalChunks', 'content', 'updatedAt'
+          ])
+          && exists(/databases/$(database)/documents/suratMasuk/$(suratId))
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.ownerId == 'internal_wasdal'
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.statusSelesai == false;
+        allow delete: if isValidId(suratId)
+          && isValidId(chunkId)
+          && isInternalWorkspaceDoc(resource.data)
+          && exists(/databases/$(database)/documents/suratMasuk/$(suratId))
+          && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.ownerId == 'internal_wasdal';
+      }
     }
   }
 }
