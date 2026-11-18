@@ -90,7 +90,7 @@ export const ModalPdfViewer: React.FC<ModalPdfViewerProps> = ({
               <div>
                 <div className="text-center border-b-2 border-slate-900 pb-4 mb-6">
                   <div className="text-xs uppercase tracking-widest font-bold text-slate-600">
-                    Pemerintah Daerah Kota
+                    Pemerintah Kota Bandung
                   </div>
                   <div className="text-sm font-extrabold uppercase text-slate-900 tracking-wide mt-0.5">
                     Dinas Perumahan dan Kawasan Permukiman
@@ -99,7 +99,7 @@ export const ModalPdfViewer: React.FC<ModalPdfViewerProps> = ({
                     Tim Pengawasan dan Pengendalian Perumahan (WASDAL)
                   </div>
                   <div className="text-[10px] text-slate-500 mt-1">
-                    Jalan Wastukancana No. 2 · Telp. (022) 4208000 · Portal Resmi SIPANTAU-WASDAL
+                    Jalan Caringin Nomor 103 Telp. (022) 5410403, Fax 5410403 · Email: dpkpkotabandung@gmail.com
                   </div>
                 </div>
 

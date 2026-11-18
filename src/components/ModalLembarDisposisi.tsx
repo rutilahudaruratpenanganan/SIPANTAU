@@ -62,7 +62,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
           {/* KOP RESMI */}
           <div className="text-center border-b-4 border-double border-slate-900 pb-4 mb-4">
             <h3 className="text-xs uppercase font-bold tracking-widest text-slate-700">
-              Pemerintah Daerah Kota
+              Pemerintah Kota Bandung
             </h3>
             <h1 className="text-base font-extrabold uppercase tracking-wide text-slate-900 mt-0.5">
               {pejabatConfig.kepalaDinas.instansi}
@@ -71,7 +71,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
               Bidang Perumahan · Tim Pengawasan dan Pengendalian Perumahan
             </h2>
             <p className="text-[10px] text-slate-600 font-sans mt-1">
-              Jalan Wastukancana No. 2 · Telp. (022) 4208000 · Email: disperkim@kotaku.go.id
+              Jalan Caringin Nomor 103 Telp. (022) 5410403, Fax 5410403 · Email: dpkpkotabandung@gmail.com
             </p>
           </div>
 
