@@ -649,7 +649,7 @@ export default function App() {
                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
             }`}>
-              {currentUser.nama} ({currentRole === 'ketua_tim' ? 'Ketua Tim / Atasan Langsung' : 'Staf Tim'})
+              {currentUser.nama} ({currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Tim'})
             </span>
             <span className="text-slate-400 hidden md:inline">·</span>
             <span className="text-slate-500 hidden md:inline">
@@ -689,7 +689,7 @@ export default function App() {
                     Daftar Surat Masuk & Pemantauan Disposisi
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Kelola disposisi atasan langsung, tindak lanjut persuratan, dan penerbitan surat keluar
+                    Kelola disposisi, tindak lanjut persuratan, dan penerbitan surat keluar
                   </p>
                 </div>
               </div>
@@ -855,7 +855,7 @@ export default function App() {
                 {/* Ketua Tim */}
                 <div className="p-4 rounded-xl bg-purple-50 border border-purple-200">
                   <span className="text-[10px] uppercase font-bold text-purple-700 tracking-wider">
-                    Ketua Tim Wasdal (Atasan Pendisposisi)
+                    Ketua Tim Wasdal (Pendisposisi)
                   </span>
                   <div className="font-bold text-sm text-purple-950 mt-1">
                     {pejabatConfig.ketuaTim.nama}

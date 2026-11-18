@@ -256,7 +256,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                 <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                   <Briefcase className="w-4 h-4 text-sky-600" />
                   <span className="font-bold text-slate-900 text-xs">
-                    2. Kepala Bidang Perumahan (Atasan Bidang / Asistensi Naskah)
+                    2. Kepala Bidang Perumahan (Asistensi Naskah)
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -287,12 +287,12 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                 </div>
               </div>
 
-              {/* 3. KETUA TIM WASDAL PERUMAHAN (ATASAN LANGSUNG) */}
+              {/* 3. KETUA TIM WASDAL PERUMAHAN */}
               <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/50 space-y-3">
                 <div className="flex items-center gap-2 border-b border-purple-200 pb-2">
                   <ShieldCheck className="w-4 h-4 text-purple-600" />
                   <span className="font-bold text-purple-950 text-xs">
-                    3. Ketua Tim Pengawasan dan Pengendalian Perumahan (Atasan Langsung Pendisposisi Surat)
+                    3. Ketua Tim Pengawasan dan Pengendalian Perumahan (Pendisposisi Surat)
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -411,7 +411,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                         className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                       >
                         <option value="staf">Staf Pelaksana</option>
-                        <option value="ketua_tim">Ketua Tim (Atasan Pendisposisi)</option>
+                        <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                       </select>
                     </div>
                   </div>
@@ -535,7 +535,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                               className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded"
                             >
                               <option value="staf">Staf Pelaksana</option>
-                              <option value="ketua_tim">Ketua Tim (Atasan Pendisposisi)</option>
+                              <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                             </select>
                           </div>
                         </div>
@@ -639,9 +639,9 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                         ) : (
                           <span
                             className="text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded font-medium border border-purple-200"
-                            title="Ketua Tim bertindak sebagai atasan langsung pendisposisi surat dan tidak dapat dihapus."
+                            title="Ketua Tim bertindak sebagai pendisposisi surat dan tidak dapat dihapus."
                           >
-                            Atasan Langsung
+                            Pendisposisi
                           </span>
                         )}
                       </div>

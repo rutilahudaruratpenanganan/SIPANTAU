@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {currentUser.nama}
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    {currentRole === 'ketua_tim' ? 'Ketua Tim (Atasan)' : 'Staf Pelaksana'}
+                    {currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Pelaksana'}
                   </div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
