@@ -11,7 +11,7 @@ import {
   HardDriveDownload
 } from 'lucide-react';
 import { Personel, Role } from '../types';
-import { canAccessBackup } from '../utils/disposisiLogic';
+import { canAccessBackup, canManagePersonel } from '../utils/disposisiLogic';
 
 export type NavTab = 'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup';
 
@@ -83,17 +83,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <FileText className="w-4 h-4 text-emerald-400" />
               <span>Daftar Surat & Disposisi</span>
             </button>
-            <button
-              onClick={() => onChangeTab('personel')}
-              className={`flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                activeTab === 'personel'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Users className="w-4 h-4 text-amber-400" />
-              <span>Personel & Pejabat</span>
-            </button>
+            {canManagePersonel(currentRole) && (
+              <button
+                onClick={() => onChangeTab('personel')}
+                className={`flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                  activeTab === 'personel'
+                    ? 'bg-slate-800 text-white font-semibold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Users className="w-4 h-4 text-amber-400" />
+                <span>Personel</span>
+              </button>
+            )}
             <button
               onClick={() => onChangeTab('rekap')}
               className={`flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
@@ -232,15 +234,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           <FileText className="w-3.5 h-3.5 text-emerald-400" />
           <span>Daftar Surat</span>
         </button>
-        <button
-          onClick={() => onChangeTab('personel')}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 ${
-            activeTab === 'personel' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-300'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5 text-amber-400" />
-          <span>Personel</span>
-        </button>
+        {canManagePersonel(currentRole) && (
+          <button
+            onClick={() => onChangeTab('personel')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 ${
+              activeTab === 'personel' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-300'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-amber-400" />
+            <span>Personel</span>
+          </button>
+        )}
         <button
           onClick={() => onChangeTab('rekap')}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 ${

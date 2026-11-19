@@ -94,13 +94,6 @@ export default function App() {
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup'>('dashboard');
 
-  // Guard backup tab strictly for pendisposisi (ketua_tim) role
-  useEffect(() => {
-    if (!canAccessBackup(currentRole) && activeTab === 'backup') {
-      setActiveTab('dashboard');
-    }
-  }, [currentRole, activeTab]);
-
   // Resolve inline data URL or multi-chunk Firestore PDF payload for backup export
   const resolvePdfDataUrlForBackup = async (
     file: DokumenFile | undefined
@@ -131,6 +124,21 @@ export default function App() {
   const [selectedSuratForSuratKeluarId, setSelectedSuratForSuratKeluarId] = useState<string | null>(null);
 
   const [isModalPersonelOpen, setIsModalPersonelOpen] = useState(false);
+
+  // Guard backup & personel tabs/modals strictly for ketua_tim role
+  useEffect(() => {
+    if (!canAccessBackup(currentRole) && activeTab === 'backup') {
+      setActiveTab('dashboard');
+    }
+    if (!canManagePersonel(currentRole)) {
+      if (activeTab === 'personel') {
+        setActiveTab('dashboard');
+      }
+      if (isModalPersonelOpen) {
+        setIsModalPersonelOpen(false);
+      }
+    }
+  }, [currentRole, activeTab, isModalPersonelOpen]);
 
   const [isModalPdfViewerOpen, setIsModalPdfViewerOpen] = useState(false);
   const [selectedFileForViewer, setSelectedFileForViewer] = useState<DokumenFile | null>(null);
@@ -721,7 +729,7 @@ export default function App() {
                 onClick={() => setIsModalPersonelOpen(true)}
                 className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
               >
-                Ubah Data Personel & Penandatangan
+                Kelola Data Personel
               </button>
             )}
           </div>
@@ -858,31 +866,25 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 3: PERSONEL & PEJABAT */}
-        {activeTab === 'personel' && (
+        {/* VIEW 3: PERSONEL (KHUSUS KETUA TIM) */}
+        {activeTab === 'personel' && canManagePersonel(currentRole) && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-900">
-                    Konfigurasi Personel Tim & Penandatangan Naskah Dinas
+                    Konfigurasi Data Personel Tim
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Penetapan Kepala Dinas (TTE PESONA), Kepala Bidang, Ketua Tim Pengawasan dan Pengendalian Perumahan, serta staf pelaksana
+                    Pengelolaan data Ketua Tim Pengawasan dan Pengendalian Perumahan serta staf pelaksana
                   </p>
                 </div>
-                {canManagePersonel(currentRole) ? (
-                  <button
-                    onClick={() => setIsModalPersonelOpen(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors shrink-0 self-start sm:self-auto"
-                  >
-                    Kelola & Edit Personel
-                  </button>
-                ) : (
-                  <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium shrink-0 self-start sm:self-auto">
-                    Mode Lihat (Khusus Ketua Tim untuk Mengubah)
-                  </span>
-                )}
+                <button
+                  onClick={() => setIsModalPersonelOpen(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors shrink-0 self-start sm:self-auto"
+                >
+                  Kelola & Edit Personel
+                </button>
               </div>
 
               {/* Pejabat Cards Preview */}
@@ -1063,8 +1065,8 @@ export default function App() {
         />
       )}
 
-      {/* 5. Modal Manajemen Personel & Penandatangan */}
-      {isModalPersonelOpen && (
+      {/* 5. Modal Manajemen Personel (Khusus Ketua Tim) */}
+      {isModalPersonelOpen && canManagePersonel(currentRole) && (
         <ModalPersonel
           isOpen={isModalPersonelOpen}
           onClose={() => setIsModalPersonelOpen(false)}
