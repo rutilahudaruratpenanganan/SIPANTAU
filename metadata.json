@@ -1,6 +1,6 @@
 {
   "name": "SIPANTAU-WASDAL",
-  "description": "Sistem Informasi Persuratan, Administrasi, dan Pemantauan Tindak Lanjut (SIPANTAU-WASDAL) pada Tim Pengawasan dan Pengendalian Perumahan",
+  "description": "Sistem Informasi Persuratan dan Pemantauan Tindak Lanjut, Tim Pengendalian dan Pengawasan Perumahan (SIPANTAU-WASDAL)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

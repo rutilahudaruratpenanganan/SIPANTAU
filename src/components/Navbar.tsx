@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Building2, 
   Users, 
   FileText, 
   ShieldCheck, 
@@ -40,9 +39,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
           
           {/* Brand Wordmark & Department */}
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 sm:shrink-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-inner font-bold text-lg shrink-0">
-              <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 sm:shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-slate-900 shadow-sm ring-1 ring-white/15 shrink-0 flex items-center justify-center">
+              <img
+                src="/assets/aistudio/Document_Verification_App_Icon_ef2df0ab.png"
+                alt="Logo SIPANTAU-WASDAL"
+                className="w-full h-full object-cover scale-[1.12]"
+              />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
