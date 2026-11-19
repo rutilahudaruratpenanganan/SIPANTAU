@@ -158,9 +158,9 @@ export const DashboardStatsCards: React.FC<DashboardStatsCardsProps> = ({
 
       {/* Personel Workload Strip */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-semibold text-slate-700">Distribusi Disposisi Personel:</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <User className="w-4 h-4 text-slate-500 shrink-0" />
+          <span className="text-xs font-semibold text-slate-700 sm:whitespace-nowrap">Distribusi Disposisi Personel:</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {stats.personelWorkload.map((p) => (

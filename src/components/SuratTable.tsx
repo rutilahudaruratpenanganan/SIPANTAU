@@ -75,7 +75,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           
           {/* Search Bar */}
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-md xl:max-w-xl">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -186,12 +186,12 @@ export const SuratTable: React.FC<SuratTableProps> = ({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-100/75 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               <th className="py-3 px-2.5 w-10 text-center">No.</th>
-              <th className="py-3 px-3 w-28">Tanggal Surat</th>
-              <th className="py-3 px-3 w-44">Asal Surat</th>
+              <th className="py-3 px-3 w-28 xl:w-32">Tanggal Surat</th>
+              <th className="py-3 px-3 w-44 xl:w-56 2xl:w-64">Asal Surat</th>
               <th className="py-3 px-3 min-w-[220px]">Perihal & Arahan</th>
-              <th className="py-3 px-3 w-40">Disposisi Personel</th>
-              <th className="py-3 px-3 w-40">Status Tindak Lanjut</th>
-              <th className="py-3 px-2.5 w-28 text-center">Berkas PDF</th>
+              <th className="py-3 px-3 w-40 xl:w-52 2xl:w-60">Disposisi Personel</th>
+              <th className="py-3 px-3 w-40 xl:w-52 2xl:w-60">Status Tindak Lanjut</th>
+              <th className="py-3 px-2.5 w-28 xl:w-36 text-center">Berkas PDF</th>
               <th className="py-3 px-3 text-right whitespace-nowrap">Aksi</th>
             </tr>
           </thead>
@@ -237,7 +237,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                         {item.asalSurat}
                       </div>
                       {item.nomorSurat && (
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[165px]" title={item.nomorSurat}>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[165px] xl:max-w-[220px] 2xl:max-w-[260px]" title={item.nomorSurat}>
                           {item.nomorSurat}
                         </div>
                       )}

@@ -686,7 +686,7 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6">
         
         {/* Role & Access Info Bar */}
         <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
@@ -937,7 +937,7 @@ export default function App() {
                 <h4 className="font-bold text-xs text-slate-800 mb-2">
                   Daftar Staf Pelaksana ({personelList.filter(p => p.peran === 'staf').length} Personel):
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 text-xs">
                   {personelList.filter(p => p.peran === 'staf').map(staf => (
                     <div key={staf.id} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs">
                       <div className="font-bold text-slate-900">{staf.nama}</div>

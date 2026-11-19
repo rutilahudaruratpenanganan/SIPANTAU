@@ -296,7 +296,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
       {/* Finished Letters Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-md xl:max-w-xl">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -452,14 +452,14 @@ export const BackupView: React.FC<BackupViewProps> = ({
                         <div className="space-y-1 text-[11px]">
                           <div className="flex items-center gap-1.5 text-slate-700">
                             <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate max-w-[140px]" title={item.fileSuratMasuk?.nama}>
+                            <span className="truncate max-w-[140px] xl:max-w-[220px]" title={item.fileSuratMasuk?.nama}>
                               {item.fileSuratMasuk ? item.fileSuratMasuk.nama : 'PDF Masuk: -'}
                             </span>
                           </div>
                           {item.fileSuratKeluar || item.nomorSuratKeluar ? (
                             <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
                               <FileCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span className="truncate max-w-[140px]" title={item.fileSuratKeluar?.nama || item.nomorSuratKeluar}>
+                              <span className="truncate max-w-[140px] xl:max-w-[220px]" title={item.fileSuratKeluar?.nama || item.nomorSuratKeluar}>
                                 {item.fileSuratKeluar?.nama || item.nomorSuratKeluar}
                               </span>
                             </div>
