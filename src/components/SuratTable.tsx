@@ -18,7 +18,11 @@ import {
   Pencil
 } from 'lucide-react';
 import { SuratMasuk, Role, Personel, TahapTindakLanjutId } from '../types';
-import { TAHAP_TINDAK_LANJUT } from '../utils/disposisiLogic';
+import {
+  TAHAP_TINDAK_LANJUT,
+  canCreateDisposisi,
+  canDeleteSurat,
+} from '../utils/disposisiLogic';
 
 interface SuratTableProps {
   suratList: SuratMasuk[];
@@ -249,7 +253,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                           <div className="leading-snug">
                             <span className="font-bold text-purple-900">Instruksi Disposisi:</span> {item.instruksiDisposisi}
                           </div>
-                          {!item.statusSelesai && (
+                          {!item.statusSelesai && canCreateDisposisi(currentRole) && (
                             <button
                               type="button"
                               onClick={() => onOpenDisposisi(item)}
@@ -280,7 +284,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-0.5">
                             <span>{item.tanggalDisposisi || '-'}</span>
-                            {!item.statusSelesai && (
+                            {!item.statusSelesai && canCreateDisposisi(currentRole) && (
                               <button
                                 type="button"
                                 onClick={() => onOpenDisposisi(item)}
@@ -299,14 +303,20 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                             <AlertCircle className="w-3 h-3" />
                             <span>Perlu Disposisi</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => onOpenDisposisi(item)}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline"
-                          >
-                            <UserPlus className="w-3 h-3" />
-                            <span>+ Disposisi Surat</span>
-                          </button>
+                          {canCreateDisposisi(currentRole) ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenDisposisi(item)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline"
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              <span>+ Disposisi Surat</span>
+                            </button>
+                          ) : (
+                            <div className="text-[10px] text-slate-400 italic">
+                              Menunggu Disposisi Ketua Tim
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
@@ -411,8 +421,8 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                           </button>
                         )}
 
-                        {/* Disposisi button (Edit / Atur) */}
-                        {!item.statusSelesai && (
+                        {/* Disposisi button (Edit / Atur - Ketua Tim only) */}
+                        {!item.statusSelesai && canCreateDisposisi(currentRole) && (
                           <button
                             onClick={() => onOpenDisposisi(item)}
                             className="p-1.5 text-purple-700 hover:bg-purple-50 rounded-md transition-colors"
@@ -436,7 +446,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                         </button>
 
                         {/* Delete Surat (Active for Ketua Tim only) */}
-                        {currentRole === 'ketua_tim' && (
+                        {canDeleteSurat(currentRole) && (
                           <button
                             onClick={() => onDeleteSurat(item)}
                             className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md transition-colors"

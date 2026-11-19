@@ -7,6 +7,8 @@ import {
   canAdvanceStage,
   canDeleteSurat,
   canManagePersonel,
+  canCreateDisposisi,
+  canAccessBackup,
   filterSurat,
   calculateDashboardStats,
 } from './disposisiLogic.ts';
@@ -111,10 +113,14 @@ test('role-based access control enforces restrictions', () => {
   assert.equal(canAdvanceStage('ketua_tim', 6), true);
   assert.equal(canDeleteSurat('ketua_tim'), true);
   assert.equal(canManagePersonel('ketua_tim'), true);
+  assert.equal(canCreateDisposisi('ketua_tim'), true);
+  assert.equal(canAccessBackup('ketua_tim'), true);
 
   // Staf has restricted privileges
   assert.equal(canDeleteSurat('staf'), false);
   assert.equal(canManagePersonel('staf'), false);
+  assert.equal(canCreateDisposisi('staf'), false);
+  assert.equal(canAccessBackup('staf'), false);
   // Staf can advance stage 4 (Drafting to Asistensi Ketua Tim)
   assert.equal(canAdvanceStage('staf', 4), true);
   // Staf cannot advance stage 1 (Diterima Kabid)

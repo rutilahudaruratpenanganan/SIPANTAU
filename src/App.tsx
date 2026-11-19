@@ -16,6 +16,7 @@ import { ModalPdfViewer } from './components/ModalPdfViewer';
 import { ModalLembarDisposisi } from './components/ModalLembarDisposisi';
 import { ModalDeleteConfirm } from './components/ModalDeleteConfirm';
 import { RekapView } from './components/RekapView';
+import { BackupView } from './components/BackupView';
 import { 
   SuratMasuk, 
   Personel, 
@@ -32,7 +33,11 @@ import {
 import { 
   filterSurat, 
   calculateDashboardStats, 
-  TAHAP_TINDAK_LANJUT 
+  TAHAP_TINDAK_LANJUT,
+  canAccessBackup,
+  canCreateDisposisi,
+  canDeleteSurat,
+  canManagePersonel
 } from './utils/disposisiLogic';
 import { CheckCircle2 } from 'lucide-react';
 import {
@@ -41,6 +46,8 @@ import {
   deletePersonelDb,
   deleteSuratDb,
   ensureWorkspaceInitialized,
+  isChunkedPdfUrl,
+  loadPdfDataUrlFromFirestore,
   subscribePersonel,
   subscribeSuratMasuk,
   subscribeWorkspace,
@@ -85,7 +92,25 @@ export default function App() {
   const currentRole: Role = currentUser.peran;
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'surat' | 'personel' | 'rekap'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup'>('dashboard');
+
+  // Guard backup tab strictly for pendisposisi (ketua_tim) role
+  useEffect(() => {
+    if (!canAccessBackup(currentRole) && activeTab === 'backup') {
+      setActiveTab('dashboard');
+    }
+  }, [currentRole, activeTab]);
+
+  // Resolve inline data URL or multi-chunk Firestore PDF payload for backup export
+  const resolvePdfDataUrlForBackup = async (
+    file: DokumenFile | undefined
+  ): Promise<string | undefined> => {
+    if (!file?.dataUrl) return undefined;
+    if (isChunkedPdfUrl(file.dataUrl)) {
+      return await loadPdfDataUrlFromFirestore(file.dataUrl);
+    }
+    return file.dataUrl;
+  };
 
   // Filtering state
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +262,10 @@ export default function App() {
     tanggalDisposisi: string,
     tenggatWaktu: string
   ) => {
+    if (!canCreateDisposisi(currentRole)) {
+      showToast('Hanya Ketua Tim (Pendisposisi) yang berhak mengatur disposisi.');
+      return;
+    }
     const item = suratList.find((s) => s.id === suratId);
     if (!item) return;
     if (item.statusSelesai) {
@@ -478,6 +507,10 @@ export default function App() {
 
   // Handler: Hapus Surat (Ketua Tim)
   const handleConfirmDeleteSurat = async (suratId: string) => {
+    if (!canDeleteSurat(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak menghapus surat.');
+      return;
+    }
     try {
       await deleteSuratDb(suratId);
       showToast('Surat berhasil dihapus dari database.');
@@ -488,6 +521,10 @@ export default function App() {
 
   // Handler: Personel Management & Dynamic Active User Sync
   const handleUpdatePejabat = async (newPejabat: PejabatConfig) => {
+    if (!canManagePersonel(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak mengubah data pejabat penandatangan.');
+      return;
+    }
     try {
       await updateWorkspacePejabatDb(newPejabat);
       const ketua = personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim');
@@ -507,6 +544,10 @@ export default function App() {
   };
 
   const handleAddPersonel = async (pData: Omit<Personel, 'id'>) => {
+    if (!canManagePersonel(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak menambah personel tim.');
+      return;
+    }
     try {
       const created = await createPersonelDb(pData);
       setActivePersonelId(created.id);
@@ -517,6 +558,10 @@ export default function App() {
   };
 
   const handleUpdatePersonel = async (id: string, updated: Partial<Personel>) => {
+    if (!canManagePersonel(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak mengubah data personel.');
+      return;
+    }
     try {
       await updatePersonelDb(id, updated);
       showToast('Data personel berhasil diperbarui di database.');
@@ -526,6 +571,10 @@ export default function App() {
   };
 
   const handleDeletePersonel = async (id: string) => {
+    if (!canManagePersonel(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak menghapus data personel.');
+      return;
+    }
     const target = personelList.find((p) => p.id === id);
     try {
       await deletePersonelDb(id);
@@ -634,7 +683,6 @@ export default function App() {
         }}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onOpenTambahSurat={() => setIsModalSuratMasukOpen(true)}
       />
 
       {/* Main Container */}
@@ -659,13 +707,23 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsModalPersonelOpen(true)}
-              className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
-            >
-              Ubah Data Personel & Penandatangan
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {canAccessBackup(currentRole) && (
+              <button
+                onClick={() => setActiveTab('backup')}
+                className="text-emerald-700 hover:text-emerald-900 font-semibold underline text-xs"
+              >
+                Backup Surat Selesai (.zip)
+              </button>
+            )}
+            {canManagePersonel(currentRole) && (
+              <button
+                onClick={() => setIsModalPersonelOpen(true)}
+                className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
+              >
+                Ubah Data Personel & Penandatangan
+              </button>
+            )}
           </div>
         </div>
 
@@ -804,7 +862,7 @@ export default function App() {
         {activeTab === 'personel' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
                 <div>
                   <h2 className="text-base font-bold text-slate-900">
                     Konfigurasi Personel Tim & Penandatangan Naskah Dinas
@@ -813,12 +871,18 @@ export default function App() {
                     Penetapan Kepala Dinas (TTE PESONA), Kepala Bidang, Ketua Tim Pengawasan dan Pengendalian Perumahan, serta staf pelaksana
                   </p>
                 </div>
-                <button
-                  onClick={() => setIsModalPersonelOpen(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
-                >
-                  Kelola & Edit Personel
-                </button>
+                {canManagePersonel(currentRole) ? (
+                  <button
+                    onClick={() => setIsModalPersonelOpen(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors shrink-0 self-start sm:self-auto"
+                  >
+                    Kelola & Edit Personel
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium shrink-0 self-start sm:self-auto">
+                    Mode Lihat (Khusus Ketua Tim untuk Mengubah)
+                  </span>
+                )}
               </div>
 
               {/* Pejabat Cards Preview */}
@@ -897,6 +961,22 @@ export default function App() {
               setSelectedFileForViewer(f);
               setIsModalPdfViewerOpen(true);
             }}
+          />
+        )}
+
+        {/* VIEW 5: BACKUP ARSIP SURAT SELESAI (KHUSUS AKUN PENDISPOSISI) */}
+        {activeTab === 'backup' && canAccessBackup(currentRole) && (
+          <BackupView
+            suratList={suratList}
+            pejabatConfig={pejabatConfig}
+            currentRole={currentRole}
+            currentUser={currentUser}
+            resolvePdfDataUrl={(file) => resolvePdfDataUrlForBackup(file)}
+            onOpenDetail={(s) => {
+              setSelectedSuratForTindakLanjutId(s.id);
+              setIsModalTindakLanjutOpen(true);
+            }}
+            onNotify={showToast}
           />
         )}
 

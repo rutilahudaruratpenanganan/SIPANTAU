@@ -29,7 +29,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
       <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-6 max-h-[95vh] flex flex-col print:shadow-none print:border-none print:max-h-none print:m-0 print:w-full">
         
         {/* Top Action Bar (hidden on print) */}
-        <div className="flex items-center justify-between px-6 py-3.5 bg-slate-900 text-white border-b border-slate-800 shrink-0 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-6 py-3.5 bg-slate-900 text-white border-b border-slate-800 shrink-0 print:hidden">
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <Printer className="w-4 h-4 text-purple-400" />
@@ -57,7 +57,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
         </div>
 
         {/* Printable Official Sheet */}
-        <div className="p-8 sm:p-10 overflow-y-auto flex-1 font-serif text-slate-900 text-xs">
+        <div className="p-4 sm:p-10 print:p-6 overflow-y-auto flex-1 font-serif text-slate-900 text-xs">
           
           {/* KOP RESMI */}
           <div className="text-center border-b-4 border-double border-slate-900 pb-4 mb-4">
@@ -130,10 +130,10 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
           </table>
 
           {/* Section: Disposisi Pejabat */}
-          <div className="grid grid-cols-2 border border-slate-900 text-xs font-sans mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 border border-slate-900 text-xs font-sans mb-4">
             
             {/* Left: Disposisi Kabid Perumahan */}
-            <div className="p-3 border-r border-slate-900 flex flex-col justify-between min-h-[160px]">
+            <div className="p-3 border-b sm:border-b-0 sm:border-r print:border-b-0 print:border-r border-slate-900 flex flex-col justify-between min-h-[160px]">
               <div>
                 <div className="font-bold border-b border-slate-400 pb-1 mb-2 text-slate-900">
                   1. Disposisi Kepala Bidang Perumahan:

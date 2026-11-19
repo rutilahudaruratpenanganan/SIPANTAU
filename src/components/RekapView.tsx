@@ -57,7 +57,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
       </div>
 
       {/* Printable Sheet View */}
-      <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-xs print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-8 shadow-xs print:border-none print:shadow-none print:p-0">
         
         {/* Kop Resmi Surat Laporan */}
         <div className="text-center border-b-2 border-slate-900 pb-4 mb-6">
@@ -162,7 +162,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
         </div>
 
         {/* Tanda Tangan Pengesahan Laporan */}
-        <div className="grid grid-cols-2 mt-8 text-xs font-sans">
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 sm:gap-4 mt-8 text-xs font-sans">
           <div className="text-center">
             <div className="text-slate-500">Mengetahui,</div>
             <div className="font-bold text-slate-900">Kepala Bidang Perumahan</div>

@@ -14,6 +14,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Personel, PejabatConfig, Role } from '../types';
+import { canManagePersonel } from '../utils/disposisiLogic';
 
 interface ModalPersonelProps {
   isOpen: boolean;
@@ -72,10 +73,13 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
   // Delete confirmation state (in-app, no window.confirm)
   const [personelToDelete, setPersonelToDelete] = useState<Personel | null>(null);
 
+  const allowManage = canManagePersonel(currentRole);
+
   if (!isOpen) return null;
 
   const handleSavePejabat = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!allowManage) return;
     onUpdatePejabat(pejabat);
     setSaveSuccessMsg('Data penandatangan dan pejabat struktural berhasil disimpan. Akses pengguna aktif langsung diperbarui!');
     setTimeout(() => setSaveSuccessMsg(''), 3500);
@@ -150,21 +154,21 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
         </div>
 
         {/* Sub-tab navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 shrink-0">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 pt-2 shrink-0 overflow-x-auto">
           <button
             onClick={() => setActiveSubTab('struktural')}
-            className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
               activeSubTab === 'struktural'
                 ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Building className="w-4 h-4" />
-            <span>Pejabat & Penandatangan (Kadis / Kabid / Ketua Tim)</span>
+            <span>Pejabat & Penandatangan</span>
           </button>
           <button
             onClick={() => setActiveSubTab('tim')}
-            className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            className={`pb-2.5 px-3 sm:px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 ${
               activeSubTab === 'tim'
                 ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -182,6 +186,13 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg flex items-center gap-2 font-medium">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{saveSuccessMsg}</span>
+            </div>
+          )}
+
+          {!allowManage && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Mode Lihat: Perubahan data penandatangan, penambahan, pengubahan, dan penghapusan personel hanya dapat dilakukan oleh Ketua Tim.</span>
             </div>
           )}
 
@@ -327,15 +338,17 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
               </div>
 
               {/* Submit Pejabat Button */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan Perubahan & Perbarui Akses Aktif</span>
-                </button>
-              </div>
+              {allowManage && (
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Perubahan & Perbarui Akses Aktif</span>
+                  </button>
+                </div>
+              )}
 
             </form>
           )}
@@ -344,7 +357,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
           {activeSubTab === 'tim' && (
             <div className="space-y-4">
               
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="font-bold text-slate-900 text-xs">
                     Daftar Personel Tim Pengawasan & Pengendalian Perumahan
@@ -353,10 +366,10 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                     Personel yang berhak menerima disposisi dan menindaklanjuti naskah dinas
                   </p>
                 </div>
-                {!isAddingPersonel && (
+                {allowManage && !isAddingPersonel && (
                   <button
                     onClick={() => setIsAddingPersonel(true)}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors shrink-0"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     <span>+ Tambah Personel</span>
@@ -617,25 +630,29 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                           </button>
                         )}
 
-                        <button
-                          onClick={() => startEditPersonel(p)}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                          title="Edit Personel"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        {!p.isKetuaTim && p.peran !== 'ketua_tim' ? (
+                        {allowManage && (
                           <button
-                            type="button"
-                            onClick={() => {
-                              setEditingPersonelId(null);
-                              setPersonelToDelete(p);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                            title={`Hapus Personel ${p.nama}`}
+                            onClick={() => startEditPersonel(p)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="Edit Personel"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
+                        )}
+                        {!p.isKetuaTim && p.peran !== 'ketua_tim' ? (
+                          allowManage ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPersonelId(null);
+                                setPersonelToDelete(p);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              title={`Hapus Personel ${p.nama}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : null
                         ) : (
                           <span
                             className="text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded font-medium border border-purple-200"

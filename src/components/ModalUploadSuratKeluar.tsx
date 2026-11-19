@@ -105,17 +105,14 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
       return;
     }
 
-    const fileToSave: DokumenFile = filePreviewData || {
-      nama: `Surat_Keluar_Resmi_${(surat.nomorSurat || surat.id).replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-      ukuran: '2.1 MB',
-      tipe: 'application/pdf',
-      tanggalUnggah: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      pengunggah: currentPengunggah,
-    };
+    if (!filePreviewData) {
+      setErrorMessage('Silakan pilih berkas PDF Surat Keluar terlebih dahulu.');
+      return;
+    }
 
     onSaveSuratKeluar(
       surat.id,
-      fileToSave,
+      filePreviewData,
       nomorSuratKeluar,
       tanggalSuratKeluar,
       perihalSuratKeluar,

@@ -84,6 +84,10 @@ export function canCreateDisposisi(role: Role): boolean {
   return role === 'ketua_tim';
 }
 
+export function canAccessBackup(role: Role): boolean {
+  return role === 'ketua_tim';
+}
+
 export function canUploadSuratKeluar(surat: SuratMasuk): boolean {
   // Can upload surat keluar if it is at stage 4 or later (or when finishing)
   return surat.tahapSaatIni >= 4;

@@ -137,14 +137,8 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
       } else if (initialSurat?.fileSuratMasuk) {
         payload.fileSuratMasuk = initialSurat.fileSuratMasuk;
       }
-    } else {
-      payload.fileSuratMasuk = filePreviewData || {
-        nama: `Surat_Masuk_${asalSurat.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-        ukuran: '1.8 MB',
-        tipe: 'application/pdf',
-        tanggalUnggah: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        pengunggah: currentPengunggah,
-      };
+    } else if (filePreviewData) {
+      payload.fileSuratMasuk = filePreviewData;
     }
 
     onSave(payload);
@@ -165,7 +159,7 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
                 ) : (
                   <FileText className="w-5 h-5 text-blue-400" />
                 )}
-                {isEditing ? 'Edit Registrasi Surat Masuk' : 'Upload & Registrasi Surat Masuk'}
+                {isEditing ? 'Edit Registrasi Surat Masuk' : 'Registrasi Surat Masuk'}
               </h2>
               {isEditing && (
                 <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/30">

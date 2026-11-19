@@ -19,7 +19,14 @@ import {
   Pencil
 } from 'lucide-react';
 import { SuratMasuk, Role, Personel, TahapTindakLanjutId } from '../types';
-import { TAHAP_TINDAK_LANJUT, LIST_TAHAP, getNextStage, canAdvanceStage, canUploadSuratKeluar } from '../utils/disposisiLogic';
+import {
+  TAHAP_TINDAK_LANJUT,
+  LIST_TAHAP,
+  getNextStage,
+  canAdvanceStage,
+  canCreateDisposisi,
+  canUploadSuratKeluar,
+} from '../utils/disposisiLogic';
 
 interface ModalTindakLanjutProps {
   isOpen: boolean;
@@ -74,6 +81,13 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
       setStatusMode(surat.statusSelesai ? 'selesai' : 'aktif');
       setTanggalSelesaiInput(surat.tanggalSelesai || todayStr);
       setSelectedTahapChange(surat.tahapSaatIni);
+      setCatatanBaru('');
+      setCatatanSelesaiInput(
+        surat.statusSelesai
+          ? (surat.riwayatTindakLanjut?.slice().reverse().find((r) => r.tahapNama === 'Selesai Tindak Lanjut')?.catatan ||
+              'Tindak lanjut naskah dinas telah selesai penuh.')
+          : 'Tindak lanjut naskah dinas telah selesai penuh, dokumen/surat tanggapan telah diterbitkan dan diarsipkan.'
+      );
     }
   }, [surat?.id, surat?.statusSelesai, surat?.tahapSaatIni, surat?.tanggalSelesai, todayStr]);
 
@@ -81,6 +95,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
 
   const nextStage = getNextStage(surat.tahapSaatIni);
   const allowAdvance = canAdvanceStage(currentRole, surat.tahapSaatIni);
+  const allowDisposisi = canCreateDisposisi(currentRole);
   const allowUploadSuratKeluar = canUploadSuratKeluar(surat);
 
   const handleAdvance = () => {
@@ -136,7 +151,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white border-b border-slate-800 shrink-0">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold border border-blue-400/20 flex items-center gap-1.5 font-mono">
                 <Calendar className="w-3.5 h-3.5 text-blue-300" />
                 Tanggal Surat: {surat.tanggalSurat}
@@ -198,7 +213,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium block">Penerima Disposisi:</span>
-                {!surat.statusSelesai && (
+                {!surat.statusSelesai && allowDisposisi && (
                   <button
                     type="button"
                     onClick={() => onOpenDisposisi(surat)}
@@ -256,7 +271,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
                   </span>
                 </div>
                 
-                {!surat.statusSelesai && (
+                {!surat.statusSelesai && allowDisposisi && (
                   <button
                     type="button"
                     onClick={() => onOpenDisposisi(surat)}
@@ -286,17 +301,21 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
                   Instruksi Disposisi Belum Ditetapkan
                 </span>
                 <p className="text-[11px] text-purple-700 mt-0.5">
-                  Surat masuk ini belum memiliki penetapan personel pelaksana dan petunjuk arahan disposisi dari Ketua Tim.
+                  {allowDisposisi
+                    ? 'Surat masuk ini belum memiliki penetapan personel pelaksana dan petunjuk arahan disposisi dari Ketua Tim.'
+                    : 'Menunggu penetapan personel pelaksana dan arahan disposisi dari Ketua Tim (Pendisposisi).'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenDisposisi(surat)}
-                className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors shrink-0"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>+ Buat Disposisi & Instruksi</span>
-              </button>
+              {!surat.statusSelesai && allowDisposisi && (
+                <button
+                  type="button"
+                  onClick={() => onOpenDisposisi(surat)}
+                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>+ Buat Disposisi & Instruksi</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -663,9 +682,9 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            {!surat.statusSelesai && (
+        <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {!surat.statusSelesai && allowDisposisi && (
               <button
                 onClick={() => onOpenDisposisi(surat)}
                 className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1.5"
