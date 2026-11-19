@@ -197,9 +197,6 @@ export const BackupView: React.FC<BackupViewProps> = ({
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
               Backup Data & Dokumen Surat Masuk Berstatus Selesai
             </h1>
-            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-              Unduh paket arsip terstruktur (<span className="font-mono text-emerald-300">.zip</span>) ke laptop yang mencakup berkas PDF Surat Masuk, History Disposisi Pendisposisi, History Proses lengkap per tahap, serta Surat Keluar (jika ada).
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -213,7 +210,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
               <span>
                 {isDownloading
                   ? 'Menyusun Backup...'
-                  : `Unduh Backup ke Laptop (${selectedIds.size} Surat)`}
+                  : `Unduh Backup (${selectedIds.size} Surat)`}
               </span>
             </button>
           </div>
