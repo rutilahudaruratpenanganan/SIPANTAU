@@ -142,7 +142,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
               Kelola Personel Tim & Penandatangan Naskah Dinas
             </h2>
             <p className="text-xs text-slate-400">
-              Konfigurasi pejabat penandatangan, ketua tim pendisposisi, dan personel staf pelaksana
+              Konfigurasi pejabat penandatangan, ketua tim pendisposisi, dan personel Staf Wasdal
             </p>
           </div>
           <button
@@ -423,7 +423,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                         onChange={(e) => setNewPeran(e.target.value as Role)}
                         className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                       >
-                        <option value="staf">Staf Pelaksana</option>
+                        <option value="staf">Staf Wasdal</option>
                         <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                       </select>
                     </div>
@@ -547,7 +547,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                               onChange={(e) => setEditPeran(e.target.value as Role)}
                               className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded"
                             >
-                              <option value="staf">Staf Pelaksana</option>
+                              <option value="staf">Staf Wasdal</option>
                               <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                             </select>
                           </div>
@@ -601,7 +601,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                               ? 'bg-purple-100 text-purple-800'
                               : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'}
+                            {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
                           </span>
                           {isCurrentlyActive && (
                             <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -619,7 +619,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                           <button
                             onClick={() => {
                               onSwitchUser(p);
-                              setSaveSuccessMsg(`Akses pengguna aktif berhasil beralih ke: ${p.nama} (${p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'})`);
+                              setSaveSuccessMsg(`Akses pengguna aktif berhasil beralih ke: ${p.nama} (${p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
                               setTimeout(() => setSaveSuccessMsg(''), 3000);
                             }}
                             className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold border border-blue-200 transition-colors flex items-center gap-1"

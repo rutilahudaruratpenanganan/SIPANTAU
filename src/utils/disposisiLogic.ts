@@ -26,7 +26,7 @@ export const TAHAP_TINDAK_LANJUT: Record<TahapTindakLanjutId, TahapConfig> = {
     id: 4,
     nama: 'Pembuatan Draft Tanggapan/Jawaban/Surat',
     deskripsi: 'Personel/staf pelaksana menyusun konsep naskah dinas, telaahan staf, atau surat balasan.',
-    aktorUtama: 'Staf Tim Pelaksana',
+    aktorUtama: 'Staf Wasdal',
     warna: 'amber',
   },
   5: {

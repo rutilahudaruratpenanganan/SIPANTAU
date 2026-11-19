@@ -142,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {currentUser.nama}
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    {currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Pelaksana'}
+                    {currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
                   </div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -188,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                                 ? 'bg-amber-500/20 text-amber-300'
                                 : 'bg-slate-700 text-slate-300'
                             }`}>
-                              {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'}
+                              {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
                             </span>
                           </button>
                         );
@@ -198,7 +198,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="px-3 py-2 border-t border-slate-800 text-[11px] text-slate-400 bg-slate-950/40">
                       <div>
                         <span className="font-medium text-slate-300">Ketua Tim:</span> Disposisi & hapus surat. <br/>
-                        <span className="font-medium text-slate-300">Staf:</span> Update draft & upload surat keluar.
+                        <span className="font-medium text-slate-300">Staf Wasdal:</span> Update draft & upload surat keluar.
                       </div>
                     </div>
                   </div>

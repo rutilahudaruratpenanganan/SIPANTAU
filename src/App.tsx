@@ -687,7 +687,7 @@ export default function App() {
         personelList={personelList}
         onSwitchUser={(user) => {
           setActivePersonelId(user.id);
-          showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'})`);
+          showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
         }}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
@@ -705,13 +705,13 @@ export default function App() {
                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
             }`}>
-              {currentUser.nama} ({currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Tim'})
+              {currentUser.nama} ({currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})
             </span>
             <span className="text-slate-400 hidden md:inline">·</span>
             <span className="text-slate-500 hidden md:inline">
               {currentRole === 'ketua_tim'
                 ? 'Hak akses penuh: Disposisi, Asistensi, Hapus Surat, Manajemen Personel.'
-                : 'Hak akses staf: Update progres tindak lanjut, penyusunan draft, upload surat keluar.'}
+                : 'Hak akses Staf Wasdal: Update progres tindak lanjut, penyusunan draft, upload surat keluar.'}
             </span>
           </div>
 
@@ -876,7 +876,7 @@ export default function App() {
                     Konfigurasi Data Personel Tim
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Pengelolaan data Ketua Tim Pengawasan dan Pengendalian Perumahan serta staf pelaksana
+                    Pengelolaan data Ketua Tim Pengawasan dan Pengendalian Perumahan serta Staf Wasdal
                   </p>
                 </div>
                 <button
@@ -937,7 +937,7 @@ export default function App() {
               {/* List of staff members */}
               <div className="pt-2">
                 <h4 className="font-bold text-xs text-slate-800 mb-2">
-                  Daftar Staf Pelaksana ({personelList.filter(p => p.peran === 'staf').length} Personel):
+                  Daftar Staf Wasdal ({personelList.filter(p => p.peran === 'staf').length} Personel):
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 text-xs">
                   {personelList.filter(p => p.peran === 'staf').map(staf => (
@@ -1076,7 +1076,7 @@ export default function App() {
           currentUser={currentUser}
           onSwitchUser={(user) => {
             setActivePersonelId(user.id);
-            showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf'})`);
+            showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
           }}
           onUpdatePejabat={handleUpdatePejabat}
           onAddPersonel={handleAddPersonel}
