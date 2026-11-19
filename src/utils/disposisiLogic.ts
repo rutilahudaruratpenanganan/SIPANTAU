@@ -220,3 +220,11 @@ export function calculateDashboardStats(list: SuratMasuk[], personelList: Person
 
   return stats;
 }
+
+export function normalizeRiwayatCatatan(catatan: string): string {
+  if (!catatan) return '';
+  return catatan.replace(
+    /Disposisi naskah dinas masuk diterima dari Kepala Bidang Perumahan\.?/gi,
+    'Disposisi surat masuk diterima dari Kepala Bidang Perumahan.'
+  );
+}

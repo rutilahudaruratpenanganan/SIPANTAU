@@ -11,6 +11,7 @@ import {
   canAccessBackup,
   filterSurat,
   calculateDashboardStats,
+  normalizeRiwayatCatatan,
 } from './disposisiLogic.ts';
 import type { SuratMasuk, Personel } from '../types/index.ts';
 
@@ -222,5 +223,20 @@ test('filterSurat supports filtering by tahapId: selesai', () => {
   const tahap4 = filterSurat(mockSurat, { tahapId: 4 });
   assert.equal(tahap4.length, 1);
   assert.equal(tahap4[0].id, 's2');
+});
+
+test('normalizeRiwayatCatatan replaces legacy disposisi text cleanly', () => {
+  assert.equal(
+    normalizeRiwayatCatatan('Disposisi naskah dinas masuk diterima dari Kepala Bidang Perumahan.'),
+    'Disposisi surat masuk diterima dari Kepala Bidang Perumahan.'
+  );
+  assert.equal(
+    normalizeRiwayatCatatan('Disposisi naskah dinas masuk diterima dari Kepala Bidang Perumahan'),
+    'Disposisi surat masuk diterima dari Kepala Bidang Perumahan.'
+  );
+  assert.equal(
+    normalizeRiwayatCatatan('Catatan tindak lanjut lainnya.'),
+    'Catatan tindak lanjut lainnya.'
+  );
 });
 

@@ -29,6 +29,7 @@ import {
   INITIAL_PERSONEL,
   INITIAL_SURAT_MASUK,
 } from '../data/initialData';
+import { normalizeRiwayatCatatan } from '../utils/disposisiLogic';
 
 export const INTERNAL_WORKSPACE_ID = 'internal_wasdal';
 
@@ -263,7 +264,7 @@ function sanitizeRiwayat(riwayat: RiwayatTindakLanjut[]): RiwayatTindakLanjut[] 
       tahapNama: clampStr(r.tahapNama, 200),
       tanggal: clampStr(r.tanggal, LIMITS.DATE_STR),
       aktor: clampStr(r.aktor, LIMITS.NAMA),
-      catatan: clampStr(r.catatan, LIMITS.INSTRUKSI),
+      catatan: normalizeRiwayatCatatan(clampStr(r.catatan, LIMITS.INSTRUKSI)),
     };
     if (r.fileLampiran) {
       entry.fileLampiran = {
@@ -302,7 +303,10 @@ function docToSuratMasuk(id: string, data: Record<string, unknown>): SuratMasuk 
     statusSelesai: Boolean(data.statusSelesai),
     tanggalSelesai: data.tanggalSelesai as string | undefined,
     riwayatTindakLanjut: Array.isArray(data.riwayatTindakLanjut)
-      ? (data.riwayatTindakLanjut as RiwayatTindakLanjut[])
+      ? (data.riwayatTindakLanjut as RiwayatTindakLanjut[]).map((r) => ({
+          ...r,
+          catatan: normalizeRiwayatCatatan(r.catatan || ''),
+        }))
       : [],
     fileSuratMasuk: fileMasuk
       ? {
@@ -534,7 +538,7 @@ export async function createSuratMasukDb(
         tahapNama: 'Disposisi Diterima Dari Kepala Bidang Perumahan',
         tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
         aktor: pejabatConfig.kepalaBidang.nama,
-        catatan: 'Disposisi naskah dinas masuk diterima dari Kepala Bidang Perumahan.',
+        catatan: 'Disposisi surat masuk diterima dari Kepala Bidang Perumahan.',
       },
     ]),
     createdAt: serverTimestamp(),
