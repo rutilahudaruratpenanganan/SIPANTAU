@@ -16,7 +16,7 @@ import {
 import type { SuratMasuk, Personel } from '../types/index.ts';
 
 const mockPersonel: Personel[] = [
-  { id: '1', nama: 'Ir. H. Budi Santoso, S.T., M.T.', jabatan: 'Ketua Tim Wasdal', peran: 'ketua_tim', isKetuaTim: true },
+  { id: '1', nama: 'Yuliani, ST', jabatan: 'Ketua Tim Wasdal', peran: 'ketua_tim', isKetuaTim: true },
   { id: '2', nama: 'Chafidz', jabatan: 'Staf Wasdal Perumahan', peran: 'staf' },
   { id: '3', nama: 'Eva', jabatan: 'Staf Wasdal Perumahan', peran: 'staf' },
   { id: '4', nama: 'Eryanti', jabatan: 'Staf Wasdal Perumahan', peran: 'staf' },

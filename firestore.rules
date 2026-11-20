@@ -210,6 +210,30 @@ service cloud.firestore {
       allow delete: if isValidId(personelId) && isInternalWorkspaceDoc(resource.data);
     }
 
+    function isAllowedSuratMasukActiveUpdate(affected) {
+      return affected.hasOnly([
+          'penerimaDisposisiIds', 'penerimaDisposisiNama', 'instruksiDisposisi',
+          'catatanDisposisiKetuaTim', 'tanggalDisposisi', 'tenggatWaktu',
+          'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
+        ])
+        || affected.hasOnly([
+          'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
+        ])
+        || affected.hasOnly([
+          'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
+        ])
+        || affected.hasOnly([
+          'fileSuratKeluar', 'nomorSuratKeluar', 'tanggalSuratKeluar',
+          'perihalSuratKeluar', 'statusSelesai', 'tanggalSelesai',
+          'riwayatTindakLanjut', 'updatedAt'
+        ])
+        || affected.hasOnly([
+          'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
+          'asalSurat', 'perihal', 'sifat', 'fileSuratMasuk',
+          'riwayatTindakLanjut', 'updatedAt'
+        ]);
+    }
+
     // 4. Surat Masuk & Disposisi
     match /suratMasuk/{suratId} {
       allow get: if isValidId(suratId) && isInternalWorkspaceDoc(resource.data);
@@ -227,38 +251,8 @@ service cloud.firestore {
         && (
           (
             // Terminal state lock: once statusSelesai == true, only explicit reopen allowed
-            resource.data.statusSelesai == false && (
-              // Action 1: Update Disposisi & Instruksi
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'penerimaDisposisiIds', 'penerimaDisposisiNama', 'instruksiDisposisi',
-                'catatanDisposisiKetuaTim', 'tanggalDisposisi', 'tenggatWaktu',
-                'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
-              ])
-              ||
-              // Action 2: Advance / Set Stage or Add Catatan
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'tahapSaatIni', 'riwayatTindakLanjut', 'updatedAt'
-              ])
-              ||
-              // Action 3: Complete Tindak Lanjut
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'statusSelesai', 'tanggalSelesai', 'riwayatTindakLanjut', 'updatedAt'
-              ])
-              ||
-              // Action 4: Upload Surat Keluar
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'fileSuratKeluar', 'nomorSuratKeluar', 'tanggalSuratKeluar',
-                'perihalSuratKeluar', 'statusSelesai', 'tanggalSelesai',
-                'riwayatTindakLanjut', 'updatedAt'
-              ])
-              ||
-              // Action 6: Update Registrasi Surat Masuk
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'nomorSurat', 'tanggalSurat', 'tanggalDiterima',
-                'asalSurat', 'perihal', 'sifat', 'fileSuratMasuk',
-                'riwayatTindakLanjut', 'updatedAt'
-              ])
-            )
+            resource.data.statusSelesai == false
+            && isAllowedSuratMasukActiveUpdate(request.resource.data.diff(resource.data).affectedKeys())
           )
           || (
             // Action 5: Reopen / Change Status Selesai from Terminal State

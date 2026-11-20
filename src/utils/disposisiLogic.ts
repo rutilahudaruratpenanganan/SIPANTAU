@@ -47,7 +47,7 @@ export const TAHAP_TINDAK_LANJUT: Record<TahapTindakLanjutId, TahapConfig> = {
     id: 7,
     nama: 'Proses PESONA',
     deskripsi: 'Pengajuan tanda tangan elektronik Kepala Dinas melalui sistem PESONA (Pemerintah Kota/Daerah).',
-    aktorUtama: 'Kepala Dinas / Admin PESONA',
+    aktorUtama: 'Kepala Dinas',
     warna: 'emerald',
   },
 };

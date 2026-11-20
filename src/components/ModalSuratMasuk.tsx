@@ -268,7 +268,7 @@ export const ModalSuratMasuk: React.FC<ModalSuratMasukProps> = ({
                 setAsalSurat(e.target.value);
                 if (errorMessage) setErrorMessage('');
               }}
-              placeholder="Contoh: PPPSRS Apartemen Metro / Ombudsman RI / Ir. Max Bambang"
+              placeholder="Contoh: PPPSRS / Pengembang / Masyarakat / Instansi Terkait"
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
             />
           </div>

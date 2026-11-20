@@ -662,49 +662,20 @@ export default function App() {
     }
   };
 
-  // Handler: Export CSV
-  const handleExportCsv = () => {
-    const headers = [
-      'No',
-      'Nomor Surat Masuk',
-      'Tanggal Surat',
-      'Asal Surat',
-      'Perihal',
-      'Sifat',
-      'Tanggal Disposisi',
-      'Penerima Disposisi',
-      'Instruksi Disposisi',
-      'Tahap Tindak Lanjut',
-      'Nama Tahap',
-      'Status Selesai',
-      'Nomor Surat Keluar',
-      'Tanggal Surat Keluar',
-    ];
+  // Handler: Export CSV (mendukung hasil filter rekap beserta history lengkap)
+  const handleExportCsv = async (
+    customList?: SuratMasuk[],
+    options?: { includeHistory?: boolean }
+  ) => {
+    const targetList = customList ?? suratList;
+    const includeHistory = options?.includeHistory ?? true;
+    const { buildRekapCsvContent } = await import('./utils/rekapLogic');
+    const csvContent = buildRekapCsvContent(targetList, includeHistory);
 
-    const rows = suratList.map((s, idx) => [
-      idx + 1,
-      `"${s.nomorSurat || ''}"`,
-      s.tanggalSurat,
-      `"${s.asalSurat.replace(/"/g, '""')}"`,
-      `"${s.perihal.replace(/"/g, '""')}"`,
-      s.sifat,
-      s.tanggalDisposisi || '',
-      `"${s.penerimaDisposisiNama.join(', ')}"`,
-      `"${(s.instruksiDisposisi || '').replace(/"/g, '""')}"`,
-      s.tahapSaatIni,
-      `"${TAHAP_TINDAK_LANJUT[s.tahapSaatIni]?.nama || ''}"`,
-      s.statusSelesai ? 'Selesai' : 'Dalam Proses',
-      `"${s.nomorSuratKeluar || ''}"`,
-      s.tanggalSuratKeluar || '',
-    ]);
-
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute(
       'download',
       `Rekap_Persuratan_WASDAL_${new Date().toISOString().split('T')[0]}.csv`
@@ -712,7 +683,8 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('File CSV rekapitulasi persuratan berhasil diunduh.');
+    URL.revokeObjectURL(url);
+    showToast(`File CSV rekapitulasi (${targetList.length} surat) berhasil diunduh.`);
   };
 
   // Calculate filtered list and dashboard statistics
