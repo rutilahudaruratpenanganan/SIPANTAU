@@ -1,5 +1,7 @@
 export type Role = 'ketua_tim' | 'staf';
 
+export type AccountCategory = 'ketua_tim' | 'staf';
+
 export interface Personel {
   id: string;
   nama: string;
@@ -8,6 +10,23 @@ export interface Personel {
   peran: Role;
   email?: string;
   isKetuaTim?: boolean;
+}
+
+export interface LoginAccount {
+  id: string;
+  nama: string;
+  nip?: string;
+  jabatan: string;
+  kategori: AccountCategory;
+  peran: Role;
+  displayRole: string;
+}
+
+export interface AkunKredensial {
+  accountId: string;
+  passwordHash: string;
+  isDefaultReset: boolean;
+  updatedAt?: string;
 }
 
 export interface PejabatConfig {

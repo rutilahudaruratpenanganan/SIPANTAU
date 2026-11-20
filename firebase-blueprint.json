@@ -261,6 +261,49 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "AkunKredensial": {
+      "title": "AkunKredensial",
+      "description": "Kredensial hash password akun pejabat dan personel untuk autentikasi aplikasi internal",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "passwordHash": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 200
+        },
+        "isDefaultReset": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "accountId",
+        "passwordHash",
+        "isDefaultReset",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -279,6 +322,10 @@
     "/suratMasuk/{suratId}/berkasChunks/{chunkId}": {
       "schema": { "$ref": "#/entities/BerkasChunk" },
       "description": "Potongan berkas PDF surat masuk dan surat keluar milik dokumen induk suratMasuk"
+    },
+    "/akunKredensial/{accountId}": {
+      "schema": { "$ref": "#/entities/AkunKredensial" },
+      "description": "Hash password SHA-256 tersalt milik akun pejabat dan personel"
     }
   }
 }

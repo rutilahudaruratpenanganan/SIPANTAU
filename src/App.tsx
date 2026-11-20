@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Navbar } from './components/Navbar';
+import { Navbar, NavTab } from './components/Navbar';
 import { DashboardStatsCards } from './components/DashboardStatsCards';
 import { SuratTable } from './components/SuratTable';
 import { ModalSuratMasuk } from './components/ModalSuratMasuk';
@@ -17,7 +17,11 @@ import { ModalLembarDisposisi } from './components/ModalLembarDisposisi';
 import { ModalDeleteConfirm } from './components/ModalDeleteConfirm';
 import { RekapView } from './components/RekapView';
 import { BackupView } from './components/BackupView';
+import { LoginPage } from './components/LoginPage';
+import { AkunView } from './components/AkunView';
 import { 
+  AkunKredensial,
+  LoginAccount,
   SuratMasuk, 
   Personel, 
   PejabatConfig, 
@@ -27,8 +31,7 @@ import {
 } from './types';
 import { 
   INITIAL_PERSONEL, 
-  INITIAL_PEJABAT, 
-  INITIAL_SURAT_MASUK 
+  INITIAL_PEJABAT
 } from './data/initialData';
 import { 
   filterSurat, 
@@ -39,6 +42,11 @@ import {
   canDeleteSurat,
   canManagePersonel
 } from './utils/disposisiLogic';
+import {
+  DEFAULT_INITIAL_PASSWORD,
+  buildLoginAccounts,
+  hashPassword,
+} from './utils/authLogic';
 import { CheckCircle2 } from 'lucide-react';
 import {
   createPersonelDb,
@@ -48,6 +56,8 @@ import {
   ensureWorkspaceInitialized,
   isChunkedPdfUrl,
   loadPdfDataUrlFromFirestore,
+  saveAkunPasswordDb,
+  subscribeAkunKredensial,
   subscribePersonel,
   subscribeSuratMasuk,
   subscribeWorkspace,
@@ -60,7 +70,7 @@ import {
   uploadSuratKeluarDb,
 } from './services/firestoreService';
 
-const ACTIVE_PERSONEL_STORAGE_KEY = 'sipantau_active_personel_id';
+const AUTH_ACCOUNT_STORAGE_KEY = 'sipantau_auth_account_id';
 
 export default function App() {
   // Firestore Workspace Loading State
@@ -75,24 +85,35 @@ export default function App() {
   const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
+  const [akunKredensialMap, setAkunKredensialMap] = useState<Record<string, AkunKredensial>>({});
 
-  // Active simulated role/personel inside internal workspace
-  const [activePersonelId, setActivePersonelId] = useState<string>(() => {
+  // Authenticated logged-in account (Pejabat or Personel)
+  const [loggedInAccountId, setLoggedInAccountId] = useState<string>(() => {
     try {
-      return localStorage.getItem(ACTIVE_PERSONEL_STORAGE_KEY) || '';
+      return localStorage.getItem(AUTH_ACCOUNT_STORAGE_KEY) || '';
     } catch {
       return '';
     }
   });
-  const currentUser: Personel =
-    personelList.find((p) => p.id === activePersonelId) ||
-    personelList.find((p) => p.isKetuaTim || p.peran === 'ketua_tim') ||
-    personelList[0] ||
-    INITIAL_PERSONEL[0];
+
+  const loginAccounts = buildLoginAccounts(pejabatConfig, personelList);
+  const loggedInAccount: LoginAccount | null =
+    loginAccounts.find((a) => a.id === loggedInAccountId) || null;
+
+  const currentUser: Personel = loggedInAccount
+    ? {
+        id: loggedInAccount.id,
+        nama: loggedInAccount.nama,
+        nip: loggedInAccount.nip,
+        jabatan: loggedInAccount.jabatan,
+        peran: loggedInAccount.peran,
+        isKetuaTim: loggedInAccount.peran === 'ketua_tim',
+      }
+    : personelList[0] || INITIAL_PERSONEL[0];
   const currentRole: Role = currentUser.peran;
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup'>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
   // Resolve inline data URL or multi-chunk Firestore PDF payload for backup export
   const resolvePdfDataUrlForBackup = async (
@@ -164,24 +185,30 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Persist selected active internal user locally
+  // Persist authenticated session locally and clear stale sessions if account is removed
   useEffect(() => {
     try {
-      if (activePersonelId) {
-        localStorage.setItem(ACTIVE_PERSONEL_STORAGE_KEY, activePersonelId);
+      if (dbReady && loggedInAccountId && !loggedInAccount) {
+        setLoggedInAccountId('');
+        localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
+        return;
+      }
+      if (loggedInAccountId) {
+        localStorage.setItem(AUTH_ACCOUNT_STORAGE_KEY, loggedInAccountId);
       } else {
-        localStorage.removeItem(ACTIVE_PERSONEL_STORAGE_KEY);
+        localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
       }
     } catch {
       // ignore localStorage errors
     }
-  }, [activePersonelId]);
+  }, [dbReady, loggedInAccountId, loggedInAccount]);
 
   // Initialize shared internal workspace and attach Firestore listeners directly on mount
   useEffect(() => {
     let cancelled = false;
     let unsubWorkspace: (() => void) | undefined;
     let unsubPersonel: (() => void) | undefined;
+    let unsubAkun: (() => void) | undefined;
     let unsubSurat: (() => void) | undefined;
 
     (async () => {
@@ -197,6 +224,10 @@ export default function App() {
           (list) => {
             if (list.length > 0) setPersonelList(list);
           },
+          (err) => setAsyncError(err)
+        );
+        unsubAkun = subscribeAkunKredensial(
+          (map) => setAkunKredensialMap(map),
           (err) => setAsyncError(err)
         );
         unsubSurat = subscribeSuratMasuk(
@@ -217,6 +248,7 @@ export default function App() {
       cancelled = true;
       unsubWorkspace?.();
       unsubPersonel?.();
+      unsubAkun?.();
       unsubSurat?.();
     };
   }, []);
@@ -558,8 +590,7 @@ export default function App() {
     }
     try {
       const created = await createPersonelDb(pData);
-      setActivePersonelId(created.id);
-      showToast(`Personel baru ${created.nama} berhasil ditambahkan dan akses pengguna aktif langsung beralih.`);
+      showToast(`Personel baru ${created.nama} berhasil ditambahkan (password awal: "wasdal").`);
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -586,10 +617,46 @@ export default function App() {
     const target = personelList.find((p) => p.id === id);
     try {
       await deletePersonelDb(id);
-      if (activePersonelId === id) {
-        setActivePersonelId('');
+      if (loggedInAccountId === id) {
+        setLoggedInAccountId('');
       }
       showToast(`Data personel ${target ? `"${target.nama}"` : ''} berhasil dihapus.`);
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
+  };
+
+  const handleLoginSuccess = (account: LoginAccount) => {
+    setLoggedInAccountId(account.id);
+    setActiveTab('dashboard');
+    showToast(`Selamat datang, ${account.nama} (${account.displayRole}).`);
+  };
+
+  const handleLogout = () => {
+    setLoggedInAccountId('');
+    setActiveTab('dashboard');
+    setIsModalPersonelOpen(false);
+    setIsModalSuratMasukOpen(false);
+    setIsModalDisposisiOpen(false);
+    setIsModalTindakLanjutOpen(false);
+    setIsModalUploadSuratKeluarOpen(false);
+    showToast('Anda telah keluar dari akun.');
+  };
+
+  const handleSaveNewPassword = async (accountId: string, newHash: string) => {
+    await saveAkunPasswordDb(accountId, newHash, false);
+    showToast('Password akun Anda berhasil diperbarui.');
+  };
+
+  const handleResetAccountPassword = async (accountId: string, nama: string) => {
+    if (!canManagePersonel(currentRole)) {
+      showToast('Hanya Ketua Tim yang berhak mereset password akun personel.');
+      return;
+    }
+    try {
+      const defaultHash = await hashPassword(DEFAULT_INITIAL_PASSWORD);
+      await saveAkunPasswordDb(accountId, defaultHash, true);
+      showToast(`Password akun ${nama} dikembalikan ke password awal "wasdal".`);
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -669,6 +736,24 @@ export default function App() {
     );
   }
 
+  if (!loggedInAccount) {
+    return (
+      <>
+        {toastMessage && (
+          <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white text-xs px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 border border-slate-700 animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+        <LoginPage
+          accounts={loginAccounts}
+          akunKredensialMap={akunKredensialMap}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       
@@ -680,17 +765,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Navbar with Branding & User Switcher */}
+      {/* Top Navbar with Branding & Authenticated Account Menu */}
       <Navbar
         currentRole={currentRole}
-        currentUser={currentUser}
-        personelList={personelList}
-        onSwitchUser={(user) => {
-          setActivePersonelId(user.id);
-          showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
-        }}
+        currentAccount={loggedInAccount}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
+        onLogout={handleLogout}
       />
 
       {/* Main Container */}
@@ -705,13 +786,13 @@ export default function App() {
                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
             }`}>
-              {currentUser.nama} ({currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})
+              {loggedInAccount.nama} ({loggedInAccount.displayRole})
             </span>
             <span className="text-slate-400 hidden md:inline">·</span>
             <span className="text-slate-500 hidden md:inline">
               {currentRole === 'ketua_tim'
                 ? 'Hak akses penuh: Disposisi, Asistensi, Hapus Surat, Manajemen Personel.'
-                : 'Hak akses Staf Wasdal: Update progres tindak lanjut, penyusunan draft, upload surat keluar.'}
+                : `Hak akses ${loggedInAccount.displayRole}: Pemantauan tindak lanjut, registrasi, upload surat keluar & manajemen akun pribadi.`}
             </span>
           </div>
 
@@ -732,6 +813,12 @@ export default function App() {
                 Kelola Data Personel
               </button>
             )}
+            <button
+              onClick={() => setActiveTab('akun')}
+              className="text-slate-700 hover:text-slate-950 font-semibold underline text-xs"
+            >
+              Akun &amp; Ubah Password
+            </button>
           </div>
         </div>
 
@@ -982,6 +1069,16 @@ export default function App() {
           />
         )}
 
+        {/* VIEW 6: AKUN SAYA & UBAH PASSWORD */}
+        {activeTab === 'akun' && (
+          <AkunView
+            currentAccount={loggedInAccount}
+            credential={akunKredensialMap[loggedInAccount.id] || null}
+            onSaveNewPassword={handleSaveNewPassword}
+            onLogout={handleLogout}
+          />
+        )}
+
       </main>
 
       {/* ALL MODALS */}
@@ -1074,14 +1171,11 @@ export default function App() {
           pejabatConfig={pejabatConfig}
           currentRole={currentRole}
           currentUser={currentUser}
-          onSwitchUser={(user) => {
-            setActivePersonelId(user.id);
-            showToast(`Berpindah ke profil: ${user.nama} (${user.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
-          }}
           onUpdatePejabat={handleUpdatePejabat}
           onAddPersonel={handleAddPersonel}
           onUpdatePersonel={handleUpdatePersonel}
           onDeletePersonel={handleDeletePersonel}
+          onResetPassword={handleResetAccountPassword}
         />
       )}
 

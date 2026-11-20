@@ -7,29 +7,30 @@ import {
   Printer,
   ChevronDown,
   LayoutDashboard,
-  HardDriveDownload
+  HardDriveDownload,
+  KeyRound,
+  LogOut,
+  UserCog
 } from 'lucide-react';
-import { Personel, Role } from '../types';
+import { LoginAccount, Role } from '../types';
 import { canAccessBackup, canManagePersonel } from '../utils/disposisiLogic';
 
-export type NavTab = 'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup';
+export type NavTab = 'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup' | 'akun';
 
 interface NavbarProps {
   currentRole: Role;
-  currentUser: Personel;
-  personelList: Personel[];
-  onSwitchUser: (personel: Personel) => void;
+  currentAccount: LoginAccount;
   activeTab: NavTab;
   onChangeTab: (tab: NavTab) => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentRole,
-  currentUser,
-  personelList,
-  onSwitchUser,
+  currentAccount,
   activeTab,
   onChangeTab,
+  onLogout,
 }) => {
   const [showUserDropdown, setShowUserDropdown] = React.useState(false);
 
@@ -124,16 +125,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Backup Arsip</span>
               </button>
             )}
+            <button
+              onClick={() => onChangeTab('akun')}
+              className={`flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                activeTab === 'akun'
+                  ? 'bg-slate-800 text-white font-semibold'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+              title="Halaman Akun & Ubah Password"
+            >
+              <UserCog className="w-4 h-4 text-sky-400" />
+              <span>Akun Saya</span>
+            </button>
           </nav>
 
-          {/* Active User / Role Switcher */}
+          {/* Active Authenticated Account Menu */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Role & User Switcher */}
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
                 className="flex items-center gap-1.5 sm:gap-2.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-left transition-colors text-xs"
-                title="Ganti Pengguna Aktif (Ketua Tim / Staf)"
+                title="Menu Akun & Ubah Password"
+                aria-label="Menu Akun Aktif"
               >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
                   currentRole === 'ketua_tim' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -141,68 +154,61 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {currentRole === 'ketua_tim' ? <ShieldCheck className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                 </div>
                 <div className="hidden md:block leading-tight">
-                  <div className="font-semibold text-slate-100 truncate max-w-[130px]">
-                    {currentUser.nama}
+                  <div className="font-semibold text-slate-100 truncate max-w-[150px]">
+                    {currentAccount.nama}
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    {currentRole === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
+                    {currentAccount.displayRole}
                   </div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
 
-              {/* User Dropdown */}
+              {/* Account Action Dropdown */}
               {showUserDropdown && (
                 <>
                   <div 
                     className="fixed inset-0 z-40" 
                     onClick={() => setShowUserDropdown(false)} 
                   />
-                  <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-2 text-xs">
-                    <div className="px-3.5 py-2 border-b border-slate-800 text-slate-400">
-                      <div className="font-semibold text-slate-200">Hak Akses & Pengguna Aktif</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Pilih profil untuk beralih hak akses internal (Ketua Tim vs Staf)
+                  <div className="absolute right-0 mt-2 w-68 bg-slate-900 border border-slate-700 rounded-xl shadow-xl z-50 py-2 text-xs">
+                    <div className="px-3.5 py-2.5 border-b border-slate-800">
+                      <div className="font-semibold text-slate-100 truncate">
+                        {currentAccount.nama}
                       </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                        {currentAccount.jabatan}
+                      </div>
+                      <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded font-semibold ${
+                        currentRole === 'ketua_tim'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-blue-500/20 text-blue-300'
+                      }`}>
+                        {currentAccount.displayRole}
+                      </span>
                     </div>
 
-                    <div className="px-2 py-1 max-h-64 overflow-y-auto">
-                      {personelList.map((p) => {
-                        const isSelected = p.id === currentUser.id;
-                        return (
-                          <button
-                            key={p.id}
-                            onClick={() => {
-                              onSwitchUser(p);
-                              setShowUserDropdown(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between my-0.5 transition-colors ${
-                              isSelected
-                                ? 'bg-blue-600/20 text-blue-200 border border-blue-500/30'
-                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                            }`}
-                          >
-                            <div className="truncate pr-2">
-                              <div className="font-medium text-slate-200">{p.nama}</div>
-                              <div className="text-[10px] text-slate-400">{p.jabatan}</div>
-                            </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
-                              p.peran === 'ketua_tim'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : 'bg-slate-700 text-slate-300'
-                            }`}>
-                              {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="px-3 py-2 border-t border-slate-800 text-[11px] text-slate-400 bg-slate-950/40">
-                      <div>
-                        <span className="font-medium text-slate-300">Ketua Tim:</span> Disposisi & hapus surat. <br/>
-                        <span className="font-medium text-slate-300">Staf Wasdal:</span> Update draft & upload surat keluar.
-                      </div>
+                    <div className="p-1.5 space-y-1">
+                      <button
+                        onClick={() => {
+                          onChangeTab('akun');
+                          setShowUserDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-slate-200 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
+                      >
+                        <KeyRound className="w-4 h-4 text-sky-400 shrink-0" />
+                        <span>Akun Saya &amp; Ubah Password</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          onLogout();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-rose-300 hover:bg-rose-950/60 hover:text-rose-200 flex items-center gap-2 transition-colors font-medium"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>Keluar / Ganti Akun</span>
+                      </button>
                     </div>
                   </div>
                 </>
@@ -270,6 +276,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Backup Arsip</span>
           </button>
         )}
+        <button
+          onClick={() => onChangeTab('akun')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 ${
+            activeTab === 'akun' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-300'
+          }`}
+        >
+          <UserCog className="w-3.5 h-3.5 text-sky-400" />
+          <span>Akun Saya</span>
+        </button>
       </nav>
     </header>
   );

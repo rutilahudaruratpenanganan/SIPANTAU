@@ -20,3 +20,4 @@
 8. **Invalid Enum / Stage Value**: `tahapSaatIni: 99`, `sifat: "Rahasia Negara"`, atau `peran: "superadmin"` -> `PERMISSION_DENIED`.
 9. **Unauthorized Collection Access**: Mencoba membaca/menulis ke `/users/any/private/info` atau koleksi acak `/secret/doc` -> `PERMISSION_DENIED`.
 10. **Unauthorized Terminal State Field Tampering**: Update mengubah field selain `statusSelesai`/`tanggalSelesai`/`riwayatTindakLanjut`/`updatedAt` ketika `statusSelesai == true` -> `PERMISSION_DENIED`.
+11. **Account Credential Integrity**: Dokumen `/akunKredensial/{accountId}` wajib memenuhi `accountId == docId`, `ownerId == 'internal_wasdal'` (immutable), `passwordHash` sepanjang 16-200 karakter, dan update hanya boleh mengubah `passwordHash`, `isDefaultReset`, dan `updatedAt`.

@@ -10,8 +10,8 @@ import {
   ShieldCheck, 
   Briefcase,
   CheckCircle2,
-  UserCheck,
-  AlertTriangle
+  AlertTriangle,
+  KeyRound
 } from 'lucide-react';
 import { Personel, PejabatConfig, Role } from '../types';
 import { canManagePersonel } from '../utils/disposisiLogic';
@@ -23,11 +23,11 @@ interface ModalPersonelProps {
   pejabatConfig: PejabatConfig;
   currentRole: Role;
   currentUser: Personel;
-  onSwitchUser: (personel: Personel) => void;
   onUpdatePejabat: (newPejabat: PejabatConfig) => void;
   onAddPersonel: (personel: Omit<Personel, 'id'>) => void;
   onUpdatePersonel: (id: string, updated: Partial<Personel>) => void;
   onDeletePersonel: (id: string) => void;
+  onResetPassword?: (accountId: string, nama: string) => void;
 }
 
 export const ModalPersonel: React.FC<ModalPersonelProps> = ({
@@ -37,11 +37,11 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
   pejabatConfig,
   currentRole,
   currentUser,
-  onSwitchUser,
   onUpdatePejabat,
   onAddPersonel,
   onUpdatePersonel,
   onDeletePersonel,
+  onResetPassword,
 }) => {
   // Active sub-tab: 'struktural' | 'tim'
   const [activeSubTab, setActiveSubTab] = useState<'struktural' | 'tim'>('struktural');
@@ -98,7 +98,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
       isKetuaTim: newPeran === 'ketua_tim',
     });
 
-    setSaveSuccessMsg(`Personel baru ${newNama} berhasil ditambahkan dan akses pengguna aktif langsung beralih.`);
+    setSaveSuccessMsg(`Personel baru ${newNama} berhasil ditambahkan dengan password awal "wasdal".`);
     setTimeout(() => setSaveSuccessMsg(''), 3500);
 
     setNewNama('');
@@ -441,7 +441,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                       type="submit"
                       className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold"
                     >
-                      Simpan & Jadikan Pengguna Aktif
+                      Simpan Personel Baru
                     </button>
                   </div>
                 </form>
@@ -615,18 +615,19 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {!isCurrentlyActive && (
+                        {allowManage && onResetPassword && (
                           <button
+                            type="button"
                             onClick={() => {
-                              onSwitchUser(p);
-                              setSaveSuccessMsg(`Akses pengguna aktif berhasil beralih ke: ${p.nama} (${p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'})`);
-                              setTimeout(() => setSaveSuccessMsg(''), 3000);
+                              onResetPassword(p.id, p.nama);
+                              setSaveSuccessMsg(`Password akun ${p.nama} direset ke password awal "wasdal".`);
+                              setTimeout(() => setSaveSuccessMsg(''), 3500);
                             }}
-                            className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold border border-blue-200 transition-colors flex items-center gap-1"
-                            title="Aktifkan akun ini sekarang"
+                            className="px-2.5 py-1 rounded bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-[11px] font-medium border border-slate-200 hover:border-amber-200 transition-colors flex items-center gap-1"
+                            title={`Reset password ${p.nama} ke "wasdal"`}
                           >
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>Gunakan Akun Ini</span>
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>Reset Password</span>
                           </button>
                         )}
 

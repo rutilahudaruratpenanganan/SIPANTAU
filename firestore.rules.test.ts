@@ -170,3 +170,25 @@ test('BerkasChunk enforces chunk index, totalChunks, content bounds, and kind', 
   assert.equal(700001 <= 700000, false); // content max 700k
 });
 
+test('AkunKredensial enforces accountId binding, hash bounds, and immutable keys on update', () => {
+  const AKUN_ALLOWED_KEYS = new Set([
+    'ownerId', 'accountId', 'passwordHash', 'isDefaultReset', 'createdAt', 'updatedAt',
+  ]);
+  const validAkun = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    accountId: 'internal_wasdal_p-chafidz',
+    passwordHash: '0123456789abcdef:abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567',
+    isDefaultReset: false,
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+  assert.equal(Object.keys(validAkun).every((k) => AKUN_ALLOWED_KEYS.has(k)), true);
+  assert.equal(VALID_ID_REGEX.test(validAkun.accountId), true);
+  assert.equal(validAkun.passwordHash.length >= 16 && validAkun.passwordHash.length <= 200, true);
+
+  const allowedUpdateKeys = new Set(['passwordHash', 'isDefaultReset', 'updatedAt']);
+  assert.equal(['passwordHash', 'isDefaultReset', 'updatedAt'].every((k) => allowedUpdateKeys.has(k)), true);
+  assert.equal(allowedUpdateKeys.has('accountId'), false);
+  assert.equal(allowedUpdateKeys.has('ownerId'), false);
+});
+

@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
+  AkunKredensial,
   DokumenFile,
   PejabatConfig,
   Personel,
@@ -849,7 +850,75 @@ export async function deletePersonelDb(id: string): Promise<void> {
   const path = `personel/${id}`;
   try {
     await deleteDoc(doc(db, 'personel', id));
+    await deleteDoc(doc(db, 'akunKredensial', id)).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export function subscribeAkunKredensial(
+  onData: (map: Record<string, AkunKredensial>) => void,
+  onError: (err: Error) => void
+) {
+  const path = 'akunKredensial';
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const map: Record<string, AkunKredensial> = {};
+      for (const docSnap of snapshot.docs) {
+        const d = docSnap.data();
+        const accountId = (d.accountId as string) || docSnap.id;
+        map[accountId] = {
+          accountId,
+          passwordHash: (d.passwordHash as string) || '',
+          isDefaultReset: Boolean(d.isDefaultReset),
+          updatedAt: d.updatedAt ? formatTimestamp(d.updatedAt) : undefined,
+        };
+      }
+      onData(map);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export async function saveAkunPasswordDb(
+  accountId: string,
+  passwordHash: string,
+  isDefaultReset = false
+): Promise<void> {
+  const path = `akunKredensial/${accountId}`;
+  const ref = doc(db, 'akunKredensial', accountId);
+  const safeHash = clampStr(passwordHash, 200);
+  if (safeHash.length < 16) {
+    throw new Error('Hash password tidak valid.');
+  }
+
+  try {
+    const existingSnap = await getDoc(ref);
+    if (existingSnap.exists()) {
+      await updateDoc(ref, {
+        passwordHash: safeHash,
+        isDefaultReset,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(ref, {
+        ownerId: INTERNAL_WORKSPACE_ID,
+        accountId: clampStr(accountId, LIMITS.ID),
+        passwordHash: safeHash,
+        isDefaultReset,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
   }
 }

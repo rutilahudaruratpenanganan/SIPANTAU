@@ -147,6 +147,19 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidAkunKredensial(data, accountId) {
+      return data.keys().hasAll(['ownerId', 'accountId', 'passwordHash', 'isDefaultReset', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'accountId', 'passwordHash', 'isDefaultReset', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && isValidId(data.accountId)
+        && data.accountId == accountId
+        && data.passwordHash is string && data.passwordHash.size() >= 16 && data.passwordHash.size() <= 200
+        && data.isDefaultReset is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // ------------------------------------------------------------------
     // Collection Rules (Internal Shared Workspace)
     // ------------------------------------------------------------------
@@ -293,6 +306,27 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/suratMasuk/$(suratId))
           && get(/databases/$(database)/documents/suratMasuk/$(suratId)).data.ownerId == 'internal_wasdal';
       }
+    }
+
+    // 5. Kredensial Akun Login (SHA-256 + Salt)
+    match /akunKredensial/{accountId} {
+      allow get: if isValidId(accountId) && (resource == null || isInternalWorkspaceDoc(resource.data));
+      allow list: if isInternalWorkspaceDoc(resource.data);
+      allow create: if isValidId(accountId)
+        && isValidAkunKredensial(request.resource.data, accountId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isValidId(accountId)
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidAkunKredensial(request.resource.data, accountId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.accountId == resource.data.accountId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'passwordHash', 'isDefaultReset', 'updatedAt'
+        ]);
+      allow delete: if isValidId(accountId) && isInternalWorkspaceDoc(resource.data);
     }
   }
 }
