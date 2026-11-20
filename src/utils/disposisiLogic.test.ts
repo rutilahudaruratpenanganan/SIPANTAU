@@ -9,6 +9,7 @@ import {
   canManagePersonel,
   canCreateDisposisi,
   canAccessBackup,
+  isFullAccessRole,
   filterSurat,
   calculateDashboardStats,
   normalizeRiwayatCatatan,
@@ -110,6 +111,7 @@ test('stage transitions work sequentially', () => {
 
 test('role-based access control enforces restrictions', () => {
   // Ketua Tim has full privileges
+  assert.equal(isFullAccessRole('ketua_tim'), true);
   assert.equal(canAdvanceStage('ketua_tim', 1), true);
   assert.equal(canAdvanceStage('ketua_tim', 6), true);
   assert.equal(canDeleteSurat('ketua_tim'), true);
@@ -117,7 +119,18 @@ test('role-based access control enforces restrictions', () => {
   assert.equal(canCreateDisposisi('ketua_tim'), true);
   assert.equal(canAccessBackup('ketua_tim'), true);
 
+  // Administrator has identical full privileges to Ketua Tim
+  assert.equal(isFullAccessRole('administrator'), true);
+  assert.equal(canAdvanceStage('administrator', 1), true);
+  assert.equal(canAdvanceStage('administrator', 4), true);
+  assert.equal(canAdvanceStage('administrator', 7), true);
+  assert.equal(canDeleteSurat('administrator'), true);
+  assert.equal(canManagePersonel('administrator'), true);
+  assert.equal(canCreateDisposisi('administrator'), true);
+  assert.equal(canAccessBackup('administrator'), true);
+
   // Staf has restricted privileges
+  assert.equal(isFullAccessRole('staf'), false);
   assert.equal(canDeleteSurat('staf'), false);
   assert.equal(canManagePersonel('staf'), false);
   assert.equal(canCreateDisposisi('staf'), false);

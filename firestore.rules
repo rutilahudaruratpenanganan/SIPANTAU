@@ -54,7 +54,7 @@ service cloud.firestore {
         && data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 150
         && (!('nip' in data) || (data.nip is string && data.nip.size() <= 60))
         && data.jabatan is string && data.jabatan.size() >= 1 && data.jabatan.size() <= 200
-        && (data.peran in ['ketua_tim', 'staf'])
+        && (data.peran in ['ketua_tim', 'administrator', 'staf'])
         && (!('email' in data) || (data.email is string && data.email.size() <= 150))
         && (!('isKetuaTim' in data) || data.isKetuaTim is bool)
         && data.createdAt is timestamp

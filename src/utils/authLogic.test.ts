@@ -41,6 +41,12 @@ const samplePersonel: Personel[] = [
     isKetuaTim: true,
   },
   {
+    id: 'internal_wasdal_p-admin',
+    nama: 'Admin Operasional',
+    jabatan: 'Administrator Wasdal',
+    peran: 'administrator',
+  },
+  {
     id: 'internal_wasdal_p-chafidz',
     nama: 'Chafidz Ginanjar, ST',
     jabatan: 'Staf Wasdal',
@@ -54,18 +60,22 @@ const samplePersonel: Personel[] = [
   },
 ];
 
-test('buildLoginAccounts includes only Ketua Tim and Staf Wasdal without Kepala Dinas or Kepala Bidang', () => {
+test('buildLoginAccounts includes Ketua Tim, Administrator, and Staf Wasdal without Kepala Dinas or Kepala Bidang', () => {
   const accounts = buildLoginAccounts(samplePejabat, samplePersonel);
 
-  assert.equal(accounts.length, 3);
+  assert.equal(accounts.length, 4);
   assert.equal(accounts[0].id, 'internal_wasdal_p-ketua');
   assert.equal(accounts[0].kategori, 'ketua_tim');
   assert.equal(accounts[0].peran, 'ketua_tim');
   assert.equal(accounts[0].displayRole, 'Ketua Tim');
-  assert.equal(accounts[1].nama, 'Chafidz Ginanjar, ST');
-  assert.equal(accounts[1].kategori, 'staf');
-  assert.equal(accounts[1].displayRole, 'Staf Wasdal');
-  assert.equal(accounts[2].nama, 'Eva Faoziah Alli, ST');
+  assert.equal(accounts[1].id, 'internal_wasdal_p-admin');
+  assert.equal(accounts[1].kategori, 'administrator');
+  assert.equal(accounts[1].peran, 'administrator');
+  assert.equal(accounts[1].displayRole, 'Administrator');
+  assert.equal(accounts[2].nama, 'Chafidz Ginanjar, ST');
+  assert.equal(accounts[2].kategori, 'staf');
+  assert.equal(accounts[2].displayRole, 'Staf Wasdal');
+  assert.equal(accounts[3].nama, 'Eva Faoziah Alli, ST');
   assert.equal(
     accounts.some(
       (a) =>

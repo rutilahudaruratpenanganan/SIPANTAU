@@ -142,7 +142,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
               Kelola Personel Tim & Penandatangan Naskah Dinas
             </h2>
             <p className="text-xs text-slate-400">
-              Konfigurasi pejabat penandatangan, ketua tim pendisposisi, dan personel Staf Wasdal
+              Konfigurasi pejabat penandatangan, ketua tim pendisposisi, administrator, dan personel Staf Wasdal
             </p>
           </div>
           <button
@@ -192,7 +192,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
           {!allowManage && (
             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg flex items-center gap-2 font-medium">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Mode Lihat: Perubahan data penandatangan, penambahan, pengubahan, dan penghapusan personel hanya dapat dilakukan oleh Ketua Tim.</span>
+              <span>Mode Lihat: Perubahan data penandatangan, penambahan, pengubahan, dan penghapusan personel hanya dapat dilakukan oleh Ketua Tim atau Administrator.</span>
             </div>
           )}
 
@@ -424,6 +424,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                         className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                       >
                         <option value="staf">Staf Wasdal</option>
+                        <option value="administrator">Administrator (Akses Penuh)</option>
                         <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                       </select>
                     </div>
@@ -548,6 +549,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                               className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded"
                             >
                               <option value="staf">Staf Wasdal</option>
+                              <option value="administrator">Administrator (Akses Penuh)</option>
                               <option value="ketua_tim">Ketua Tim (Pendisposisi)</option>
                             </select>
                           </div>
@@ -599,9 +601,15 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
                           <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
                             p.peran === 'ketua_tim'
                               ? 'bg-purple-100 text-purple-800'
+                              : p.peran === 'administrator'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
                               : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {p.peran === 'ketua_tim' ? 'Ketua Tim' : 'Staf Wasdal'}
+                            {p.peran === 'ketua_tim'
+                              ? 'Ketua Tim'
+                              : p.peran === 'administrator'
+                              ? 'Administrator'
+                              : 'Staf Wasdal'}
                           </span>
                           {isCurrentlyActive && (
                             <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">

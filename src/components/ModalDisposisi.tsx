@@ -84,12 +84,12 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
 
   if (!isOpen || !surat) return null;
 
-  const stafList = personelList.filter((p) => p.peran === 'staf');
+  const stafList = personelList.filter((p) => (p.peran === 'staf' || p.peran === 'administrator') && !p.isKetuaTim);
   const availablePersonel =
     stafList.length > 0
       ? stafList
-      : personelList.filter((p) => !p.isKetuaTim).length > 0
-      ? personelList.filter((p) => !p.isKetuaTim)
+      : personelList.filter((p) => !p.isKetuaTim && p.peran !== 'ketua_tim').length > 0
+      ? personelList.filter((p) => !p.isKetuaTim && p.peran !== 'ketua_tim')
       : personelList;
 
   const togglePersonel = (id: string) => {

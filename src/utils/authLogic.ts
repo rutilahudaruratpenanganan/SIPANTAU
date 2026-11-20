@@ -7,8 +7,8 @@ export const PEJABAT_KEPALA_BIDANG_ID = 'pejabat_kepala_bidang';
 export const PEJABAT_KETUA_TIM_ID = 'pejabat_ketua_tim';
 
 /**
- * Membangun daftar akun login dropdown berdasarkan daftar Ketua Tim dan Staf Wasdal
- * yang terdaftar pada aplikasi (Kepala Dinas dan Kepala Bidang tidak disertakan).
+ * Membangun daftar akun login dropdown berdasarkan daftar Ketua Tim, Administrator,
+ * dan Staf Wasdal yang terdaftar pada aplikasi (Kepala Dinas dan Kepala Bidang tidak disertakan).
  */
 export function buildLoginAccounts(
   pejabatConfig: PejabatConfig,
@@ -51,9 +51,25 @@ export function buildLoginAccounts(
     });
   }
 
+  // Administrator (akses penuh setara Ketua Tim)
+  const adminPersonel = personelList.filter(
+    (p) => p.peran === 'administrator' && !p.isKetuaTim
+  );
+  for (const admin of adminPersonel) {
+    pushUnique({
+      id: admin.id,
+      nama: admin.nama.trim(),
+      nip: admin.nip?.trim() || undefined,
+      jabatan: admin.jabatan?.trim() || 'Administrator Sistem',
+      kategori: 'administrator',
+      peran: 'administrator',
+      displayRole: 'Administrator',
+    });
+  }
+
   // Staf Wasdal
   const stafList = personelList.filter(
-    (p) => p.peran !== 'ketua_tim' && !p.isKetuaTim
+    (p) => p.peran !== 'ketua_tim' && p.peran !== 'administrator' && !p.isKetuaTim
   );
   for (const staf of stafList) {
     pushUnique({

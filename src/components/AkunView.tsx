@@ -17,6 +17,7 @@ import {
   isUsingDefaultPassword,
   validatePasswordChange,
 } from '../utils/authLogic';
+import { isFullAccessRole } from '../utils/disposisiLogic';
 
 interface AkunViewProps {
   currentAccount: LoginAccount;
@@ -87,12 +88,12 @@ export const AkunView: React.FC<AkunViewProps> = ({
           <div className="flex items-start gap-3.5">
             <div
               className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                currentAccount.peran === 'ketua_tim'
+                isFullAccessRole(currentAccount.peran)
                   ? 'bg-amber-100 text-amber-800 border border-amber-300'
                   : 'bg-blue-100 text-blue-800 border border-blue-300'
               }`}
             >
-              {currentAccount.peran === 'ketua_tim' ? (
+              {isFullAccessRole(currentAccount.peran) ? (
                 <ShieldCheck className="w-6 h-6" />
               ) : (
                 <UserCheck className="w-6 h-6" />
@@ -101,7 +102,7 @@ export const AkunView: React.FC<AkunViewProps> = ({
             <div className="min-w-0">
               <span
                 className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                  currentAccount.peran === 'ketua_tim'
+                  isFullAccessRole(currentAccount.peran)
                     ? 'bg-amber-50 text-amber-800 border-amber-200'
                     : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 }`}
@@ -151,6 +152,8 @@ export const AkunView: React.FC<AkunViewProps> = ({
             <p className="text-[11px] text-slate-600 leading-relaxed">
               {currentAccount.peran === 'ketua_tim'
                 ? 'Hak akses penuh Pendisposisi: registrasi surat masuk, disposisi & instruksi personel, asistensi tindak lanjut, cetak rekap, backup arsip (.zip), hapus surat, serta manajemen data personel.'
+                : currentAccount.peran === 'administrator'
+                ? 'Hak akses penuh Administrator (setara Ketua Tim): registrasi surat masuk, disposisi & instruksi personel, asistensi & pengaturan tahap tindak lanjut, cetak rekap, backup arsip (.zip), hapus surat, serta manajemen data personel.'
                 : 'Hak akses Staf Wasdal: melihat dashboard pemantauan, registrasi surat masuk, memperbarui tahapan tindak lanjut / draft, mengunggah surat keluar, mencetak lembar & rekap, serta mengelola password akun sendiri.'}
             </p>
           </div>
@@ -175,7 +178,7 @@ export const AkunView: React.FC<AkunViewProps> = ({
               <span>Ubah Password Akun</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Ketua Tim dan Staf Wasdal dapat memperbarui password akun masing-masing secara mandiri
+              Ketua Tim, Administrator, dan Staf Wasdal dapat memperbarui password akun masing-masing secara mandiri
             </p>
           </div>
 

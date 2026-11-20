@@ -68,7 +68,7 @@
         },
         "peran": {
           "type": "string",
-          "enum": ["ketua_tim", "staf"]
+          "enum": ["ketua_tim", "administrator", "staf"]
         },
         "email": {
           "type": "string",

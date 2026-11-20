@@ -106,10 +106,10 @@ export const BackupView: React.FC<BackupViewProps> = ({
           <Lock className="w-6 h-6" />
         </div>
         <h2 className="text-base font-bold text-slate-900">
-          Menu Backup Khusus Akun Pendisposisi
+          Menu Backup Khusus Ketua Tim &amp; Administrator
         </h2>
         <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
-          Fitur unduh cadangan (backup) seluruh surat berstatus selesai hanya tersedia pada akun Pendisposisi (Ketua Tim). Silakan alihkan profil pengguna aktif melalui menu di kanan atas.
+          Fitur unduh cadangan (backup) seluruh surat berstatus selesai hanya tersedia untuk akun Ketua Tim (Pendisposisi) atau Administrator. Silakan alihkan profil pengguna aktif melalui menu di kanan atas.
         </p>
       </div>
     );

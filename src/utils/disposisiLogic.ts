@@ -64,8 +64,12 @@ export function getPrevStage(current: TahapTindakLanjutId): TahapTindakLanjutId 
   return (current - 1) as TahapTindakLanjutId;
 }
 
+export function isFullAccessRole(role: Role): boolean {
+  return role === 'ketua_tim' || role === 'administrator';
+}
+
 export function canAdvanceStage(role: Role, currentStage: TahapTindakLanjutId): boolean {
-  if (role === 'ketua_tim') return true;
+  if (isFullAccessRole(role)) return true;
   // Staf can advance stage 4 (Drafting) to stage 5 (Asistensi Ketua Tim)
   // and upload surat keluar when approved
   if (role === 'staf' && currentStage === 4) return true;
@@ -73,19 +77,19 @@ export function canAdvanceStage(role: Role, currentStage: TahapTindakLanjutId): 
 }
 
 export function canDeleteSurat(role: Role): boolean {
-  return role === 'ketua_tim';
+  return isFullAccessRole(role);
 }
 
 export function canManagePersonel(role: Role): boolean {
-  return role === 'ketua_tim';
+  return isFullAccessRole(role);
 }
 
 export function canCreateDisposisi(role: Role): boolean {
-  return role === 'ketua_tim';
+  return isFullAccessRole(role);
 }
 
 export function canAccessBackup(role: Role): boolean {
-  return role === 'ketua_tim';
+  return isFullAccessRole(role);
 }
 
 export function canUploadSuratKeluar(surat: SuratMasuk): boolean {

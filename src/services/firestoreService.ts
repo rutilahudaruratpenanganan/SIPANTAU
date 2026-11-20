@@ -464,9 +464,14 @@ export function subscribePersonel(
           isKetuaTim: typeof d.isKetuaTim === 'boolean' ? d.isKetuaTim : d.peran === 'ketua_tim',
         };
       });
+      const roleOrder = (peran: Role): number => {
+        if (peran === 'ketua_tim') return 0;
+        if (peran === 'administrator') return 1;
+        return 2;
+      };
       list.sort((a, b) => {
-        if (a.peran === 'ketua_tim' && b.peran !== 'ketua_tim') return -1;
-        if (b.peran === 'ketua_tim' && a.peran !== 'ketua_tim') return 1;
+        const cmpRole = roleOrder(a.peran) - roleOrder(b.peran);
+        if (cmpRole !== 0) return cmpRole;
         return a.nama.localeCompare(b.nama);
       });
       onData(list);

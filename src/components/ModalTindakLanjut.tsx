@@ -26,6 +26,7 @@ import {
   canAdvanceStage,
   canCreateDisposisi,
   canUploadSuratKeluar,
+  isFullAccessRole,
 } from '../utils/disposisiLogic';
 
 interface ModalTindakLanjutProps {
@@ -401,7 +402,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
                       </button>
                     ) : (
                       <div className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded">
-                        Memerlukan wewenang Ketua Tim untuk melanjutkan tahapan
+                        Memerlukan wewenang Ketua Tim atau Administrator untuk melanjutkan tahapan
                       </div>
                     )}
                   </div>
@@ -417,7 +418,7 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
                 </div>
 
                 {/* Direct Stage Selector for authorized user */}
-                {onSetTahapDirect && currentRole === 'ketua_tim' && (
+                {onSetTahapDirect && isFullAccessRole(currentRole) && (
                   <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-600">Pilih / Lompat Tahapan Langsung:</span>

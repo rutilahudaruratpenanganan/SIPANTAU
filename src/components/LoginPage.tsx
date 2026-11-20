@@ -34,6 +34,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [backdropFailed, setBackdropFailed] = useState<boolean>(false);
 
   const ketuaAccounts = accounts.filter((a) => a.kategori === 'ketua_tim');
+  const adminAccounts = accounts.filter((a) => a.kategori === 'administrator');
   const stafAccounts = accounts.filter((a) => a.kategori === 'staf');
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) || null;
 
@@ -188,6 +189,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     ))}
                   </optgroup>
                 )}
+                {adminAccounts.length > 0 && (
+                  <optgroup label="Administrator">
+                    {adminAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.nama} — {acc.displayRole}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
                 {stafAccounts.length > 0 && (
                   <optgroup label="Staf Wasdal">
                     {stafAccounts.map((acc) => (
@@ -209,7 +219,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 </span>
                 <span
                   className={
-                    selectedAccount.peran === 'ketua_tim'
+                    selectedAccount.peran === 'ketua_tim' || selectedAccount.peran === 'administrator'
                       ? 'font-semibold text-amber-700'
                       : 'font-semibold text-blue-700'
                   }

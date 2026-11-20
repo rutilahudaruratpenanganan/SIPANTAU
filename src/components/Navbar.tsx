@@ -13,7 +13,7 @@ import {
   UserCog
 } from 'lucide-react';
 import { LoginAccount, Role } from '../types';
-import { canAccessBackup, canManagePersonel } from '../utils/disposisiLogic';
+import { canAccessBackup, canManagePersonel, isFullAccessRole } from '../utils/disposisiLogic';
 
 export type NavTab = 'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup' | 'akun';
 
@@ -119,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'bg-emerald-700/80 text-white font-semibold border border-emerald-500/40'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                 }`}
-                title="Backup surat masuk berstatus selesai ke laptop (khusus Pendisposisi)"
+                title="Backup surat masuk berstatus selesai ke laptop (Ketua Tim & Administrator)"
               >
                 <HardDriveDownload className="w-4 h-4 text-emerald-400" />
                 <span>Backup Arsip</span>
@@ -149,9 +149,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 aria-label="Menu Akun Aktif"
               >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
-                  currentRole === 'ketua_tim' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  isFullAccessRole(currentRole) ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                 }`}>
-                  {currentRole === 'ketua_tim' ? <ShieldCheck className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                  {isFullAccessRole(currentRole) ? <ShieldCheck className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                 </div>
                 <div className="hidden md:block leading-tight">
                   <div className="font-semibold text-slate-100 truncate max-w-[150px]">
@@ -180,7 +180,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         {currentAccount.jabatan}
                       </div>
                       <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded font-semibold ${
-                        currentRole === 'ketua_tim'
+                        isFullAccessRole(currentRole)
                           ? 'bg-amber-500/20 text-amber-300'
                           : 'bg-blue-500/20 text-blue-300'
                       }`}>

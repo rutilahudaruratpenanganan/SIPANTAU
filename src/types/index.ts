@@ -1,6 +1,6 @@
-export type Role = 'ketua_tim' | 'staf';
+export type Role = 'ketua_tim' | 'administrator' | 'staf';
 
-export type AccountCategory = 'ketua_tim' | 'staf';
+export type AccountCategory = 'ketua_tim' | 'administrator' | 'staf';
 
 export interface Personel {
   id: string;

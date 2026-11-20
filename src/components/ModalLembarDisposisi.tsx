@@ -159,9 +159,9 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
                   Diteruskan Kepada Personel:
                 </div>
                 <div className="flex flex-wrap gap-1 mb-2">
-                  {(personelList.filter((p) => p.peran === 'staf').length > 0
-                    ? personelList.filter((p) => p.peran === 'staf')
-                    : personelList.filter((p) => !p.isKetuaTim)
+                  {(personelList.filter((p) => (p.peran === 'staf' || p.peran === 'administrator') && !p.isKetuaTim).length > 0
+                    ? personelList.filter((p) => (p.peran === 'staf' || p.peran === 'administrator') && !p.isKetuaTim)
+                    : personelList.filter((p) => !p.isKetuaTim && p.peran !== 'ketua_tim')
                   ).map((p) => {
                     const isAssigned = surat.penerimaDisposisiNama?.includes(p.nama);
                     return (

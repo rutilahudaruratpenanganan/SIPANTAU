@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 const VALID_ID_REGEX = /^[a-zA-Z0-9_-]+$/;
 const VALID_SIFAT = new Set(['Biasa', 'Penting', 'Segera', 'Sangat Segera', 'Rahasia']);
-const VALID_ROLES = new Set(['ketua_tim', 'staf']);
+const VALID_ROLES = new Set(['ketua_tim', 'administrator', 'staf']);
 const INTERNAL_WORKSPACE_ID = 'internal_wasdal';
 
 const SURAT_ALLOWED_KEYS = new Set([
@@ -99,7 +99,10 @@ test('Internal workspace security checks enforce PERMISSION_DENIED on invalid pa
     evaluateSuratCreate('s1', { ...validPayload, tahapSaatIni: 99 }, true),
     'PERMISSION_DENIED'
   );
-  // 8. Invalid Role Enum
+  // 8. Role Enum allowlist
+  assert.equal(VALID_ROLES.has('ketua_tim'), true);
+  assert.equal(VALID_ROLES.has('administrator'), true);
+  assert.equal(VALID_ROLES.has('staf'), true);
   assert.equal(VALID_ROLES.has('superadmin'), false);
 });
 

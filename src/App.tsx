@@ -40,7 +40,8 @@ import {
   canAccessBackup,
   canCreateDisposisi,
   canDeleteSurat,
-  canManagePersonel
+  canManagePersonel,
+  isFullAccessRole
 } from './utils/disposisiLogic';
 import {
   DEFAULT_INITIAL_PASSWORD,
@@ -146,7 +147,7 @@ export default function App() {
 
   const [isModalPersonelOpen, setIsModalPersonelOpen] = useState(false);
 
-  // Guard backup & personel tabs/modals strictly for ketua_tim role
+  // Guard backup & personel tabs/modals strictly for full-access roles (ketua_tim & administrator)
   useEffect(() => {
     if (!canAccessBackup(currentRole) && activeTab === 'backup') {
       setActiveTab('dashboard');
@@ -303,7 +304,7 @@ export default function App() {
     tenggatWaktu: string
   ) => {
     if (!canCreateDisposisi(currentRole)) {
-      showToast('Hanya Ketua Tim (Pendisposisi) yang berhak mengatur disposisi.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak mengatur disposisi.');
       return;
     }
     const item = suratList.find((s) => s.id === suratId);
@@ -545,10 +546,10 @@ export default function App() {
     }
   };
 
-  // Handler: Hapus Surat (Ketua Tim)
+  // Handler: Hapus Surat (Ketua Tim & Administrator)
   const handleConfirmDeleteSurat = async (suratId: string) => {
     if (!canDeleteSurat(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak menghapus surat.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak menghapus surat.');
       return;
     }
     try {
@@ -562,7 +563,7 @@ export default function App() {
   // Handler: Personel Management & Dynamic Active User Sync
   const handleUpdatePejabat = async (newPejabat: PejabatConfig) => {
     if (!canManagePersonel(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak mengubah data pejabat penandatangan.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak mengubah data pejabat penandatangan.');
       return;
     }
     try {
@@ -585,7 +586,7 @@ export default function App() {
 
   const handleAddPersonel = async (pData: Omit<Personel, 'id'>) => {
     if (!canManagePersonel(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak menambah personel tim.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak menambah personel tim.');
       return;
     }
     try {
@@ -598,7 +599,7 @@ export default function App() {
 
   const handleUpdatePersonel = async (id: string, updated: Partial<Personel>) => {
     if (!canManagePersonel(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak mengubah data personel.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak mengubah data personel.');
       return;
     }
     try {
@@ -611,7 +612,7 @@ export default function App() {
 
   const handleDeletePersonel = async (id: string) => {
     if (!canManagePersonel(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak menghapus data personel.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak menghapus data personel.');
       return;
     }
     const target = personelList.find((p) => p.id === id);
@@ -650,7 +651,7 @@ export default function App() {
 
   const handleResetAccountPassword = async (accountId: string, nama: string) => {
     if (!canManagePersonel(currentRole)) {
-      showToast('Hanya Ketua Tim yang berhak mereset password akun personel.');
+      showToast('Hanya Ketua Tim atau Administrator yang berhak mereset password akun personel.');
       return;
     }
     try {
@@ -754,7 +755,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">Akses Pengguna Aktif:</span>
             <span className={`px-2 py-0.5 rounded-md font-bold ${
-              currentRole === 'ketua_tim'
+              isFullAccessRole(currentRole)
                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
             }`}>
@@ -762,8 +763,8 @@ export default function App() {
             </span>
             <span className="text-slate-400 hidden md:inline">·</span>
             <span className="text-slate-500 hidden md:inline">
-              {currentRole === 'ketua_tim'
-                ? 'Hak akses penuh: Disposisi, Asistensi, Hapus Surat, Manajemen Personel.'
+              {isFullAccessRole(currentRole)
+                ? 'Hak akses penuh: Disposisi, Asistensi, Hapus Surat, Manajemen Personel, dan Backup Arsip.'
                 : `Hak akses ${loggedInAccount.displayRole}: Pemantauan tindak lanjut, registrasi, upload surat keluar & manajemen akun pribadi.`}
             </span>
           </div>
@@ -925,7 +926,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 3: PERSONEL (KHUSUS KETUA TIM) */}
+        {/* VIEW 3: PERSONEL (KETUA TIM & ADMINISTRATOR) */}
         {activeTab === 'personel' && canManagePersonel(currentRole) && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs">
@@ -935,7 +936,7 @@ export default function App() {
                     Konfigurasi Data Personel Tim
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Pengelolaan data Ketua Tim Pengawasan dan Pengendalian Perumahan serta Staf Wasdal
+                    Pengelolaan data Ketua Tim Pengawasan dan Pengendalian Perumahan, Administrator, serta Staf Wasdal
                   </p>
                 </div>
                 <button
@@ -992,6 +993,26 @@ export default function App() {
                 </div>
 
               </div>
+
+              {/* List of Administrators (if any) */}
+              {personelList.some((p) => p.peran === 'administrator') && (
+                <div className="pt-2">
+                  <h4 className="font-bold text-xs text-slate-800 mb-2">
+                    Daftar Administrator ({personelList.filter((p) => p.peran === 'administrator').length} Personel · Akses Penuh):
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 text-xs">
+                    {personelList
+                      .filter((p) => p.peran === 'administrator')
+                      .map((adm) => (
+                        <div key={adm.id} className="p-3 bg-amber-50/70 rounded-lg border border-amber-200 shadow-2xs">
+                          <div className="font-bold text-slate-900">{adm.nama}</div>
+                          <div className="text-[11px] text-amber-800 font-semibold">{adm.jabatan}</div>
+                          {adm.nip && <div className="text-[10px] text-slate-500 font-mono mt-0.5">NIP. {adm.nip}</div>}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               {/* List of staff members */}
               <div className="pt-2">
