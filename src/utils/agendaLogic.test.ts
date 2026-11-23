@@ -494,20 +494,21 @@ test('cancelled agendas stay in today running ticker with status dibatalkan, whi
     },
   ];
 
-  // Ticker includes both rescheduled active event and cancelled event for today (active first, then cancelled)
+  // Ticker includes all today's cancelled events (even past hours) prioritized at front, followed by active/rescheduled events
   const tickerItems = getTodayActiveAndUpcomingAgendas(statusEvents, today, 10 * 60);
   assert.deepEqual(
     tickerItems.map((i) => ({ id: i.event.id, status: i.status })),
     [
-      { id: 'rescheduled-today', status: 'akan' },
+      { id: 'cancelled-past-today', status: 'dibatalkan' },
       { id: 'cancelled-today', status: 'dibatalkan' },
+      { id: 'rescheduled-today', status: 'akan' },
     ]
   );
-  assert.match(formatAgendaTickerEntry(tickerItems[0]), /Jadwal Ulang/);
   assert.match(
     formatAgendaTickerEntry(tickerItems[1]),
     /\[DIBATALKAN\] 13:00–14:00 WIB · Rapat Batal Hari Ini · Alasan: Narasumber berhalangan hadir/
   );
+  assert.match(formatAgendaTickerEntry(tickerItems[2]), /Jadwal Ulang/);
 
   // Upcoming sidebar still excludes cancelled events
   const upcoming = getUpcomingAgendaEvents(statusEvents, today, 5);

@@ -233,7 +233,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
 
           {/* Footer Official Disposisi */}
           <div className="text-[10px] text-slate-500 font-sans flex items-center justify-between border-t border-slate-300 pt-2">
-            <span>SIPANTAU-WASDAL · Sistem Informasi Persuratan, Agenda, dan Pemantauan · Tim Pengendalian dan Pengawasan Perumahan</span>
+            <span>SIPANTAU-WASDAL · Sistem Informasi Persuratan, Agenda, dan Pemantauan · Tim Pengawasan dan Pengendalian Perumahan</span>
             <span>Dokumen Otentik Terintegrasi DPKP</span>
           </div>
 

@@ -37,7 +37,7 @@ export const DashboardStatsCards: React.FC<DashboardStatsCardsProps> = ({
               Sistem Informasi Persuratan, Agenda, dan Pemantauan
             </h1>
             <p className="text-sm sm:text-base font-medium text-blue-200 mt-1">
-              Tim Pengendalian dan Pengawasan Perumahan
+              Tim Pengawasan dan Pengendalian Perumahan
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">

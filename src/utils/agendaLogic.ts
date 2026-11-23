@@ -709,10 +709,16 @@ export function getTodayActiveAndUpcomingAgendas(
 
     const agendaStatus = normalizeAgendaStatus(ev.status);
 
+    // Cancelled agendas for today always stay in the running ticker all day, even if their original time window has passed
+    if (agendaStatus === 'dibatalkan') {
+      results.push({ event: ev, status: 'dibatalkan' });
+      continue;
+    }
+
     if (ev.sepanjangHari) {
       results.push({
         event: ev,
-        status: agendaStatus === 'dibatalkan' ? 'dibatalkan' : 'sedang',
+        status: 'sedang',
       });
       continue;
     }
@@ -720,24 +726,19 @@ export function getTodayActiveAndUpcomingAgendas(
     const startMin = timeToMinutes(ev.jamMulai);
     const endMin = timeToMinutes(ev.jamSelesai);
 
-    // Exclude agendas that have already ended today
+    // Exclude active agendas that have already ended today
     if (endMin <= safeNow) {
       continue;
     }
 
-    const status: TodayAgendaStatus =
-      agendaStatus === 'dibatalkan'
-        ? 'dibatalkan'
-        : startMin <= safeNow
-        ? 'sedang'
-        : 'akan';
+    const status: TodayAgendaStatus = startMin <= safeNow ? 'sedang' : 'akan';
     results.push({ event: ev, status });
   }
 
   const statusRank: Record<TodayAgendaStatus, number> = {
-    sedang: 0,
-    akan: 1,
-    dibatalkan: 2,
+    dibatalkan: 0,
+    sedang: 1,
+    akan: 2,
   };
 
   return results.sort((a, b) => {

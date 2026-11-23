@@ -131,7 +131,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 Sistem Informasi Persuratan, Agenda, dan Pemantauan
               </p>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                Tim Pengendalian dan Pengawasan Perumahan
+                Tim Pengawasan dan Pengendalian Perumahan
               </p>
             </div>
           </div>
