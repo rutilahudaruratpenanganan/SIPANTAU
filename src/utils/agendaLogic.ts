@@ -584,3 +584,72 @@ export function buildAgendaRekapCsvContent(
   return '\uFEFF' + [headers.join(','), ...rows].join('\n');
 }
 
+// ============================================================================
+// RUNNING TEXT AGENDA HARI INI (Sedang Berlangsung & Akan Berjalan)
+// ============================================================================
+
+export type TodayAgendaStatus = 'sedang' | 'akan';
+
+export interface TodayRunningAgendaItem {
+  event: AgendaEvent;
+  status: TodayAgendaStatus;
+}
+
+export function getTodayActiveAndUpcomingAgendas(
+  events: AgendaEvent[],
+  todayIso: string,
+  nowMinutes: number
+): TodayRunningAgendaItem[] {
+  const safeNow = Math.max(0, Math.min(24 * 60 - 1, Math.floor(nowMinutes)));
+  const results: TodayRunningAgendaItem[] = [];
+
+  for (const ev of events) {
+    if (normalizeIsoDateOnly(ev.tanggal) !== todayIso) {
+      continue;
+    }
+
+    if (ev.sepanjangHari) {
+      results.push({ event: ev, status: 'sedang' });
+      continue;
+    }
+
+    const startMin = timeToMinutes(ev.jamMulai);
+    const endMin = timeToMinutes(ev.jamSelesai);
+
+    // Exclude agendas that have already ended today
+    if (endMin <= safeNow) {
+      continue;
+    }
+
+    const status: TodayAgendaStatus = startMin <= safeNow ? 'sedang' : 'akan';
+    results.push({ event: ev, status });
+  }
+
+  return results.sort((a, b) => {
+    if (a.status !== b.status) {
+      return a.status === 'sedang' ? -1 : 1;
+    }
+    if (a.event.sepanjangHari !== b.event.sepanjangHari) {
+      return a.event.sepanjangHari ? -1 : 1;
+    }
+    const cmpTime = timeToMinutes(a.event.jamMulai) - timeToMinutes(b.event.jamMulai);
+    if (cmpTime !== 0) return cmpTime;
+    return a.event.judul.localeCompare(b.event.judul);
+  });
+}
+
+export function formatAgendaTickerEntry(item: TodayRunningAgendaItem): string {
+  const { event, status } = item;
+  const statusTag = status === 'sedang' ? 'SEDANG BERLANGSUNG' : 'AKAN BERJALAN';
+  const timeText = formatAgendaTimeRange(event);
+  const pesertaText =
+    event.pesertaNama.length > 0
+      ? event.pesertaNama.length > 2
+        ? `${event.pesertaNama.slice(0, 2).join(', ')} +${event.pesertaNama.length - 2}`
+        : event.pesertaNama.join(', ')
+      : event.pesertaTambahan || '-';
+
+  return `[${statusTag}] ${timeText} · ${event.judul} · Lokasi: ${event.lokasi} · Peserta: ${pesertaText}`;
+}
+
+

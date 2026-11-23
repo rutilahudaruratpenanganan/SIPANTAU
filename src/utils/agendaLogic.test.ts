@@ -12,8 +12,10 @@ import {
   formatMonthYearLabel,
   formatWeekRangeLabel,
   getMonthCalendarGrid,
+  getTodayActiveAndUpcomingAgendas,
   getUpcomingAgendaEvents,
   getWeekDays,
+  formatAgendaTickerEntry,
   resolveAgendaRekapRange,
   sortAgendaEvents,
   timeToMinutes,
@@ -366,4 +368,85 @@ test('calculateAgendaRekapStats and buildAgendaRekapCsvContent summarize and esc
   assert.match(csv, /"Membawa dokumen ""SK Pertelaan"" terbaru"/);
   assert.match(csv, /"Bulanan · November 2026"/);
 });
+
+test('getTodayActiveAndUpcomingAgendas returns only ongoing and upcoming agendas for today', () => {
+  const today = '2026-11-22';
+  const todayEvents: AgendaEvent[] = [
+    {
+      ...sampleEvents[0],
+      id: 'past-today',
+      judul: 'Apel Pagi (Sudah Selesai)',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '07:30',
+      jamSelesai: '08:30',
+    },
+    {
+      ...sampleEvents[1],
+      id: 'exact-end',
+      judul: 'Briefing Tepat Selesai',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '09:00',
+      jamSelesai: '10:00',
+    },
+    {
+      ...sampleEvents[0],
+      id: 'ongoing-today',
+      judul: 'Rapat Evaluasi Berjalan',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '09:30',
+      jamSelesai: '11:30',
+    },
+    {
+      ...sampleEvents[2],
+      id: 'allday-today',
+      judul: 'Piket Posko Hari Ini',
+      tanggal: today,
+      sepanjangHari: true,
+      jamMulai: '00:00',
+      jamSelesai: '23:59',
+    },
+    {
+      ...sampleEvents[3],
+      id: 'upcoming-today',
+      judul: 'Tinjauan Lapangan Sore',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '14:00',
+      jamSelesai: '16:00',
+    },
+    {
+      ...sampleEvents[0],
+      id: 'tomorrow-event',
+      judul: 'Agenda Besok',
+      tanggal: '2026-11-23',
+      sepanjangHari: false,
+      jamMulai: '09:00',
+      jamSelesai: '11:00',
+    },
+  ];
+
+  // At 10:00 WIB (600 mins): past-today & exact-end excluded; tomorrow-event excluded
+  const result = getTodayActiveAndUpcomingAgendas(todayEvents, today, 10 * 60);
+  assert.deepEqual(
+    result.map((item) => ({ id: item.event.id, status: item.status })),
+    [
+      { id: 'allday-today', status: 'sedang' },
+      { id: 'ongoing-today', status: 'sedang' },
+      { id: 'upcoming-today', status: 'akan' },
+    ]
+  );
+
+  assert.match(
+    formatAgendaTickerEntry(result[1]),
+    /\[SEDANG BERLANGSUNG\] 09:30–11:30 WIB · Rapat Evaluasi Berjalan · Lokasi:/
+  );
+  assert.match(
+    formatAgendaTickerEntry(result[2]),
+    /\[AKAN BERJALAN\] 14:00–16:00 WIB · Tinjauan Lapangan Sore · Lokasi:/
+  );
+});
+
 

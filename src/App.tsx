@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar, NavTab } from './components/Navbar';
 import { DashboardStatsCards } from './components/DashboardStatsCards';
+import { DashboardAgendaTicker } from './components/DashboardAgendaTicker';
 import { SuratTable } from './components/SuratTable';
 import { ModalSuratMasuk } from './components/ModalSuratMasuk';
 import { ModalDisposisi } from './components/ModalDisposisi';
@@ -849,6 +850,16 @@ export default function App() {
         {/* VIEW 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            <DashboardAgendaTicker
+              agendaList={agendaList}
+              onOpenEvent={(ev) => {
+                setSelectedAgendaForEditId(ev.id);
+                setAgendaInitialOpts({});
+                setIsModalAgendaOpen(true);
+              }}
+              onOpenAgendaTab={() => setActiveTab('agenda')}
+            />
+
             <DashboardStatsCards
               stats={dashboardStats}
               selectedTahap={selectedTahap}

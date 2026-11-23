@@ -6,3 +6,36 @@
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }
 }
+
+@keyframes wasdal-agenda-ticker {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.wasdal-ticker-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: wasdal-agenda-ticker var(--ticker-duration, 26s) linear infinite;
+}
+
+.wasdal-ticker-viewport:hover .wasdal-ticker-track,
+.wasdal-ticker-viewport:focus-within .wasdal-ticker-track,
+.wasdal-ticker-track[data-paused='true'] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wasdal-ticker-track {
+    animation: none;
+    width: auto;
+  }
+  .wasdal-ticker-duplicate {
+    display: none;
+  }
+}
+
