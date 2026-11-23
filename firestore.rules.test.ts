@@ -198,8 +198,9 @@ test('AkunKredensial enforces accountId binding, hash bounds, and immutable keys
 const AGENDA_ALLOWED_KEYS = new Set([
   'ownerId', 'judul', 'kategori', 'tanggal', 'sepanjangHari',
   'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
-  'pesertaTambahan', 'catatan', 'dibuatOlehId', 'dibuatOlehNama',
-  'createdAt', 'updatedAt',
+  'pesertaTambahan', 'catatan',
+  'status', 'tanggalSebelumnya', 'alasanStatus', 'statusDiubahOleh', 'statusDiubahPada',
+  'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
 ]);
 const VALID_AGENDA_KATEGORI = new Set([
   'Rapat Koordinasi',
@@ -207,6 +208,11 @@ const VALID_AGENDA_KATEGORI = new Set([
   'Asistensi',
   'Audiensi',
   'Lainnya',
+]);
+const VALID_AGENDA_STATUS = new Set([
+  'terjadwal',
+  'dibatalkan',
+  'dijadwalkan_ulang',
 ]);
 
 function evaluateAgendaCreate(
@@ -226,6 +232,12 @@ function evaluateAgendaCreate(
   if (typeof payload.kategori !== 'string' || !VALID_AGENDA_KATEGORI.has(payload.kategori)) {
     return 'PERMISSION_DENIED';
   }
+  if (payload.status !== undefined && (typeof payload.status !== 'string' || !VALID_AGENDA_STATUS.has(payload.status))) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.alasanStatus === 'string' && payload.alasanStatus.length > 500) {
+    return 'PERMISSION_DENIED';
+  }
   if (typeof payload.lokasi !== 'string' || payload.lokasi.length < 1 || payload.lokasi.length > 250) {
     return 'PERMISSION_DENIED';
   }
@@ -241,7 +253,7 @@ function evaluateAgendaCreate(
   return 'ALLOW';
 }
 
-test('AgendaEvent enforces workspace binding, bounds, allowed keys, and immutable fields', () => {
+test('AgendaEvent enforces workspace binding, bounds, allowed keys, status allowlist, and immutable fields', () => {
   const validAgenda: Record<string, unknown> = {
     ownerId: INTERNAL_WORKSPACE_ID,
     judul: 'Rapat Koordinasi Evaluasi PPPSRS',
@@ -255,6 +267,7 @@ test('AgendaEvent enforces workspace binding, bounds, allowed keys, and immutabl
     pesertaNama: ['Chafidz Ginanjar, ST'],
     pesertaTambahan: 'Perwakilan Bagian Hukum',
     catatan: 'Membahas kelengkapan berkas.',
+    status: 'terjadwal',
     dibuatOlehId: 'internal_wasdal_p-chafidz',
     dibuatOlehNama: 'Chafidz Ginanjar, ST',
     createdAt: 'SERVER_TIME',
@@ -262,9 +275,19 @@ test('AgendaEvent enforces workspace binding, bounds, allowed keys, and immutabl
   };
 
   assert.equal(evaluateAgendaCreate('agenda-170000-ab12', validAgenda, true), 'ALLOW');
+  assert.equal(
+    evaluateAgendaCreate(
+      'agenda-170000-ab13',
+      { ...validAgenda, status: 'dijadwalkan_ulang', tanggalSebelumnya: '2026-11-24', alasanStatus: 'Pindah jadwal' },
+      true
+    ),
+    'ALLOW'
+  );
   assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, ownerId: 'other' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, shadowField: 1 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, kategori: 'Unknown' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, status: 'dihapus_paksa' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, alasanStatus: 'a'.repeat(501) }, true), 'PERMISSION_DENIED');
   assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, judul: 'a'.repeat(201) }, true), 'PERMISSION_DENIED');
   assert.equal(evaluateAgendaCreate('agenda-1', validAgenda, false), 'PERMISSION_DENIED');
 
@@ -276,6 +299,19 @@ test('AgendaEvent enforces workspace binding, bounds, allowed keys, and immutabl
   assert.equal(agendaUpdateAllowedKeys.has('createdAt'), false);
   assert.equal(agendaUpdateAllowedKeys.has('dibuatOlehId'), false);
   assert.equal(agendaUpdateAllowedKeys.has('dibuatOlehNama'), false);
+
+  const cancelKeys = new Set(['status', 'alasanStatus', 'statusDiubahOleh', 'statusDiubahPada', 'updatedAt']);
+  assert.equal(cancelKeys.has('ownerId'), false);
+  assert.equal(cancelKeys.has('dibuatOlehId'), false);
+
+  const rescheduleKeys = new Set([
+    'status', 'tanggal', 'tanggalSebelumnya', 'sepanjangHari',
+    'jamMulai', 'jamSelesai', 'lokasi', 'alasanStatus',
+    'statusDiubahOleh', 'statusDiubahPada', 'updatedAt',
+  ]);
+  assert.equal(rescheduleKeys.has('tanggal'), true);
+  assert.equal(rescheduleKeys.has('tanggalSebelumnya'), true);
+  assert.equal(rescheduleKeys.has('ownerId'), false);
 });
 
 

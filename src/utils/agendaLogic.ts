@@ -1,4 +1,4 @@
-import type { AgendaEvent, AgendaKategori } from '../types/index.ts';
+import type { AgendaEvent, AgendaKategori, AgendaStatus } from '../types/index.ts';
 
 export const AGENDA_KATEGORI_LIST: AgendaKategori[] = [
   'Rapat Koordinasi',
@@ -7,6 +7,26 @@ export const AGENDA_KATEGORI_LIST: AgendaKategori[] = [
   'Audiensi',
   'Lainnya',
 ];
+
+export const AGENDA_STATUS_LIST: AgendaStatus[] = [
+  'terjadwal',
+  'dijadwalkan_ulang',
+  'dibatalkan',
+];
+
+export function normalizeAgendaStatus(status?: AgendaStatus): AgendaStatus {
+  if (status === 'dibatalkan' || status === 'dijadwalkan_ulang') {
+    return status;
+  }
+  return 'terjadwal';
+}
+
+export function getAgendaStatusLabel(status?: AgendaStatus): string {
+  const normalized = normalizeAgendaStatus(status);
+  if (normalized === 'dibatalkan') return 'Dibatalkan';
+  if (normalized === 'dijadwalkan_ulang') return 'Dijadwalkan Ulang';
+  return 'Terjadwal';
+}
 
 export interface KategoriStyle {
   bg: string;
@@ -261,6 +281,56 @@ export function validateAgendaInput(input: AgendaValidationInput): string | null
   return null;
 }
 
+export interface RescheduleValidationInput {
+  currentTanggal: string;
+  currentSepanjangHari: boolean;
+  currentJamMulai: string;
+  currentJamSelesai: string;
+  currentLokasi: string;
+  currentStatus?: AgendaStatus;
+  newTanggal: string;
+  newSepanjangHari: boolean;
+  newJamMulai: string;
+  newJamSelesai: string;
+  newLokasi: string;
+}
+
+export function validateRescheduleInput(input: RescheduleValidationInput): string | null {
+  const nextDate = input.newTanggal.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+    return 'Tanggal jadwal ulang harus diisi dengan format yang valid.';
+  }
+  if (!input.newSepanjangHari) {
+    if (!/^\d{2}:\d{2}$/.test(input.newJamMulai) || !/^\d{2}:\d{2}$/.test(input.newJamSelesai)) {
+      return 'Waktu mulai dan waktu selesai jadwal ulang wajib diisi.';
+    }
+    if (timeToMinutes(input.newJamSelesai) <= timeToMinutes(input.newJamMulai)) {
+      return 'Waktu selesai harus lebih lambat daripada waktu mulai.';
+    }
+  }
+  if (!input.newLokasi.trim()) {
+    return 'Lokasi / tempat kegiatan wajib diisi.';
+  }
+
+  const sameDate = nextDate === (input.currentTanggal || '').trim();
+  const sameAllDay = Boolean(input.newSepanjangHari) === Boolean(input.currentSepanjangHari);
+  const sameTime =
+    input.newSepanjangHari ||
+    (input.newJamMulai === input.currentJamMulai && input.newJamSelesai === input.currentJamSelesai);
+  const sameLokasi = input.newLokasi.trim() === (input.currentLokasi || '').trim();
+
+  if (
+    normalizeAgendaStatus(input.currentStatus) !== 'dibatalkan' &&
+    sameDate &&
+    sameAllDay &&
+    sameTime &&
+    sameLokasi
+  ) {
+    return 'Pilih tanggal baru atau ubah waktu/lokasi untuk menjadwalkan ulang agenda.';
+  }
+  return null;
+}
+
 export function sortAgendaEvents(events: AgendaEvent[]): AgendaEvent[] {
   return [...events].sort((a, b) => {
     const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
@@ -278,6 +348,7 @@ export interface AgendaFilterOptions {
   searchQuery?: string;
   personelNama?: string | 'all';
   kategori?: AgendaKategori | 'all';
+  status?: AgendaStatus | 'all';
 }
 
 export function filterAgendaEvents(
@@ -285,6 +356,11 @@ export function filterAgendaEvents(
   filters: AgendaFilterOptions
 ): AgendaEvent[] {
   return sortAgendaEvents(events).filter((ev) => {
+    if (filters.status && filters.status !== 'all') {
+      if (normalizeAgendaStatus(ev.status) !== filters.status) {
+        return false;
+      }
+    }
     if (filters.kategori && filters.kategori !== 'all' && ev.kategori !== filters.kategori) {
       return false;
     }
@@ -298,9 +374,10 @@ export function filterAgendaEvents(
       const matchJudul = ev.judul.toLowerCase().includes(q);
       const matchLokasi = ev.lokasi.toLowerCase().includes(q);
       const matchCatatan = (ev.catatan || '').toLowerCase().includes(q);
+      const matchAlasan = (ev.alasanStatus || '').toLowerCase().includes(q);
       const matchPeserta = ev.pesertaNama.some((p) => p.toLowerCase().includes(q));
       const matchTambahan = (ev.pesertaTambahan || '').toLowerCase().includes(q);
-      if (!matchJudul && !matchLokasi && !matchCatatan && !matchPeserta && !matchTambahan) {
+      if (!matchJudul && !matchLokasi && !matchCatatan && !matchAlasan && !matchPeserta && !matchTambahan) {
         return false;
       }
     }
@@ -314,7 +391,7 @@ export function getUpcomingAgendaEvents(
   limit = 5
 ): AgendaEvent[] {
   return sortAgendaEvents(events)
-    .filter((ev) => ev.tanggal >= fromIso)
+    .filter((ev) => ev.tanggal >= fromIso && normalizeAgendaStatus(ev.status) !== 'dibatalkan')
     .slice(0, limit);
 }
 
@@ -485,11 +562,15 @@ export function filterAgendaForRekap(
     searchQuery: options.searchQuery,
     personelNama: options.personelNama,
     kategori: options.kategori,
+    status: options.status,
   });
 }
 
 export interface AgendaRekapStats {
   totalAgenda: number;
+  totalAktif: number;
+  totalDijadwalkanUlang: number;
+  totalDibatalkan: number;
   hariAktif: number;
   totalSehariPenuh: number;
   totalTerjadwalJam: number;
@@ -509,8 +590,17 @@ export function calculateAgendaRekapStats(events: AgendaEvent[]): AgendaRekapSta
   const uniqueDates = new Set<string>();
   const personelCountMap = new Map<string, number>();
   let totalSehariPenuh = 0;
+  let totalDijadwalkanUlang = 0;
+  let totalDibatalkan = 0;
 
   for (const ev of events) {
+    const status = normalizeAgendaStatus(ev.status);
+    if (status === 'dibatalkan') {
+      totalDibatalkan++;
+    } else if (status === 'dijadwalkan_ulang') {
+      totalDijadwalkanUlang++;
+    }
+
     if (ev.tanggal) uniqueDates.add(ev.tanggal);
     if (ev.sepanjangHari) totalSehariPenuh++;
     if (ev.kategori in byKategori) {
@@ -531,6 +621,9 @@ export function calculateAgendaRekapStats(events: AgendaEvent[]): AgendaRekapSta
 
   return {
     totalAgenda: events.length,
+    totalAktif: events.length - totalDibatalkan,
+    totalDijadwalkanUlang,
+    totalDibatalkan,
     hariAktif: uniqueDates.size,
     totalSehariPenuh,
     totalTerjadwalJam: events.length - totalSehariPenuh,
@@ -550,6 +643,9 @@ export function buildAgendaRekapCsvContent(
     'Tanggal',
     'Hari',
     'Waktu',
+    'Status',
+    'Tanggal Sebelumnya',
+    'Keterangan Status',
     'Kategori',
     'Judul Agenda',
     'Lokasi',
@@ -567,6 +663,9 @@ export function buildAgendaRekapCsvContent(
       ev.tanggal || '',
       NAMA_HARI_FULL[dow] || '',
       formatAgendaTimeRange(ev),
+      escapeCsv(getAgendaStatusLabel(ev.status)),
+      ev.tanggalSebelumnya || '',
+      escapeCsv(ev.alasanStatus || ''),
       escapeCsv(ev.kategori || ''),
       escapeCsv(ev.judul || ''),
       escapeCsv(ev.lokasi || ''),
@@ -604,6 +703,9 @@ export function getTodayActiveAndUpcomingAgendas(
   const results: TodayRunningAgendaItem[] = [];
 
   for (const ev of events) {
+    if (normalizeAgendaStatus(ev.status) === 'dibatalkan') {
+      continue;
+    }
     if (normalizeIsoDateOnly(ev.tanggal) !== todayIso) {
       continue;
     }
@@ -642,6 +744,8 @@ export function formatAgendaTickerEntry(item: TodayRunningAgendaItem): string {
   const { event, status } = item;
   const statusTag = status === 'sedang' ? 'SEDANG BERLANGSUNG' : 'AKAN BERJALAN';
   const timeText = formatAgendaTimeRange(event);
+  const rescheduleNote =
+    normalizeAgendaStatus(event.status) === 'dijadwalkan_ulang' ? ' · Jadwal Ulang' : '';
   const pesertaText =
     event.pesertaNama.length > 0
       ? event.pesertaNama.length > 2
@@ -649,7 +753,7 @@ export function formatAgendaTickerEntry(item: TodayRunningAgendaItem): string {
         : event.pesertaNama.join(', ')
       : event.pesertaTambahan || '-';
 
-  return `[${statusTag}] ${timeText} · ${event.judul} · Lokasi: ${event.lokasi} · Peserta: ${pesertaText}`;
+  return `[${statusTag}] ${timeText} · ${event.judul}${rescheduleNote} · Lokasi: ${event.lokasi} · Peserta: ${pesertaText}`;
 }
 
 

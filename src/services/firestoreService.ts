@@ -18,6 +18,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   AgendaEvent,
   AgendaKategori,
+  AgendaStatus,
   AkunKredensial,
   DokumenFile,
   PejabatConfig,
@@ -62,6 +63,7 @@ const LIMITS = {
   PESERTA_TAMBAHAN: 300,
   TIME_STR: 10,
   CATATAN_AGENDA: 1500,
+  ALASAN_STATUS: 500,
 };
 
 const pdfMemoryCache = new Map<string, string>();
@@ -936,6 +938,10 @@ export async function saveAkunPasswordDb(
 }
 
 function docToAgendaEvent(id: string, data: Record<string, unknown>): AgendaEvent {
+  const rawStatus = data.status as AgendaStatus | undefined;
+  const status: AgendaStatus =
+    rawStatus === 'dibatalkan' || rawStatus === 'dijadwalkan_ulang' ? rawStatus : 'terjadwal';
+
   return {
     id,
     judul: (data.judul as string) || '',
@@ -949,6 +955,11 @@ function docToAgendaEvent(id: string, data: Record<string, unknown>): AgendaEven
     pesertaNama: Array.isArray(data.pesertaNama) ? (data.pesertaNama as string[]) : [],
     pesertaTambahan: (data.pesertaTambahan as string | undefined) || undefined,
     catatan: (data.catatan as string | undefined) || undefined,
+    status,
+    tanggalSebelumnya: (data.tanggalSebelumnya as string | undefined) || undefined,
+    alasanStatus: (data.alasanStatus as string | undefined) || undefined,
+    statusDiubahOleh: (data.statusDiubahOleh as string | undefined) || undefined,
+    statusDiubahPada: (data.statusDiubahPada as string | undefined) || undefined,
     dibuatOlehId: (data.dibuatOlehId as string) || '',
     dibuatOlehNama: (data.dibuatOlehNama as string) || '',
     createdAt: formatTimestamp(data.createdAt),
@@ -1028,6 +1039,7 @@ export async function createAgendaEventDb(
       .slice(0, LIMITS.MAX_DISPOSISI_ARRAY)
       .map((n) => clampStr(n, LIMITS.NAMA))
       .filter(Boolean),
+    status: 'terjadwal',
     dibuatOlehId: clampStr(creator.id, LIMITS.ID) || 'system',
     dibuatOlehNama: clampStr(creator.nama, LIMITS.NAMA) || 'Tim Wasdal',
     createdAt: serverTimestamp(),
@@ -1090,6 +1102,95 @@ export async function updateAgendaEventDb(
   }
 }
 
+export async function cancelAgendaEventDb(
+  agendaId: string,
+  actorNama: string,
+  alasan?: string
+): Promise<void> {
+  const path = `agenda/${agendaId}`;
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  const updatePayload: Record<string, unknown> = {
+    status: 'dibatalkan',
+    alasanStatus: alasan?.trim()
+      ? clampStr(alasan, LIMITS.ALASAN_STATUS)
+      : deleteField(),
+    statusDiubahOleh: clampStr(actorNama, LIMITS.NAMA) || 'Tim Wasdal',
+    statusDiubahPada: clampStr(nowStamp, LIMITS.DATE_STR),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'agenda', agendaId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export interface AgendaReschedulePayload {
+  previousTanggal: string;
+  tanggal: string;
+  sepanjangHari: boolean;
+  jamMulai: string;
+  jamSelesai: string;
+  lokasi: string;
+  alasan?: string;
+  actorNama: string;
+}
+
+export async function rescheduleAgendaEventDb(
+  agendaId: string,
+  input: AgendaReschedulePayload
+): Promise<void> {
+  const path = `agenda/${agendaId}`;
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  const updatePayload: Record<string, unknown> = {
+    status: 'dijadwalkan_ulang',
+    tanggal: clampStr(input.tanggal, LIMITS.DATE_STR),
+    tanggalSebelumnya: clampStr(input.previousTanggal, LIMITS.DATE_STR),
+    sepanjangHari: Boolean(input.sepanjangHari),
+    jamMulai: input.sepanjangHari
+      ? '00:00'
+      : clampStr(input.jamMulai, LIMITS.TIME_STR) || '09:00',
+    jamSelesai: input.sepanjangHari
+      ? '23:59'
+      : clampStr(input.jamSelesai, LIMITS.TIME_STR) || '10:00',
+    lokasi: clampStr(input.lokasi, LIMITS.LOKASI_AGENDA) || '-',
+    alasanStatus: input.alasan?.trim()
+      ? clampStr(input.alasan, LIMITS.ALASAN_STATUS)
+      : deleteField(),
+    statusDiubahOleh: clampStr(input.actorNama, LIMITS.NAMA) || 'Tim Wasdal',
+    statusDiubahPada: clampStr(nowStamp, LIMITS.DATE_STR),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'agenda', agendaId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function reactivateAgendaEventDb(
+  agendaId: string,
+  actorNama: string
+): Promise<void> {
+  const path = `agenda/${agendaId}`;
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  const updatePayload: Record<string, unknown> = {
+    status: 'terjadwal',
+    alasanStatus: deleteField(),
+    statusDiubahOleh: clampStr(actorNama, LIMITS.NAMA) || 'Tim Wasdal',
+    statusDiubahPada: clampStr(nowStamp, LIMITS.DATE_STR),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'agenda', agendaId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
 export async function deleteAgendaEventDb(agendaId: string): Promise<void> {
   const path = `agenda/${agendaId}`;
   try {
@@ -1098,4 +1199,5 @@ export async function deleteAgendaEventDb(agendaId: string): Promise<void> {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
+
 

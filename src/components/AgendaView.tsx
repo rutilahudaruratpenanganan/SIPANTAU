@@ -13,10 +13,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { AgendaEvent, AgendaKategori, PejabatConfig, Personel } from '../types';
+import { AgendaEvent, AgendaKategori, AgendaStatus, PejabatConfig, Personel } from '../types';
 import { AgendaRekapPanel } from './AgendaRekapPanel';
 import {
   AGENDA_KATEGORI_LIST,
+  AGENDA_STATUS_LIST,
   NAMA_BULAN,
   NAMA_HARI_FULL,
   NAMA_HARI_SHORT,
@@ -29,12 +30,14 @@ import {
   formatIsoDateFromParts,
   formatMonthYearLabel,
   formatWeekRangeLabel,
+  getAgendaStatusLabel,
   getDayOfWeekMonFirst,
   getKategoriStyle,
   getMonthCalendarGrid,
   getUpcomingAgendaEvents,
   getWeekDays,
   minutesToHhmm,
+  normalizeAgendaStatus,
   pad2,
   parseIsoDateParts,
   timeToMinutes,
@@ -129,6 +132,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPersonel, setSelectedPersonel] = useState<string | 'all'>('all');
   const [selectedKategori, setSelectedKategori] = useState<AgendaKategori | 'all'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<AgendaStatus | 'all'>('all');
 
   const filteredEvents = useMemo(
     () =>
@@ -136,8 +140,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         searchQuery,
         personelNama: selectedPersonel,
         kategori: selectedKategori,
+        status: selectedStatus,
       }),
-    [agendaList, searchQuery, selectedPersonel, selectedKategori]
+    [agendaList, searchQuery, selectedPersonel, selectedKategori, selectedStatus]
   );
 
   const eventsByDate = useMemo(() => {
@@ -204,7 +209,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const activeFiltersCount =
     (searchQuery.trim() ? 1 : 0) +
     (selectedPersonel !== 'all' ? 1 : 0) +
-    (selectedKategori !== 'all' ? 1 : 0);
+    (selectedKategori !== 'all' ? 1 : 0) +
+    (selectedStatus !== 'all' ? 1 : 0);
 
   const groupedJadwalDates = useMemo(() => {
     const groups: { tanggal: string; items: AgendaEvent[] }[] = [];
@@ -363,6 +369,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     setSearchQuery('');
                     setSelectedPersonel('all');
                     setSelectedKategori('all');
+                    setSelectedStatus('all');
                   }}
                   className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 whitespace-nowrap"
                 >
@@ -448,6 +455,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   </button>
                 );
               })}
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <label htmlFor="filter-agenda-status" className="block font-semibold text-slate-600 text-[11px]">
+                Status Pelaksanaan
+              </label>
+              <select
+                id="filter-agenda-status"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as AgendaStatus | 'all')}
+                className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-800 text-xs focus:outline-none focus:bg-white focus:border-blue-500"
+              >
+                <option value="all">Semua Status</option>
+                {AGENDA_STATUS_LIST.map((st) => (
+                  <option key={st} value={st}>
+                    {getAgendaStatusLabel(st)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -683,23 +710,51 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                         <div className="space-y-1 flex-1 min-w-0">
                           {visibleEvents.map((ev) => {
                             const st = getKategoriStyle(ev.kategori);
+                            const evStatus = normalizeAgendaStatus(ev.status);
+                            const isCancelled = evStatus === 'dibatalkan';
+                            const isRescheduled = evStatus === 'dijadwalkan_ulang';
                             return (
                               <button
                                 key={ev.id}
                                 type="button"
+                                data-testid={`agenda-event-${ev.id}`}
+                                data-status={evStatus}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onOpenEvent(ev);
                                 }}
-                                className={`w-full text-left px-1.5 py-1 rounded-md border text-[11px] leading-tight transition-colors ${st.bg} ${st.bgHover} ${st.border} ${st.text}`}
+                                className={`w-full text-left px-1.5 py-1 rounded-md border text-[11px] leading-tight transition-colors ${
+                                  isCancelled
+                                    ? 'bg-slate-100 hover:bg-slate-200/70 border-slate-300 text-slate-500'
+                                    : `${st.bg} ${st.bgHover} ${st.border} ${st.text}`
+                                }`}
                               >
                                 <div className="flex items-center gap-1 min-w-0">
-                                  <span className={`w-1.5 h-1.5 rounded-xs shrink-0 ${st.dot}`} />
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-xs shrink-0 ${
+                                      isCancelled ? 'bg-slate-400' : st.dot
+                                    }`}
+                                  />
                                   <span className="font-mono text-[10px] font-semibold tabular-nums shrink-0">
                                     {ev.sepanjangHari ? 'Sehari' : ev.jamMulai}
                                   </span>
-                                  <span className="font-semibold truncate">{ev.judul}</span>
+                                  <span
+                                    className={`font-semibold truncate ${
+                                      isCancelled ? 'line-through' : ''
+                                    }`}
+                                  >
+                                    {ev.judul}
+                                  </span>
                                 </div>
+                                {(isCancelled || isRescheduled) && (
+                                  <div
+                                    className={`text-[9px] font-bold truncate mt-0.5 ${
+                                      isCancelled ? 'text-rose-700' : 'text-amber-800'
+                                    }`}
+                                  >
+                                    {isCancelled ? 'Dibatalkan' : 'Dijadwalkan Ulang'}
+                                  </div>
+                                )}
                               </button>
                             );
                           })}
@@ -779,14 +834,20 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                         <div key={dayIso} className="p-1 border-r last:border-r-0 border-slate-200 space-y-1">
                           {allDay.map((ev) => {
                             const st = getKategoriStyle(ev.kategori);
+                            const evStatus = normalizeAgendaStatus(ev.status);
+                            const isCancelled = evStatus === 'dibatalkan';
                             return (
                               <button
                                 key={ev.id}
                                 type="button"
                                 onClick={() => onOpenEvent(ev)}
-                                className={`w-full text-left px-1.5 py-1 rounded border text-[10px] font-semibold truncate ${st.bg} ${st.border} ${st.text}`}
+                                className={`w-full text-left px-1.5 py-1 rounded border text-[10px] font-semibold truncate ${
+                                  isCancelled
+                                    ? 'bg-slate-100 border-slate-300 text-slate-500 line-through'
+                                    : `${st.bg} ${st.border} ${st.text}`
+                                }`}
                               >
-                                {ev.judul}
+                                {isCancelled ? `[Batal] ${ev.judul}` : ev.judul}
                               </button>
                             );
                           })}
@@ -837,6 +898,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
                         {positioned.map((item) => {
                           const st = getKategoriStyle(item.event.kategori);
+                          const evStatus = normalizeAgendaStatus(item.event.status);
+                          const isCancelled = evStatus === 'dibatalkan';
+                          const isRescheduled = evStatus === 'dijadwalkan_ulang';
                           const widthPct = 100 / item.colCount;
                           const leftPct = item.colIndex * widthPct;
                           return (
@@ -853,12 +917,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                 left: `calc(${leftPct}% + 2px)`,
                                 width: `calc(${widthPct}% - 4px)`,
                               }}
-                              className={`absolute z-10 rounded-lg border px-1.5 py-1 text-left overflow-hidden shadow-2xs transition-colors ${st.bg} ${st.bgHover} ${st.border} ${st.text}`}
+                              className={`absolute z-10 rounded-lg border px-1.5 py-1 text-left overflow-hidden shadow-2xs transition-colors ${
+                                isCancelled
+                                  ? 'bg-slate-100 hover:bg-slate-200/70 border-slate-300 text-slate-500'
+                                  : `${st.bg} ${st.bgHover} ${st.border} ${st.text}`
+                              }`}
                             >
                               <div className="text-[10px] font-mono font-bold tabular-nums truncate">
                                 {item.event.jamMulai}–{item.event.jamSelesai}
+                                {isCancelled && (
+                                  <span className="ml-1 font-sans text-rose-700">· Batal</span>
+                                )}
+                                {isRescheduled && (
+                                  <span className="ml-1 font-sans text-amber-800">· Ulang</span>
+                                )}
                               </div>
-                              <div className="text-[11px] font-bold leading-tight truncate">
+                              <div
+                                className={`text-[11px] font-bold leading-tight truncate ${
+                                  isCancelled ? 'line-through' : ''
+                                }`}
+                              >
                                 {item.event.judul}
                               </div>
                               <div className="text-[10px] opacity-80 truncate">
@@ -888,15 +966,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     .filter((e) => e.sepanjangHari)
                     .map((ev) => {
                       const st = getKategoriStyle(ev.kategori);
+                      const evStatus = normalizeAgendaStatus(ev.status);
+                      const isCancelled = evStatus === 'dibatalkan';
                       return (
                         <button
                           key={ev.id}
                           type="button"
                           onClick={() => onOpenEvent(ev)}
-                          className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 ${st.bg} ${st.bgHover} ${st.border} ${st.text}`}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 ${
+                            isCancelled
+                              ? 'bg-slate-100 hover:bg-slate-200/70 border-slate-300 text-slate-500'
+                              : `${st.bg} ${st.bgHover} ${st.border} ${st.text}`
+                          }`}
                         >
-                          <span className={`w-2 h-2 rounded-xs ${st.dot}`} />
-                          <span>{ev.judul}</span>
+                          <span className={`w-2 h-2 rounded-xs ${isCancelled ? 'bg-slate-400' : st.dot}`} />
+                          <span className={isCancelled ? 'line-through' : ''}>{ev.judul}</span>
+                          {evStatus !== 'terjadwal' && (
+                            <span className={`text-[10px] font-bold ${isCancelled ? 'text-rose-700' : 'text-amber-800'}`}>
+                              · {getAgendaStatusLabel(ev.status)}
+                            </span>
+                          )}
                           <span className="opacity-75 text-[11px]">· {ev.lokasi}</span>
                         </button>
                       );
@@ -937,6 +1026,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
                   {layoutOverlappingDayEvents(eventsByDate.get(anchorIso) || []).map((item) => {
                     const st = getKategoriStyle(item.event.kategori);
+                    const evStatus = normalizeAgendaStatus(item.event.status);
+                    const isCancelled = evStatus === 'dibatalkan';
+                    const isRescheduled = evStatus === 'dijadwalkan_ulang';
                     const widthPct = 100 / item.colCount;
                     const leftPct = item.colIndex * widthPct;
                     return (
@@ -953,7 +1045,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                           left: `calc(${leftPct}% + 6px)`,
                           width: `calc(${widthPct}% - 12px)`,
                         }}
-                        className={`absolute z-10 rounded-xl border p-2.5 text-left overflow-hidden shadow-xs transition-colors flex flex-col justify-between ${st.bg} ${st.bgHover} ${st.border} ${st.text}`}
+                        className={`absolute z-10 rounded-xl border p-2.5 text-left overflow-hidden shadow-xs transition-colors flex flex-col justify-between ${
+                          isCancelled
+                            ? 'bg-slate-100 hover:bg-slate-200/70 border-slate-300 text-slate-500'
+                            : `${st.bg} ${st.bgHover} ${st.border} ${st.text}`
+                        }`}
                       >
                         <div className="space-y-0.5 min-w-0">
                           <div className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -963,8 +1059,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                             <span className="px-1.5 py-0.2 rounded bg-white/70 border border-current/20 text-[10px] font-semibold">
                               {item.event.kategori}
                             </span>
+                            {(isCancelled || isRescheduled) && (
+                              <span
+                                className={`font-bold text-[10px] ${
+                                  isCancelled ? 'text-rose-700' : 'text-amber-800'
+                                }`}
+                              >
+                                · {getAgendaStatusLabel(item.event.status)}
+                              </span>
+                            )}
                           </div>
-                          <div className="font-bold text-xs sm:text-sm truncate">
+                          <div className={`font-bold text-xs sm:text-sm truncate ${isCancelled ? 'line-through' : ''}`}>
                             {item.event.judul}
                           </div>
                         </div>
@@ -1050,12 +1155,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                         <div className="flex-1 space-y-2 min-w-0">
                           {group.items.map((ev) => {
                             const st = getKategoriStyle(ev.kategori);
+                            const evStatus = normalizeAgendaStatus(ev.status);
+                            const isCancelled = evStatus === 'dibatalkan';
+                            const isRescheduled = evStatus === 'dijadwalkan_ulang';
                             return (
                               <button
                                 key={ev.id}
                                 type="button"
                                 onClick={() => onOpenEvent(ev)}
-                                className="w-full text-left p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/20 transition-colors space-y-2"
+                                className={`w-full text-left p-3.5 rounded-xl border transition-colors space-y-2 ${
+                                  isCancelled
+                                    ? 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+                                    : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/20'
+                                }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex flex-wrap items-center gap-2">
@@ -1067,15 +1179,37 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                                       {formatAgendaTimeRange(ev)}
                                     </span>
+                                    {(isCancelled || isRescheduled) && (
+                                      <span
+                                        className={`text-xs font-bold whitespace-nowrap ${
+                                          isCancelled ? 'text-rose-700' : 'text-amber-800'
+                                        }`}
+                                      >
+                                        · {getAgendaStatusLabel(ev.status)}
+                                        {isRescheduled && ev.tanggalSebelumnya
+                                          ? ` (dari ${formatIndonesianDateFull(ev.tanggalSebelumnya)})`
+                                          : ''}
+                                      </span>
+                                    )}
                                   </div>
                                   <span className="text-[11px] text-slate-400 whitespace-nowrap">
                                     Oleh: {ev.dibuatOlehNama}
                                   </span>
                                 </div>
 
-                                <div className="text-sm font-bold text-slate-900">
+                                <div
+                                  className={`text-sm font-bold ${
+                                    isCancelled ? 'line-through text-slate-500' : 'text-slate-900'
+                                  }`}
+                                >
                                   {ev.judul}
                                 </div>
+
+                                {ev.alasanStatus && (
+                                  <div className="text-[11px] text-slate-600">
+                                    Keterangan status: {ev.alasanStatus}
+                                  </div>
+                                )}
 
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
                                   <span className="inline-flex items-center gap-1.5">

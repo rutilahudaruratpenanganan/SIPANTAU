@@ -19,12 +19,14 @@ interface LoginPageProps {
   accounts: LoginAccount[];
   akunKredensialMap: Record<string, AkunKredensial>;
   onLoginSuccess: (account: LoginAccount) => void;
+  sessionNotice?: string | null;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   accounts,
   akunKredensialMap,
   onLoginSuccess,
+  sessionNotice,
 }) => {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -149,6 +151,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">Pilih akun Anda</p>
           </div>
+
+          {sessionNotice && !errorMsg && (
+            <div
+              role="status"
+              data-testid="login-session-notice"
+              className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2.5 text-xs"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>{sessionNotice}</span>
+            </div>
+          )}
 
           {errorMsg && (
             <div

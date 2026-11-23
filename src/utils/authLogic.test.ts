@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_INITIAL_PASSWORD,
+  IDLE_TIMEOUT_MINUTES,
+  IDLE_TIMEOUT_MS,
   PEJABAT_KEPALA_BIDANG_ID,
   PEJABAT_KEPALA_DINAS_ID,
   buildLoginAccounts,
+  getIdleRemainingMs,
   hashPassword,
+  isSessionIdleExpired,
   isUsingDefaultPassword,
+  parseStoredTimestamp,
   validatePasswordChange,
   verifyAccountPassword,
 } from './authLogic.ts';
@@ -160,3 +165,26 @@ test('validatePasswordChange enforces current password check, length, confirmati
   });
   assert.equal(valid.valid, true);
 });
+
+test('idle timeout enforces 30-minute threshold accurately across timestamps', () => {
+  assert.equal(IDLE_TIMEOUT_MINUTES, 30);
+  assert.equal(IDLE_TIMEOUT_MS, 1800000);
+
+  assert.equal(parseStoredTimestamp(null), null);
+  assert.equal(parseStoredTimestamp('abc'), null);
+  assert.equal(parseStoredTimestamp('-5'), null);
+  assert.equal(parseStoredTimestamp('1700000000000'), 1700000000000);
+
+  const base = 1700000000000;
+  // 29 minutes 59 seconds elapsed -> NOT expired
+  assert.equal(isSessionIdleExpired(base, base + IDLE_TIMEOUT_MS - 1000), false);
+  assert.equal(getIdleRemainingMs(base, base + IDLE_TIMEOUT_MS - 1000), 1000);
+
+  // Exact 30 minutes elapsed -> expired
+  assert.equal(isSessionIdleExpired(base, base + IDLE_TIMEOUT_MS), true);
+  assert.equal(getIdleRemainingMs(base, base + IDLE_TIMEOUT_MS), 0);
+
+  // Missing timestamp does not falsely mark fresh session expired
+  assert.equal(isSessionIdleExpired(null, base + IDLE_TIMEOUT_MS), false);
+});
+

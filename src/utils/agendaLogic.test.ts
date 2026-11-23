@@ -11,15 +11,18 @@ import {
   formatAgendaTimeRange,
   formatMonthYearLabel,
   formatWeekRangeLabel,
+  getAgendaStatusLabel,
   getMonthCalendarGrid,
   getTodayActiveAndUpcomingAgendas,
   getUpcomingAgendaEvents,
   getWeekDays,
   formatAgendaTickerEntry,
+  normalizeAgendaStatus,
   resolveAgendaRekapRange,
   sortAgendaEvents,
   timeToMinutes,
   validateAgendaInput,
+  validateRescheduleInput,
 } from './agendaLogic.ts';
 import type { AgendaEvent } from '../types/index.ts';
 
@@ -362,7 +365,11 @@ test('calculateAgendaRekapStats and buildAgendaRekapCsvContent summarize and esc
   assert.equal(stats.personelBreakdown[0].jumlah, 3);
 
   const csv = buildAgendaRekapCsvContent(sampleEvents, 'Bulanan · November 2026');
-  assert.ok(csv.startsWith('\uFEFFNo,Tanggal,Hari,Waktu,Kategori,Judul Agenda'));
+  assert.ok(
+    csv.startsWith(
+      '\uFEFFNo,Tanggal,Hari,Waktu,Status,Tanggal Sebelumnya,Keterangan Status,Kategori,Judul Agenda'
+    )
+  );
   // Quotes inside judul/catatan of ag-4 must be doubled
   assert.match(csv, /"Asistensi Pengembang Rusunawa ""Cibeunying"""/);
   assert.match(csv, /"Membawa dokumen ""SK Pertelaan"" terbaru"/);
@@ -448,5 +455,153 @@ test('getTodayActiveAndUpcomingAgendas returns only ongoing and upcoming agendas
     /\[AKAN BERJALAN\] 14:00–16:00 WIB · Tinjauan Lapangan Sore · Lokasi:/
   );
 });
+
+test('cancelled agendas are excluded from ticker & upcoming, while rescheduled agendas remain active with status metadata', () => {
+  const today = '2026-11-22';
+  const statusEvents: AgendaEvent[] = [
+    {
+      ...sampleEvents[0],
+      id: 'cancelled-today',
+      judul: 'Rapat Batal Hari Ini',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '13:00',
+      jamSelesai: '14:00',
+      status: 'dibatalkan',
+      alasanStatus: 'Narasumber berhalangan hadir',
+    },
+    {
+      ...sampleEvents[1],
+      id: 'rescheduled-today',
+      judul: 'Asistensi Pindahan Kemarin',
+      tanggal: today,
+      tanggalSebelumnya: '2026-11-21',
+      sepanjangHari: false,
+      jamMulai: '14:00',
+      jamSelesai: '15:30',
+      status: 'dijadwalkan_ulang',
+      alasanStatus: 'Digeser ke hari ini',
+    },
+  ];
+
+  // Ticker excludes cancelled event, includes rescheduled event
+  const tickerItems = getTodayActiveAndUpcomingAgendas(statusEvents, today, 10 * 60);
+  assert.deepEqual(
+    tickerItems.map((i) => i.event.id),
+    ['rescheduled-today']
+  );
+  assert.match(formatAgendaTickerEntry(tickerItems[0]), /Jadwal Ulang/);
+
+  // Upcoming excludes cancelled event
+  const upcoming = getUpcomingAgendaEvents(statusEvents, today, 5);
+  assert.deepEqual(
+    upcoming.map((e) => e.id),
+    ['rescheduled-today']
+  );
+
+  // Filter by status
+  assert.deepEqual(
+    filterAgendaEvents(statusEvents, { status: 'dibatalkan' }).map((e) => e.id),
+    ['cancelled-today']
+  );
+  assert.deepEqual(
+    filterAgendaEvents(statusEvents, { status: 'dijadwalkan_ulang' }).map((e) => e.id),
+    ['rescheduled-today']
+  );
+
+  // Status labels & normalization
+  assert.equal(normalizeAgendaStatus(undefined), 'terjadwal');
+  assert.equal(getAgendaStatusLabel(undefined), 'Terjadwal');
+  assert.equal(getAgendaStatusLabel('dibatalkan'), 'Dibatalkan');
+  assert.equal(getAgendaStatusLabel('dijadwalkan_ulang'), 'Dijadwalkan Ulang');
+
+  // Rekap stats & CSV include status counts and columns
+  const stats = calculateAgendaRekapStats(statusEvents);
+  assert.equal(stats.totalAgenda, 2);
+  assert.equal(stats.totalDibatalkan, 1);
+  assert.equal(stats.totalDijadwalkanUlang, 1);
+  assert.equal(stats.totalAktif, 1);
+
+  const csv = buildAgendaRekapCsvContent(statusEvents);
+  assert.match(csv, /Status,Tanggal Sebelumnya,Keterangan Status/);
+  assert.match(csv, /"Dibatalkan"/);
+  assert.match(csv, /"Dijadwalkan Ulang"/);
+  assert.match(csv, /2026-11-21/);
+});
+
+test('validateRescheduleInput enforces schedule change for active agenda and allows reactivating cancelled agenda', () => {
+  // Unchanged active schedule rejected
+  assert.match(
+    validateRescheduleInput({
+      currentTanggal: '2026-11-24',
+      currentSepanjangHari: false,
+      currentJamMulai: '09:00',
+      currentJamSelesai: '10:00',
+      currentLokasi: 'Ruang Rapat',
+      currentStatus: 'terjadwal',
+      newTanggal: '2026-11-24',
+      newSepanjangHari: false,
+      newJamMulai: '09:00',
+      newJamSelesai: '10:00',
+      newLokasi: 'Ruang Rapat',
+    }) || '',
+    /Pilih tanggal baru/
+  );
+
+  // Moving to another date accepted
+  assert.equal(
+    validateRescheduleInput({
+      currentTanggal: '2026-11-24',
+      currentSepanjangHari: false,
+      currentJamMulai: '09:00',
+      currentJamSelesai: '10:00',
+      currentLokasi: 'Ruang Rapat',
+      currentStatus: 'terjadwal',
+      newTanggal: '2026-11-27',
+      newSepanjangHari: false,
+      newJamMulai: '09:00',
+      newJamSelesai: '10:00',
+      newLokasi: 'Ruang Rapat',
+    }),
+    null
+  );
+
+  // Invalid end <= start rejected
+  assert.match(
+    validateRescheduleInput({
+      currentTanggal: '2026-11-24',
+      currentSepanjangHari: false,
+      currentJamMulai: '09:00',
+      currentJamSelesai: '10:00',
+      currentLokasi: 'Ruang Rapat',
+      currentStatus: 'terjadwal',
+      newTanggal: '2026-11-27',
+      newSepanjangHari: false,
+      newJamMulai: '14:00',
+      newJamSelesai: '13:00',
+      newLokasi: 'Ruang Rapat',
+    }) || '',
+    /lebih lambat/
+  );
+
+  // Cancelled agenda rescheduled back on same date & time is allowed
+  assert.equal(
+    validateRescheduleInput({
+      currentTanggal: '2026-11-24',
+      currentSepanjangHari: false,
+      currentJamMulai: '09:00',
+      currentJamSelesai: '10:00',
+      currentLokasi: 'Ruang Rapat',
+      currentStatus: 'dibatalkan',
+      newTanggal: '2026-11-24',
+      newSepanjangHari: false,
+      newJamMulai: '09:00',
+      newJamSelesai: '10:00',
+      newLokasi: 'Ruang Rapat',
+    }),
+    null
+  );
+});
+
 
 

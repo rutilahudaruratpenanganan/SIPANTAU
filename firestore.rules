@@ -169,8 +169,9 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'ownerId', 'judul', 'kategori', 'tanggal', 'sepanjangHari',
           'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
-          'pesertaTambahan', 'catatan', 'dibuatOlehId', 'dibuatOlehNama',
-          'createdAt', 'updatedAt'
+          'pesertaTambahan', 'catatan',
+          'status', 'tanggalSebelumnya', 'alasanStatus', 'statusDiubahOleh', 'statusDiubahPada',
+          'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
         && data.ownerId == 'internal_wasdal'
@@ -189,6 +190,11 @@ service cloud.firestore {
         && (data.pesertaNama.size() == 0 || (data.pesertaNama[0] is string && data.pesertaNama[0].size() <= 150))
         && (!('pesertaTambahan' in data) || (data.pesertaTambahan is string && data.pesertaTambahan.size() <= 300))
         && (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 1500))
+        && (!('status' in data) || (data.status in ['terjadwal', 'dibatalkan', 'dijadwalkan_ulang']))
+        && (!('tanggalSebelumnya' in data) || (data.tanggalSebelumnya is string && data.tanggalSebelumnya.size() <= 40))
+        && (!('alasanStatus' in data) || (data.alasanStatus is string && data.alasanStatus.size() <= 500))
+        && (!('statusDiubahOleh' in data) || (data.statusDiubahOleh is string && data.statusDiubahOleh.size() <= 150))
+        && (!('statusDiubahPada' in data) || (data.statusDiubahPada is string && data.statusDiubahPada.size() <= 40))
         && data.dibuatOlehId is string && data.dibuatOlehId.size() >= 1 && data.dibuatOlehId.size() <= 128
         && data.dibuatOlehNama is string && data.dibuatOlehNama.size() >= 1 && data.dibuatOlehNama.size() <= 150
         && data.createdAt is timestamp
@@ -358,6 +364,30 @@ service cloud.firestore {
       allow delete: if isValidId(accountId) && isInternalWorkspaceDoc(resource.data);
     }
 
+    function isAllowedAgendaUpdateAction(affected) {
+      return affected.hasOnly([
+          'judul', 'kategori', 'tanggal', 'sepanjangHari',
+          'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
+          'pesertaTambahan', 'catatan', 'updatedAt'
+        ])
+        || (
+          request.resource.data.status == 'dibatalkan'
+          && affected.hasOnly(['status', 'alasanStatus', 'statusDiubahOleh', 'statusDiubahPada', 'updatedAt'])
+        )
+        || (
+          request.resource.data.status == 'dijadwalkan_ulang'
+          && affected.hasOnly([
+            'status', 'tanggal', 'tanggalSebelumnya', 'sepanjangHari',
+            'jamMulai', 'jamSelesai', 'lokasi', 'alasanStatus',
+            'statusDiubahOleh', 'statusDiubahPada', 'updatedAt'
+          ])
+        )
+        || (
+          request.resource.data.status == 'terjadwal'
+          && affected.hasOnly(['status', 'alasanStatus', 'statusDiubahOleh', 'statusDiubahPada', 'updatedAt'])
+        );
+    }
+
     // 6. Agenda Kegiatan Tim (Kalender)
     match /agenda/{agendaId} {
       allow get: if isValidId(agendaId) && isInternalWorkspaceDoc(resource.data);
@@ -374,11 +404,7 @@ service cloud.firestore {
         && request.resource.data.dibuatOlehNama == resource.data.dibuatOlehNama
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'judul', 'kategori', 'tanggal', 'sepanjangHari',
-          'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
-          'pesertaTambahan', 'catatan', 'updatedAt'
-        ]);
+        && isAllowedAgendaUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if isValidId(agendaId) && isInternalWorkspaceDoc(resource.data);
     }
   }

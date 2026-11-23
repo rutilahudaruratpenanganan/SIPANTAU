@@ -178,3 +178,36 @@ export async function validatePasswordChange(params: {
 
   return { valid: true };
 }
+
+export const IDLE_TIMEOUT_MINUTES = 30;
+export const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_MINUTES * 60 * 1000;
+export const IDLE_WARNING_THRESHOLD_MS = 60 * 1000;
+
+export function parseStoredTimestamp(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+export function getIdleRemainingMs(
+  lastActivityAt: number,
+  nowMs: number,
+  timeoutMs: number = IDLE_TIMEOUT_MS
+): number {
+  if (!Number.isFinite(lastActivityAt) || lastActivityAt <= 0) return timeoutMs;
+  const elapsed = Math.max(0, nowMs - lastActivityAt);
+  return Math.max(0, timeoutMs - elapsed);
+}
+
+export function isSessionIdleExpired(
+  lastActivityAt: number | null | undefined,
+  nowMs: number,
+  timeoutMs: number = IDLE_TIMEOUT_MS
+): boolean {
+  if (typeof lastActivityAt !== 'number' || !Number.isFinite(lastActivityAt) || lastActivityAt <= 0) {
+    return false;
+  }
+  return nowMs - lastActivityAt >= timeoutMs;
+}
+

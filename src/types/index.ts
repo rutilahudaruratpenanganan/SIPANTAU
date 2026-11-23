@@ -123,6 +123,8 @@ export type AgendaKategori =
   | 'Audiensi'
   | 'Lainnya';
 
+export type AgendaStatus = 'terjadwal' | 'dibatalkan' | 'dijadwalkan_ulang';
+
 export interface AgendaEvent {
   id: string;
   judul: string;
@@ -136,6 +138,11 @@ export interface AgendaEvent {
   pesertaNama: string[];
   pesertaTambahan?: string;
   catatan?: string;
+  status?: AgendaStatus;
+  tanggalSebelumnya?: string; // YYYY-MM-DD saat dijadwalkan ulang
+  alasanStatus?: string; // Alasan pembatalan atau keterangan jadwal ulang
+  statusDiubahOleh?: string;
+  statusDiubahPada?: string;
   dibuatOlehId: string;
   dibuatOlehNama: string;
   createdAt: string;

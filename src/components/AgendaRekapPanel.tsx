@@ -14,9 +14,10 @@ import {
   Search,
   Users,
 } from 'lucide-react';
-import { AgendaEvent, AgendaKategori, PejabatConfig, Personel } from '../types';
+import { AgendaEvent, AgendaKategori, AgendaStatus, PejabatConfig, Personel } from '../types';
 import {
   AGENDA_KATEGORI_LIST,
+  AGENDA_STATUS_LIST,
   AgendaRekapPeriodMode,
   NAMA_BULAN,
   NAMA_HARI_FULL,
@@ -26,10 +27,13 @@ import {
   calculateAgendaRekapStats,
   filterAgendaForRekap,
   formatAgendaTimeRange,
+  formatIndonesianDateFull,
   formatWeekRangeLabel,
+  getAgendaStatusLabel,
   getDayOfWeekMonFirst,
   getKategoriStyle,
   getMonthStartAndEndIso,
+  normalizeAgendaStatus,
   pad2,
   parseIsoDateParts,
   resolveAgendaRekapRange,
@@ -84,6 +88,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
   const [dateTo, setDateTo] = useState<string>(defaultMonthBounds.endDate);
 
   const [selectedKategori, setSelectedKategori] = useState<AgendaKategori | 'all'>(initialKategori);
+  const [selectedStatus, setSelectedStatus] = useState<AgendaStatus | 'all'>('all');
   const [selectedPersonel, setSelectedPersonel] = useState<string | 'all'>(initialPersonel);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery);
 
@@ -108,6 +113,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
         dateFrom,
         dateTo,
         kategori: selectedKategori,
+        status: selectedStatus,
         personelNama: selectedPersonel,
         searchQuery,
       }),
@@ -119,6 +125,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
       dateFrom,
       dateTo,
       selectedKategori,
+      selectedStatus,
       selectedPersonel,
       searchQuery,
     ]
@@ -127,10 +134,14 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
   const stats = useMemo(() => calculateAgendaRekapStats(filteredEvents), [filteredEvents]);
 
   const hasSecondaryFilter =
-    selectedKategori !== 'all' || selectedPersonel !== 'all' || searchQuery.trim() !== '';
+    selectedKategori !== 'all' ||
+    selectedStatus !== 'all' ||
+    selectedPersonel !== 'all' ||
+    searchQuery.trim() !== '';
 
   const handleResetFilters = () => {
     setSelectedKategori('all');
+    setSelectedStatus('all');
     setSelectedPersonel('all');
     setSearchQuery('');
     if (periodMode === 'range') {
@@ -398,7 +409,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
         </div>
 
         {/* Secondary Filters Row */}
-        <div className="pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-12 gap-2.5 items-end text-xs">
+        <div className="pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-end text-xs">
           <div className="lg:col-span-3 space-y-1">
             <label htmlFor="rekap-agenda-kategori" className="block font-semibold text-slate-700">
               Kategori Kegiatan
@@ -418,7 +429,26 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
             </select>
           </div>
 
-          <div className="lg:col-span-3 space-y-1">
+          <div className="lg:col-span-2 space-y-1">
+            <label htmlFor="rekap-agenda-status" className="block font-semibold text-slate-700">
+              Status Agenda
+            </label>
+            <select
+              id="rekap-agenda-status"
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value as AgendaStatus | 'all')}
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600"
+            >
+              <option value="all">Semua Status</option>
+              {AGENDA_STATUS_LIST.map((st) => (
+                <option key={st} value={st}>
+                  {getAgendaStatusLabel(st)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lg:col-span-2 space-y-1">
             <label htmlFor="rekap-agenda-personel" className="block font-semibold text-slate-700">
               Personel Peserta
             </label>
@@ -437,7 +467,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
             </select>
           </div>
 
-          <div className="lg:col-span-4 space-y-1">
+          <div className="lg:col-span-3 space-y-1">
             <label htmlFor="rekap-agenda-search" className="block font-semibold text-slate-700">
               Pencarian Kata Kunci
             </label>
@@ -486,7 +516,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
             {stats.totalAgenda}
           </div>
           <div className="text-[11px] text-slate-500 tabular-nums mt-0.5">
-            {stats.totalTerjadwalJam} terjadwal jam · {stats.totalSehariPenuh} sehari penuh
+            {stats.totalAktif} aktif · {stats.totalDijadwalkanUlang} jadwal ulang · {stats.totalDibatalkan} batal
           </div>
         </div>
 
@@ -629,6 +659,7 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
                   <th className="border border-slate-800 p-2 text-center w-9">No.</th>
                   <th className="border border-slate-800 p-2 w-32">Hari &amp; Tanggal</th>
                   <th className="border border-slate-800 p-2 w-28">Waktu</th>
+                  <th className="border border-slate-800 p-2 w-32">Status</th>
                   <th className="border border-slate-800 p-2 w-36">Kategori</th>
                   <th className="border border-slate-800 p-2 min-w-[200px]">Agenda Kegiatan &amp; Catatan</th>
                   <th className="border border-slate-800 p-2 w-40">Lokasi</th>
@@ -640,9 +671,17 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
                   const parts = parseIsoDateParts(ev.tanggal);
                   const dow = getDayOfWeekMonFirst(ev.tanggal);
                   const st = getKategoriStyle(ev.kategori);
+                  const evStatus = normalizeAgendaStatus(ev.status);
 
                   return (
-                    <tr key={ev.id} className="align-top hover:bg-slate-50/80 print:break-inside-avoid">
+                    <tr
+                      key={ev.id}
+                      className={`align-top print:break-inside-avoid ${
+                        evStatus === 'dibatalkan'
+                          ? 'bg-slate-50/80 text-slate-500'
+                          : 'hover:bg-slate-50/80'
+                      }`}
+                    >
                       <td className="border border-slate-800 p-2 text-center font-mono font-medium tabular-nums">
                         {idx + 1}
                       </td>
@@ -656,6 +695,24 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
                         {formatAgendaTimeRange(ev)}
                       </td>
                       <td className="border border-slate-800 p-2 whitespace-nowrap">
+                        <span
+                          className={`font-bold text-[10px] ${
+                            evStatus === 'dibatalkan'
+                              ? 'text-rose-700'
+                              : evStatus === 'dijadwalkan_ulang'
+                              ? 'text-amber-800'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {getAgendaStatusLabel(ev.status)}
+                        </span>
+                        {evStatus === 'dijadwalkan_ulang' && ev.tanggalSebelumnya && (
+                          <div className="text-[9px] text-slate-500 mt-0.5 tabular-nums">
+                            Dari: {formatIndonesianDateFull(ev.tanggalSebelumnya)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="border border-slate-800 p-2 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-semibold print:border-slate-400 print:bg-transparent print:text-slate-900 whitespace-nowrap ${st.bg} ${st.border} ${st.text}`}>
                           <span className={`w-1.5 h-1.5 rounded-xs shrink-0 print:hidden ${st.dot}`} />
                           {ev.kategori}
@@ -665,10 +722,19 @@ export const AgendaRekapPanel: React.FC<AgendaRekapPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => onOpenEvent(ev)}
-                          className="text-left font-bold text-slate-900 hover:text-blue-700 hover:underline print:no-underline print:text-slate-900"
+                          className={`text-left font-bold hover:text-blue-700 hover:underline print:no-underline print:text-slate-900 ${
+                            evStatus === 'dibatalkan'
+                              ? 'line-through text-slate-500'
+                              : 'text-slate-900'
+                          }`}
                         >
                           {ev.judul}
                         </button>
+                        {ev.alasanStatus && (
+                          <div className="text-[10px] text-slate-700">
+                            Keterangan status: {ev.alasanStatus}
+                          </div>
+                        )}
                         {ev.catatan && (
                           <div className="text-[10px] text-slate-600 leading-relaxed">
                             {ev.catatan}

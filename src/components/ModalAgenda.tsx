@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  Ban,
   Calendar,
+  CalendarClock,
   Check,
   Clock,
   MapPin,
+  RotateCcw,
   Search,
   Trash2,
   UserCheck,
@@ -12,13 +15,20 @@ import {
   X,
 } from 'lucide-react';
 import { AgendaEvent, AgendaKategori, Personel } from '../types';
-import { AgendaMutationPayload } from '../services/firestoreService';
+import {
+  AgendaMutationPayload,
+  AgendaReschedulePayload,
+} from '../services/firestoreService';
 import {
   AGENDA_KATEGORI_LIST,
+  formatIndonesianDateFull,
+  getAgendaStatusLabel,
   getKategoriStyle,
   minutesToHhmm,
+  normalizeAgendaStatus,
   timeToMinutes,
   validateAgendaInput,
+  validateRescheduleInput,
 } from '../utils/agendaLogic';
 
 interface ModalAgendaProps {
@@ -31,6 +41,12 @@ interface ModalAgendaProps {
   personelList: Personel[];
   currentUser: Personel;
   onSave: (payload: AgendaMutationPayload, editingId?: string) => Promise<void>;
+  onCancelAgenda?: (agendaId: string, alasan?: string) => Promise<void>;
+  onRescheduleAgenda?: (
+    agendaId: string,
+    payload: AgendaReschedulePayload
+  ) => Promise<void>;
+  onReactivateAgenda?: (agendaId: string) => Promise<void>;
   onDelete?: (agendaId: string) => Promise<void>;
 }
 
@@ -59,9 +75,13 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
   personelList,
   currentUser,
   onSave,
+  onCancelAgenda,
+  onRescheduleAgenda,
+  onReactivateAgenda,
   onDelete,
 }) => {
   const isEditing = Boolean(initialEvent);
+  const currentStatus = normalizeAgendaStatus(initialEvent?.status);
 
   const [judul, setJudul] = useState('');
   const [kategori, setKategori] = useState<AgendaKategori>('Rapat Koordinasi');
@@ -75,8 +95,20 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
   const [catatan, setCatatan] = useState('');
   const [personelSearch, setPersonelSearch] = useState('');
 
+  // Status Action Mode: cancel or reschedule
+  const [actionMode, setActionMode] = useState<'none' | 'cancel' | 'reschedule'>('none');
+  const [cancelReason, setCancelReason] = useState('');
+
+  const [rescheduleTanggal, setRescheduleTanggal] = useState('');
+  const [rescheduleSepanjangHari, setRescheduleSepanjangHari] = useState(false);
+  const [rescheduleJamMulai, setRescheduleJamMulai] = useState('09:00');
+  const [rescheduleJamSelesai, setRescheduleJamSelesai] = useState('10:00');
+  const [rescheduleLokasi, setRescheduleLokasi] = useState('');
+  const [rescheduleAlasan, setRescheduleAlasan] = useState('');
+
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isMutatingStatus, setIsMutatingStatus] = useState(false);
   const [confirmDeleteStep, setConfirmDeleteStep] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -94,10 +126,21 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
       setPesertaIds(initialEvent.pesertaIds || []);
       setPesertaTambahan(initialEvent.pesertaTambahan || '');
       setCatatan(initialEvent.catatan || '');
+
+      setRescheduleTanggal(initialEvent.tanggal);
+      setRescheduleSepanjangHari(initialEvent.sepanjangHari);
+      setRescheduleJamMulai(initialEvent.jamMulai || '09:00');
+      setRescheduleJamSelesai(initialEvent.jamSelesai || '10:00');
+      setRescheduleLokasi(initialEvent.lokasi || '');
+      setRescheduleAlasan('');
+      setCancelReason(
+        initialEvent.status === 'dibatalkan' ? initialEvent.alasanStatus || '' : ''
+      );
     } else {
+      const defDate = initialDate || getTodayIso();
       setJudul('');
       setKategori('Rapat Koordinasi');
-      setTanggal(initialDate || getTodayIso());
+      setTanggal(defDate);
       setSepanjangHari(false);
       setJamMulai(initialJamMulai || '09:00');
       setJamSelesai(initialJamSelesai || '10:00');
@@ -105,15 +148,26 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
       setPesertaIds(currentUser?.id ? [currentUser.id] : []);
       setPesertaTambahan('');
       setCatatan('');
+      setRescheduleTanggal(defDate);
+      setRescheduleSepanjangHari(false);
+      setRescheduleJamMulai(initialJamMulai || '09:00');
+      setRescheduleJamSelesai(initialJamSelesai || '10:00');
+      setRescheduleLokasi('');
+      setRescheduleAlasan('');
+      setCancelReason('');
     }
+    setActionMode('none');
     setPersonelSearch('');
     setErrorMessage('');
     setIsSaving(false);
+    setIsMutatingStatus(false);
     setConfirmDeleteStep(false);
     setIsDeleting(false);
   }, [isOpen, initialEvent?.id, initialDate, initialJamMulai, initialJamSelesai, currentUser?.id]);
 
   if (!isOpen) return null;
+
+  const isBusy = isSaving || isDeleting || isMutatingStatus;
 
   const togglePeserta = (id: string) => {
     setErrorMessage('');
@@ -126,6 +180,25 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
     const startMin = timeToMinutes(jamMulai || '09:00');
     const nextEnd = Math.min(23 * 60 + 59, startMin + durationMin);
     setJamSelesai(minutesToHhmm(nextEnd));
+  };
+
+  const openReschedulePanel = () => {
+    if (!initialEvent) return;
+    setRescheduleTanggal(initialEvent.tanggal);
+    setRescheduleSepanjangHari(initialEvent.sepanjangHari);
+    setRescheduleJamMulai(initialEvent.jamMulai || '09:00');
+    setRescheduleJamSelesai(initialEvent.jamSelesai || '10:00');
+    setRescheduleLokasi(initialEvent.lokasi || '');
+    setRescheduleAlasan('');
+    setErrorMessage('');
+    setConfirmDeleteStep(false);
+    setActionMode((prev) => (prev === 'reschedule' ? 'none' : 'reschedule'));
+  };
+
+  const openCancelPanel = () => {
+    setErrorMessage('');
+    setConfirmDeleteStep(false);
+    setActionMode((prev) => (prev === 'cancel' ? 'none' : 'cancel'));
   };
 
   const filteredPersonel = personelList.filter((p) => {
@@ -142,7 +215,7 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSaving || isDeleting) return;
+    if (isBusy) return;
 
     const validationError = validateAgendaInput({
       judul,
@@ -191,8 +264,84 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
     }
   };
 
+  const handleConfirmCancelAgenda = async () => {
+    if (!initialEvent || !onCancelAgenda || isBusy) return;
+    setIsMutatingStatus(true);
+    setErrorMessage('');
+    try {
+      await onCancelAgenda(initialEvent.id, cancelReason.trim() || undefined);
+      onClose();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal membatalkan agenda kegiatan.'
+      );
+    } finally {
+      setIsMutatingStatus(false);
+    }
+  };
+
+  const handleConfirmRescheduleAgenda = async () => {
+    if (!initialEvent || !onRescheduleAgenda || isBusy) return;
+
+    const validationError = validateRescheduleInput({
+      currentTanggal: initialEvent.tanggal,
+      currentSepanjangHari: initialEvent.sepanjangHari,
+      currentJamMulai: initialEvent.jamMulai,
+      currentJamSelesai: initialEvent.jamSelesai,
+      currentLokasi: initialEvent.lokasi,
+      currentStatus: initialEvent.status,
+      newTanggal: rescheduleTanggal,
+      newSepanjangHari: rescheduleSepanjangHari,
+      newJamMulai: rescheduleJamMulai,
+      newJamSelesai: rescheduleJamSelesai,
+      newLokasi: rescheduleLokasi,
+    });
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
+    setIsMutatingStatus(true);
+    setErrorMessage('');
+    try {
+      await onRescheduleAgenda(initialEvent.id, {
+        previousTanggal: initialEvent.tanggal,
+        tanggal: rescheduleTanggal.trim(),
+        sepanjangHari: rescheduleSepanjangHari,
+        jamMulai: rescheduleSepanjangHari ? '00:00' : rescheduleJamMulai,
+        jamSelesai: rescheduleSepanjangHari ? '23:59' : rescheduleJamSelesai,
+        lokasi: rescheduleLokasi.trim(),
+        alasan: rescheduleAlasan.trim() || undefined,
+        actorNama: currentUser.nama,
+      });
+      onClose();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal menjadwalkan ulang agenda kegiatan.'
+      );
+    } finally {
+      setIsMutatingStatus(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!initialEvent || !onReactivateAgenda || isBusy) return;
+    setIsMutatingStatus(true);
+    setErrorMessage('');
+    try {
+      await onReactivateAgenda(initialEvent.id);
+      onClose();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal mengaktifkan kembali agenda.'
+      );
+    } finally {
+      setIsMutatingStatus(false);
+    }
+  };
+
   const handleConfirmDelete = async () => {
-    if (!initialEvent || !onDelete || isDeleting || isSaving) return;
+    if (!initialEvent || !onDelete || isBusy) return;
     setIsDeleting(true);
     setErrorMessage('');
     try {
@@ -231,7 +380,7 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
               <p className="text-[11px] text-slate-500 truncate">
                 {isEditing
                   ? `Dibuat oleh ${initialEvent?.dibuatOlehNama || 'Tim Wasdal'}`
-                  : 'Jadwalkan agenda rapat, asistensi, atau tinjauan lapangan Tim Wasdal'}
+                  : 'Jadwalkan agenda rapat, asistensi, audiensi, dan tinjauan lapangan Tim Wasdal'}
               </p>
             </div>
           </div>
@@ -248,9 +397,308 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
         {/* Body */}
         <form id="agenda-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-xs">
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Status & Quick Schedule Actions (Only when inspecting/editing an existing agenda) */}
+          {isEditing && initialEvent && (
+            <div
+              data-testid="agenda-status-bar"
+              className={`rounded-xl border p-3.5 space-y-3 ${
+                currentStatus === 'dibatalkan'
+                  ? 'bg-rose-50/70 border-rose-200'
+                  : currentStatus === 'dijadwalkan_ulang'
+                  ? 'bg-amber-50/70 border-amber-200'
+                  : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold text-slate-600">Status Agenda:</span>
+                    <span
+                      data-testid="agenda-current-status-label"
+                      className={`font-bold ${
+                        currentStatus === 'dibatalkan'
+                          ? 'text-rose-700'
+                          : currentStatus === 'dijadwalkan_ulang'
+                          ? 'text-amber-800'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {getAgendaStatusLabel(initialEvent.status)}
+                    </span>
+                    {initialEvent.tanggalSebelumnya && currentStatus === 'dijadwalkan_ulang' && (
+                      <span className="text-[11px] text-slate-600 tabular-nums">
+                        · Dipindah dari {formatIndonesianDateFull(initialEvent.tanggalSebelumnya)}
+                      </span>
+                    )}
+                  </div>
+                  {initialEvent.alasanStatus && (
+                    <p className="text-[11px] text-slate-700">
+                      Keterangan: <span className="font-medium">{initialEvent.alasanStatus}</span>
+                    </p>
+                  )}
+                  {initialEvent.statusDiubahOleh && (
+                    <p className="text-[10px] text-slate-500">
+                      Diperbarui oleh {initialEvent.statusDiubahOleh}
+                      {initialEvent.statusDiubahPada ? ` · ${initialEvent.statusDiubahPada}` : ''}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {onRescheduleAgenda && (
+                    <button
+                      type="button"
+                      data-testid="open-reschedule-agenda-btn"
+                      onClick={openReschedulePanel}
+                      disabled={isBusy}
+                      aria-expanded={actionMode === 'reschedule'}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors whitespace-nowrap ${
+                        actionMode === 'reschedule'
+                          ? 'bg-amber-700 border-amber-700 text-white'
+                          : 'bg-white border-amber-300 text-amber-900 hover:bg-amber-50'
+                      }`}
+                    >
+                      <CalendarClock className="w-3.5 h-3.5" />
+                      <span>Jadwalkan Ulang</span>
+                    </button>
+                  )}
+
+                  {currentStatus !== 'dibatalkan' && onCancelAgenda && (
+                    <button
+                      type="button"
+                      data-testid="open-cancel-agenda-btn"
+                      onClick={openCancelPanel}
+                      disabled={isBusy}
+                      aria-expanded={actionMode === 'cancel'}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors whitespace-nowrap ${
+                        actionMode === 'cancel'
+                          ? 'bg-rose-700 border-rose-700 text-white'
+                          : 'bg-white border-rose-300 text-rose-700 hover:bg-rose-50'
+                      }`}
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Batalkan Agenda</span>
+                    </button>
+                  )}
+
+                  {currentStatus === 'dibatalkan' && onReactivateAgenda && (
+                    <button
+                      type="button"
+                      data-testid="reactivate-agenda-btn"
+                      onClick={handleReactivate}
+                      disabled={isBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-semibold transition-colors whitespace-nowrap"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Aktifkan Kembali</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline Panel: Batalkan Agenda (tidak menghapus, ubah status menjadi Dibatalkan) */}
+              {actionMode === 'cancel' && (
+                <div
+                  data-testid="agenda-cancel-panel"
+                  className="pt-3 border-t border-rose-200 space-y-2.5"
+                >
+                  <p className="text-[11px] text-rose-900 font-medium">
+                    Agenda tidak dihapus dari kalender, melainkan tetap tercatat dengan status{' '}
+                    <span className="font-bold">Dibatalkan</span>.
+                  </p>
+                  <div>
+                    <label
+                      htmlFor="agenda-cancel-reason"
+                      className="block font-semibold text-slate-700 mb-1"
+                    >
+                      Alasan Pembatalan (Opsional)
+                    </label>
+                    <input
+                      id="agenda-cancel-reason"
+                      type="text"
+                      maxLength={500}
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Contoh: Kegiatan ditunda / Narasumber berhalangan hadir..."
+                      className="w-full px-3 py-2 rounded-lg border border-rose-300 bg-white text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-600"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActionMode('none')}
+                      disabled={isBusy}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold whitespace-nowrap"
+                    >
+                      Kembali
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="confirm-cancel-agenda-btn"
+                      onClick={handleConfirmCancelAgenda}
+                      disabled={isBusy}
+                      className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {isMutatingStatus ? 'Membatalkan...' : 'Konfirmasi Batalkan'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Inline Panel: Jadwalkan Ulang (pindah ke hari baru yang dipilih) */}
+              {actionMode === 'reschedule' && (
+                <div
+                  data-testid="agenda-reschedule-panel"
+                  className="pt-3 border-t border-amber-200 space-y-3"
+                >
+                  <p className="text-[11px] text-amber-950 font-medium">
+                    Pilih tanggal jadwal ulang baru. Agenda akan otomatis berpindah di kalender ke hari yang dipilih dengan status{' '}
+                    <span className="font-bold">Dijadwalkan Ulang</span>.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor="agenda-reschedule-tanggal"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Tanggal Jadwal Ulang <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        id="agenda-reschedule-tanggal"
+                        type="date"
+                        value={rescheduleTanggal}
+                        onChange={(e) => {
+                          setRescheduleTanggal(e.target.value);
+                          setErrorMessage('');
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-900 font-mono text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                      />
+                    </div>
+
+                    <div className="flex items-end pb-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={rescheduleSepanjangHari}
+                          onChange={(e) => {
+                            setRescheduleSepanjangHari(e.target.checked);
+                            setErrorMessage('');
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="font-semibold text-slate-700">Sepanjang Hari</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {!rescheduleSepanjangHari && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label
+                          htmlFor="agenda-reschedule-jam-mulai"
+                          className="block font-semibold text-slate-700 mb-1"
+                        >
+                          Waktu Mulai Baru (WIB)
+                        </label>
+                        <input
+                          id="agenda-reschedule-jam-mulai"
+                          type="time"
+                          value={rescheduleJamMulai}
+                          onChange={(e) => {
+                            setRescheduleJamMulai(e.target.value);
+                            setErrorMessage('');
+                          }}
+                          className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-900 font-mono text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="agenda-reschedule-jam-selesai"
+                          className="block font-semibold text-slate-700 mb-1"
+                        >
+                          Waktu Selesai Baru (WIB)
+                        </label>
+                        <input
+                          id="agenda-reschedule-jam-selesai"
+                          type="time"
+                          value={rescheduleJamSelesai}
+                          onChange={(e) => {
+                            setRescheduleJamSelesai(e.target.value);
+                            setErrorMessage('');
+                          }}
+                          className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-900 font-mono text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor="agenda-reschedule-lokasi"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Lokasi Kegiatan <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        id="agenda-reschedule-lokasi"
+                        type="text"
+                        maxLength={250}
+                        value={rescheduleLokasi}
+                        onChange={(e) => {
+                          setRescheduleLokasi(e.target.value);
+                          setErrorMessage('');
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="agenda-reschedule-alasan"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Keterangan Jadwal Ulang (Opsional)
+                      </label>
+                      <input
+                        id="agenda-reschedule-alasan"
+                        type="text"
+                        maxLength={500}
+                        value={rescheduleAlasan}
+                        onChange={(e) => setRescheduleAlasan(e.target.value)}
+                        placeholder="Contoh: Penyesuaian jadwal pimpinan..."
+                        className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActionMode('none')}
+                      disabled={isBusy}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold whitespace-nowrap"
+                    >
+                      Kembali
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="confirm-reschedule-agenda-btn"
+                      onClick={handleConfirmRescheduleAgenda}
+                      disabled={isBusy}
+                      className="px-3.5 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {isMutatingStatus ? 'Memindahkan...' : 'Simpan Jadwal Ulang'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -587,15 +1035,15 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
                   <button
                     type="button"
                     onClick={handleConfirmDelete}
-                    disabled={isDeleting || isSaving}
+                    disabled={isBusy}
                     className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold disabled:opacity-50 whitespace-nowrap"
                   >
-                    {isDeleting ? 'Menghapus...' : 'Ya, Hapus Agenda'}
+                    {isDeleting ? 'Menghapus...' : 'Ya, Hapus Permanen'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteStep(false)}
-                    disabled={isDeleting}
+                    disabled={isBusy}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium whitespace-nowrap"
                   >
                     Batal
@@ -604,8 +1052,11 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmDeleteStep(true)}
-                  disabled={isSaving}
+                  onClick={() => {
+                    setActionMode('none');
+                    setConfirmDeleteStep(true);
+                  }}
+                  disabled={isBusy}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold transition-colors whitespace-nowrap"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -619,15 +1070,15 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
             <button
               type="button"
               onClick={onClose}
-              disabled={isSaving || isDeleting}
+              disabled={isBusy}
               className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold transition-colors whitespace-nowrap"
             >
-              Batal
+              {isEditing ? 'Tutup' : 'Batal'}
             </button>
             <button
               type="submit"
               form="agenda-form"
-              disabled={isSaving || isDeleting}
+              disabled={isBusy}
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap"
             >
               {isSaving
@@ -642,3 +1093,4 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
     </div>
   );
 };
+

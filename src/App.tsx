@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Navbar, NavTab } from './components/Navbar';
 import { DashboardStatsCards } from './components/DashboardStatsCards';
 import { DashboardAgendaTicker } from './components/DashboardAgendaTicker';
@@ -49,12 +49,19 @@ import {
 } from './utils/disposisiLogic';
 import {
   DEFAULT_INITIAL_PASSWORD,
+  IDLE_TIMEOUT_MS,
+  IDLE_WARNING_THRESHOLD_MS,
   buildLoginAccounts,
+  getIdleRemainingMs,
   hashPassword,
+  isSessionIdleExpired,
+  parseStoredTimestamp,
 } from './utils/authLogic';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Clock } from 'lucide-react';
 import {
   AgendaMutationPayload,
+  AgendaReschedulePayload,
+  cancelAgendaEventDb,
   createAgendaEventDb,
   createPersonelDb,
   createSuratMasukDb,
@@ -64,6 +71,8 @@ import {
   ensureWorkspaceInitialized,
   isChunkedPdfUrl,
   loadPdfDataUrlFromFirestore,
+  reactivateAgendaEventDb,
+  rescheduleAgendaEventDb,
   saveAkunPasswordDb,
   subscribeAgendaEvents,
   subscribeAkunKredensial,
@@ -81,6 +90,9 @@ import {
 } from './services/firestoreService';
 
 const AUTH_ACCOUNT_STORAGE_KEY = 'sipantau_auth_account_id';
+const AUTH_LAST_ACTIVITY_STORAGE_KEY = 'sipantau_last_activity_at';
+const IDLE_EXPIRED_NOTICE =
+  'Sesi Anda berakhir otomatis karena tidak ada aktivitas selama 30 menit. Silakan masuk kembali.';
 
 export default function App() {
   // Firestore Workspace Loading State
@@ -98,14 +110,46 @@ export default function App() {
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
   const [akunKredensialMap, setAkunKredensialMap] = useState<Record<string, AkunKredensial>>({});
 
-  // Authenticated logged-in account (Pejabat or Personel)
+  // Authenticated logged-in account (with automatic 30-minute idle expiration check on boot)
+  const [initialBootExpired] = useState<boolean>(() => {
+    try {
+      const savedId = localStorage.getItem(AUTH_ACCOUNT_STORAGE_KEY) || '';
+      if (!savedId) return false;
+      const lastAct = parseStoredTimestamp(localStorage.getItem(AUTH_LAST_ACTIVITY_STORAGE_KEY));
+      if (isSessionIdleExpired(lastAct, Date.now(), IDLE_TIMEOUT_MS)) {
+        localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LAST_ACTIVITY_STORAGE_KEY);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  });
+
   const [loggedInAccountId, setLoggedInAccountId] = useState<string>(() => {
+    if (initialBootExpired) return '';
     try {
       return localStorage.getItem(AUTH_ACCOUNT_STORAGE_KEY) || '';
     } catch {
       return '';
     }
   });
+
+  const [sessionNotice, setSessionNotice] = useState<string | null>(
+    initialBootExpired ? IDLE_EXPIRED_NOTICE : null
+  );
+  const [idleWarningSeconds, setIdleWarningSeconds] = useState<number | null>(null);
+
+  const lastActivityRef = useRef<number>((() => {
+    try {
+      const stored = parseStoredTimestamp(localStorage.getItem(AUTH_LAST_ACTIVITY_STORAGE_KEY));
+      return stored || Date.now();
+    } catch {
+      return Date.now();
+    }
+  })());
+  const lastPersistedActivityRef = useRef<number>(lastActivityRef.current);
 
   const loginAccounts = buildLoginAccounts(pejabatConfig, personelList);
   const loggedInAccount: LoginAccount | null =
@@ -211,12 +255,14 @@ export default function App() {
       if (dbReady && loggedInAccountId && !loggedInAccount) {
         setLoggedInAccountId('');
         localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LAST_ACTIVITY_STORAGE_KEY);
         return;
       }
       if (loggedInAccountId) {
         localStorage.setItem(AUTH_ACCOUNT_STORAGE_KEY, loggedInAccountId);
       } else {
         localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LAST_ACTIVITY_STORAGE_KEY);
       }
     } catch {
       // ignore localStorage errors
@@ -653,24 +699,180 @@ export default function App() {
     }
   };
 
+  const recordUserActivity = useCallback((forcePersist = false) => {
+    const now = Date.now();
+    lastActivityRef.current = now;
+    setIdleWarningSeconds((prev) => (prev !== null ? null : prev));
+
+    if (forcePersist || now - lastPersistedActivityRef.current >= 5000) {
+      lastPersistedActivityRef.current = now;
+      try {
+        localStorage.setItem(AUTH_LAST_ACTIVITY_STORAGE_KEY, String(now));
+      } catch {
+        // ignore localStorage errors
+      }
+    }
+  }, []);
+
   const handleLoginSuccess = (account: LoginAccount) => {
+    const now = Date.now();
+    lastActivityRef.current = now;
+    lastPersistedActivityRef.current = now;
+    try {
+      localStorage.setItem(AUTH_ACCOUNT_STORAGE_KEY, account.id);
+      localStorage.setItem(AUTH_LAST_ACTIVITY_STORAGE_KEY, String(now));
+    } catch {
+      // ignore localStorage errors
+    }
+    setSessionNotice(null);
+    setIdleWarningSeconds(null);
     setLoggedInAccountId(account.id);
     setActiveTab('dashboard');
     showToast(`Selamat datang, ${account.nama} (${account.displayRole}).`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback((reason: 'manual' | 'idle' = 'manual') => {
+    try {
+      localStorage.removeItem(AUTH_ACCOUNT_STORAGE_KEY);
+      localStorage.removeItem(AUTH_LAST_ACTIVITY_STORAGE_KEY);
+    } catch {
+      // ignore localStorage errors
+    }
+    setIdleWarningSeconds(null);
     setLoggedInAccountId('');
     setActiveTab('dashboard');
     setIsModalPersonelOpen(false);
     setIsModalSuratMasukOpen(false);
+    setSelectedSuratForEditId(null);
     setIsModalDisposisiOpen(false);
+    setSelectedSuratForDisposisiId(null);
     setIsModalTindakLanjutOpen(false);
+    setSelectedSuratForTindakLanjutId(null);
     setIsModalUploadSuratKeluarOpen(false);
+    setSelectedSuratForSuratKeluarId(null);
+    setIsModalPdfViewerOpen(false);
+    setSelectedFileForViewer(null);
+    setIsModalLembarDisposisiOpen(false);
+    setSelectedSuratForLembarId(null);
+    setIsModalDeleteOpen(false);
+    setSelectedSuratForDeleteId(null);
     setIsModalAgendaOpen(false);
     setSelectedAgendaForEditId(null);
-    showToast('Anda telah keluar dari akun.');
-  };
+    if (reason === 'idle') {
+      setSessionNotice(IDLE_EXPIRED_NOTICE);
+      showToast('Sesi berakhir otomatis karena tidak ada aktivitas selama 30 menit.');
+    } else {
+      setSessionNotice(null);
+      showToast('Anda telah keluar dari akun.');
+    }
+  }, []);
+
+  const logoutRef = useRef(handleLogout);
+  useEffect(() => {
+    logoutRef.current = handleLogout;
+  }, [handleLogout]);
+
+  // Monitor inactivity for ALL authenticated accounts (Ketua Tim, Administrator, Staf Wasdal)
+  useEffect(() => {
+    if (!dbReady || !loggedInAccount) return;
+
+    // Seed stored timestamp if absent from pre-existing login, without forcing immediate logout
+    try {
+      const existingStored = parseStoredTimestamp(localStorage.getItem(AUTH_LAST_ACTIVITY_STORAGE_KEY));
+      if (!existingStored) {
+        const now = Date.now();
+        lastActivityRef.current = now;
+        lastPersistedActivityRef.current = now;
+        localStorage.setItem(AUTH_LAST_ACTIVITY_STORAGE_KEY, String(now));
+      }
+    } catch {
+      // ignore storage issues
+    }
+
+    const evaluateIdleState = () => {
+      const now = Date.now();
+      let latestActivity = lastActivityRef.current;
+      try {
+        const stored = parseStoredTimestamp(localStorage.getItem(AUTH_LAST_ACTIVITY_STORAGE_KEY));
+        if (stored && stored > latestActivity) {
+          latestActivity = stored;
+          lastActivityRef.current = stored;
+        }
+      } catch {
+        // ignore storage issues
+      }
+
+      if (isSessionIdleExpired(latestActivity, now, IDLE_TIMEOUT_MS)) {
+        logoutRef.current('idle');
+        return true;
+      }
+
+      const remaining = getIdleRemainingMs(latestActivity, now, IDLE_TIMEOUT_MS);
+      if (remaining <= IDLE_WARNING_THRESHOLD_MS) {
+        setIdleWarningSeconds(Math.max(1, Math.ceil(remaining / 1000)));
+      } else {
+        setIdleWarningSeconds((prev) => (prev !== null ? null : prev));
+      }
+      return false;
+    };
+
+    // Check immediately on mount/session attach
+    if (evaluateIdleState()) return;
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'pointerdown',
+      'click',
+    ];
+
+    const onActivity = () => {
+      recordUserActivity(false);
+    };
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        evaluateIdleState();
+      }
+    };
+
+    const onStorageSync = (e: StorageEvent) => {
+      if (e.key === AUTH_ACCOUNT_STORAGE_KEY && !e.newValue) {
+        logoutRef.current('manual');
+        return;
+      }
+      if (e.key === AUTH_LAST_ACTIVITY_STORAGE_KEY && e.newValue) {
+        const synced = parseStoredTimestamp(e.newValue);
+        if (synced && synced > lastActivityRef.current) {
+          lastActivityRef.current = synced;
+          lastPersistedActivityRef.current = synced;
+          setIdleWarningSeconds(null);
+        }
+      }
+    };
+
+    for (const evt of activityEvents) {
+      window.addEventListener(evt, onActivity, { passive: true, capture: true });
+    }
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    window.addEventListener('focus', onVisibilityOrFocus);
+    window.addEventListener('storage', onStorageSync);
+
+    const intervalId = window.setInterval(evaluateIdleState, 1000);
+
+    return () => {
+      for (const evt of activityEvents) {
+        window.removeEventListener(evt, onActivity, { capture: true });
+      }
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      window.removeEventListener('storage', onStorageSync);
+      window.clearInterval(intervalId);
+    };
+  }, [dbReady, loggedInAccount?.id, recordUserActivity]);
 
   const handleSaveAgenda = async (
     payload: AgendaMutationPayload,
@@ -693,6 +895,33 @@ export default function App() {
     await deleteAgendaEventDb(agendaId);
     showToast(
       `Agenda ${target ? `"${target.judul}"` : ''} berhasil dihapus dari kalender.`
+    );
+  };
+
+  const handleCancelAgenda = async (agendaId: string, alasan?: string) => {
+    const target = agendaList.find((a) => a.id === agendaId);
+    await cancelAgendaEventDb(agendaId, currentUser.nama, alasan);
+    showToast(
+      `Agenda ${target ? `"${target.judul}"` : ''} ditandai berstatus Dibatalkan.`
+    );
+  };
+
+  const handleRescheduleAgenda = async (
+    agendaId: string,
+    payload: AgendaReschedulePayload
+  ) => {
+    const target = agendaList.find((a) => a.id === agendaId);
+    await rescheduleAgendaEventDb(agendaId, payload);
+    showToast(
+      `Agenda ${target ? `"${target.judul}"` : ''} dijadwalkan ulang ke ${payload.tanggal}.`
+    );
+  };
+
+  const handleReactivateAgenda = async (agendaId: string) => {
+    const target = agendaList.find((a) => a.id === agendaId);
+    await reactivateAgendaEventDb(agendaId, currentUser.nama);
+    showToast(
+      `Agenda ${target ? `"${target.judul}"` : ''} diaktifkan kembali menjadi Terjadwal.`
     );
   };
 
@@ -774,6 +1003,7 @@ export default function App() {
           accounts={loginAccounts}
           akunKredensialMap={akunKredensialMap}
           onLoginSuccess={handleLoginSuccess}
+          sessionNotice={sessionNotice}
         />
       </>
     );
@@ -790,13 +1020,39 @@ export default function App() {
         </div>
       )}
 
+      {/* 60-Second Pre-Logout Inactivity Warning Banner */}
+      {idleWarningSeconds !== null && (
+        <div
+          role="alert"
+          data-testid="idle-warning-banner"
+          className="fixed bottom-5 left-5 right-5 sm:left-auto sm:right-5 sm:max-w-md z-50 bg-amber-50 border border-amber-300 text-amber-950 rounded-xl shadow-xl p-3.5 flex items-center justify-between gap-3 text-xs print:hidden"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <div className="font-bold">Tidak ada aktivitas terdeteksi</div>
+              <div className="text-amber-800 tabular-nums">
+                Akun akan logout otomatis dalam <span className="font-bold">{idleWarningSeconds} detik</span>.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => recordUserActivity(true)}
+            className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white font-semibold shrink-0 whitespace-nowrap"
+          >
+            Tetap Masuk
+          </button>
+        </div>
+      )}
+
       {/* Top Navbar with Branding & Authenticated Account Menu */}
       <Navbar
         currentRole={currentRole}
         currentAccount={loggedInAccount}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onLogout={handleLogout}
+        onLogout={() => handleLogout('manual')}
       />
 
       {/* Main Container */}
@@ -1310,6 +1566,9 @@ export default function App() {
           personelList={personelList}
           currentUser={currentUser}
           onSave={handleSaveAgenda}
+          onCancelAgenda={handleCancelAgenda}
+          onRescheduleAgenda={handleRescheduleAgenda}
+          onReactivateAgenda={handleReactivateAgenda}
           onDelete={handleDeleteAgenda}
         />
       )}
