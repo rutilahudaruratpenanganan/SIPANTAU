@@ -319,6 +319,7 @@ export default function App() {
       item.instruksiDisposisi
     );
     const newTahap = (item.tahapSaatIni < 3 ? 3 : item.tahapSaatIni) as TahapTindakLanjutId;
+    const tenggatLabel = tenggatWaktu ? ` Tenggat: ${tenggatWaktu}.` : '';
     const newRiwayat = [
       ...item.riwayatTindakLanjut,
       {
@@ -328,8 +329,8 @@ export default function App() {
         tanggal: new Date().toISOString().replace('T', ' ').substring(0, 16),
         aktor: currentUser.nama,
         catatan: wasEditing
-          ? `Disposisi dan instruksi diperbarui. Personel: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`
-          : `Didisposisikan kepada: ${penerimaNama.join(', ')}. Instruksi: "${instruksi}"`,
+          ? `Disposisi dan instruksi diperbarui. Personel: ${penerimaNama.join(', ')}.${tenggatLabel} Instruksi: "${instruksi}"`
+          : `Didisposisikan kepada: ${penerimaNama.join(', ')}.${tenggatLabel} Instruksi: "${instruksi}"`,
       },
     ];
 
@@ -347,7 +348,7 @@ export default function App() {
       );
       showToast(
         wasEditing
-          ? `Perubahan disposisi & instruksi untuk ${penerimaNama.join(', ')} berhasil disimpan.`
+          ? `Perubahan disposisi, instruksi & tenggat waktu untuk ${penerimaNama.join(', ')} berhasil disimpan.`
           : `Disposisi berhasil diteruskan kepada ${penerimaNama.join(', ')}.`
       );
     } catch (err) {

@@ -112,6 +112,20 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
               </tr>
               <tr>
                 <td className="border border-slate-900 p-2 font-bold bg-slate-100">
+                  Tenggat Waktu
+                </td>
+                <td className="border border-slate-900 p-2 font-mono font-semibold text-amber-800">
+                  {surat.tenggatWaktu || '-'}
+                </td>
+                <td className="border border-slate-900 p-2 font-bold bg-slate-100">
+                  Status Tindak Lanjut
+                </td>
+                <td className="border border-slate-900 p-2 font-semibold">
+                  {surat.statusSelesai ? 'Selesai Tindak Lanjut' : 'Dalam Proses'}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 p-2 font-bold bg-slate-100">
                   Asal Surat / Pengirim
                 </td>
                 <td colSpan={3} className="border border-slate-900 p-2 font-bold">

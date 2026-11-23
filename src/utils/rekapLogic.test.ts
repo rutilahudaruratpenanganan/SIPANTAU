@@ -149,9 +149,15 @@ test('formatRekapPeriodeLabel and getRekapStatusLabel return human-readable Indo
   );
 });
 
-test('buildRekapCsvContent includes complete normalized history when enabled', () => {
-  const csv = buildRekapCsvContent([sampleSurat[0]], true);
+test('buildRekapCsvContent includes complete normalized history and tenggatWaktu when enabled', () => {
+  const suratWithTenggat: SuratMasuk = {
+    ...sampleSurat[0],
+    tenggatWaktu: '2026-10-18',
+  };
+  const csv = buildRekapCsvContent([suratWithTenggat], true);
   assert.equal(csv.startsWith('\uFEFF'), true);
+  assert.equal(csv.includes('Tenggat Waktu'), true);
+  assert.equal(csv.includes('2026-10-18'), true);
   assert.equal(csv.includes('Riwayat Tindak Lanjut Lengkap'), true);
   assert.equal(
     csv.includes('Disposisi surat masuk diterima dari Kepala Bidang Perumahan.'),

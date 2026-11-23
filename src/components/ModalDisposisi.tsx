@@ -65,9 +65,9 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
 
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Sync internal state whenever the selected surat changes
+  // Sync internal state only when the modal opens or target surat changes
   useEffect(() => {
-    if (surat) {
+    if (isOpen && surat) {
       setSelectedPersonelIds(surat.penerimaDisposisiIds || []);
       setInstruksi(surat.instruksiDisposisi || '');
       setCatatan(surat.catatanDisposisiKetuaTim || '');
@@ -75,12 +75,12 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
         surat.tanggalDisposisi || new Date().toISOString().split('T')[0]
       );
       setTenggatWaktu(
-        surat.tenggatWaktu || 
+        surat.tenggatWaktu ||
         new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       );
       setErrorMessage('');
     }
-  }, [surat?.id, surat?.instruksiDisposisi, surat?.penerimaDisposisiIds, surat?.catatanDisposisiKetuaTim, surat?.tanggalDisposisi, surat?.tenggatWaktu]);
+  }, [isOpen, surat?.id]);
 
   if (!isOpen || !surat) return null;
 
@@ -135,8 +135,8 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
       selectedNames,
       instruksi.trim(),
       catatan.trim(),
-      tanggalDisposisi,
-      tenggatWaktu
+      tanggalDisposisi.trim(),
+      tenggatWaktu.trim()
     );
     onClose();
   };
@@ -170,7 +170,9 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Tutup modal disposisi"
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -235,10 +237,11 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
           {/* Tanggal & Tenggat */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">
+              <label htmlFor="disposisi-tanggal" className="block font-semibold text-slate-700 mb-1">
                 Tanggal Disposisi
               </label>
               <input
+                id="disposisi-tanggal"
                 type="date"
                 value={tanggalDisposisi}
                 onChange={(e) => setTanggalDisposisi(e.target.value)}
@@ -246,10 +249,11 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">
+              <label htmlFor="disposisi-tenggat" className="block font-semibold text-slate-700 mb-1">
                 Tenggat Waktu Penyelesaian
               </label>
               <input
+                id="disposisi-tenggat"
                 type="date"
                 value={tenggatWaktu}
                 onChange={(e) => setTenggatWaktu(e.target.value)}
@@ -261,7 +265,7 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
           {/* Petunjuk / Instruksi Disposisi - EDITABLE */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block font-semibold text-slate-800">
+              <label htmlFor="disposisi-instruksi" className="block font-semibold text-slate-800">
                 Instruksi / Arahan Disposisi Ketua Tim <span className="text-rose-500">*</span>
               </label>
               <div className="flex items-center gap-2">
@@ -311,6 +315,7 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
 
             {/* Textarea for Instruksi */}
             <textarea
+              id="disposisi-instruksi"
               rows={3}
               value={instruksi}
               onChange={(e) => setInstruksi(e.target.value)}
@@ -321,10 +326,11 @@ export const ModalDisposisi: React.FC<ModalDisposisiProps> = ({
 
           {/* Catatan Tambahan */}
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
+            <label htmlFor="disposisi-catatan" className="block font-semibold text-slate-700 mb-1">
               Catatan Penting / Atensi Khusus Ketua Tim
             </label>
             <input
+              id="disposisi-catatan"
               type="text"
               value={catatan}
               onChange={(e) => setCatatan(e.target.value)}

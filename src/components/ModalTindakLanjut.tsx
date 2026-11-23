@@ -263,13 +263,18 @@ export const ModalTindakLanjut: React.FC<ModalTindakLanjutProps> = ({
           {surat.instruksiDisposisi ? (
             <div className="p-4 rounded-xl bg-purple-50/80 border border-purple-200 text-purple-950 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold text-xs text-purple-900">
                     Instruksi Disposisi Ketua Tim:
                   </span>
                   <span className="px-2 py-0.5 rounded text-[10px] bg-purple-200 text-purple-800 font-medium">
                     {surat.tanggalDisposisi || 'Terdisposisi'}
                   </span>
+                  {surat.tenggatWaktu && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-semibold font-mono">
+                      Tenggat: {surat.tenggatWaktu}
+                    </span>
+                  )}
                 </div>
                 
                 {!surat.statusSelesai && allowDisposisi && (

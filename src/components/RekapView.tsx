@@ -357,6 +357,11 @@ export const RekapView: React.FC<RekapViewProps> = ({
                         <div className="font-mono text-[10px] text-slate-500 tabular-nums">
                           {item.tanggalDisposisi || '-'}
                         </div>
+                        {item.tenggatWaktu && (
+                          <div className="font-mono text-[10px] font-semibold text-amber-800 tabular-nums">
+                            Tenggat: {item.tenggatWaktu}
+                          </div>
+                        )}
                         <div className="font-semibold text-purple-900 mt-0.5">
                           {item.penerimaDisposisiNama.join(', ') || 'Belum didisposisikan'}
                         </div>

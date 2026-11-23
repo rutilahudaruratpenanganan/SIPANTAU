@@ -282,13 +282,21 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                               </span>
                             ))}
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-0.5">
-                            <span>{item.tanggalDisposisi || '-'}</span>
+                          <div className="flex items-start justify-between gap-2 text-[10px] text-slate-500 font-mono pt-0.5">
+                            <div className="space-y-0.5 min-w-0">
+                              <div className="whitespace-nowrap">Disposisi: {item.tanggalDisposisi || '-'}</div>
+                              {item.tenggatWaktu && (
+                                <div className="text-amber-700 font-semibold flex items-center gap-1 whitespace-nowrap">
+                                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                                  <span>Tenggat: {item.tenggatWaktu}</span>
+                                </div>
+                              )}
+                            </div>
                             {!item.statusSelesai && canCreateDisposisi(currentRole) && (
                               <button
                                 type="button"
                                 onClick={() => onOpenDisposisi(item)}
-                                className="text-purple-700 hover:text-purple-900 font-bold hover:underline inline-flex items-center gap-0.5"
+                                className="text-purple-700 hover:text-purple-900 font-bold hover:underline inline-flex items-center gap-0.5 shrink-0"
                                 title="Edit Disposisi & Instruksi"
                               >
                                 <FileEdit className="w-2.5 h-2.5" />
