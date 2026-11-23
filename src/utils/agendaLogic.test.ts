@@ -456,7 +456,7 @@ test('getTodayActiveAndUpcomingAgendas returns only ongoing and upcoming agendas
   );
 });
 
-test('cancelled agendas are excluded from ticker & upcoming, while rescheduled agendas remain active with status metadata', () => {
+test('cancelled agendas stay in today running ticker with status dibatalkan, while excluded from upcoming active sidebar', () => {
   const today = '2026-11-22';
   const statusEvents: AgendaEvent[] = [
     {
@@ -482,17 +482,34 @@ test('cancelled agendas are excluded from ticker & upcoming, while rescheduled a
       status: 'dijadwalkan_ulang',
       alasanStatus: 'Digeser ke hari ini',
     },
+    {
+      ...sampleEvents[2],
+      id: 'cancelled-past-today',
+      judul: 'Apel Pagi Batal Sudah Lewat',
+      tanggal: today,
+      sepanjangHari: false,
+      jamMulai: '07:00',
+      jamSelesai: '08:00',
+      status: 'dibatalkan',
+    },
   ];
 
-  // Ticker excludes cancelled event, includes rescheduled event
+  // Ticker includes both rescheduled active event and cancelled event for today (active first, then cancelled)
   const tickerItems = getTodayActiveAndUpcomingAgendas(statusEvents, today, 10 * 60);
   assert.deepEqual(
-    tickerItems.map((i) => i.event.id),
-    ['rescheduled-today']
+    tickerItems.map((i) => ({ id: i.event.id, status: i.status })),
+    [
+      { id: 'rescheduled-today', status: 'akan' },
+      { id: 'cancelled-today', status: 'dibatalkan' },
+    ]
   );
   assert.match(formatAgendaTickerEntry(tickerItems[0]), /Jadwal Ulang/);
+  assert.match(
+    formatAgendaTickerEntry(tickerItems[1]),
+    /\[DIBATALKAN\] 13:00–14:00 WIB · Rapat Batal Hari Ini · Alasan: Narasumber berhalangan hadir/
+  );
 
-  // Upcoming excludes cancelled event
+  // Upcoming sidebar still excludes cancelled events
   const upcoming = getUpcomingAgendaEvents(statusEvents, today, 5);
   assert.deepEqual(
     upcoming.map((e) => e.id),
@@ -502,7 +519,7 @@ test('cancelled agendas are excluded from ticker & upcoming, while rescheduled a
   // Filter by status
   assert.deepEqual(
     filterAgendaEvents(statusEvents, { status: 'dibatalkan' }).map((e) => e.id),
-    ['cancelled-today']
+    ['cancelled-past-today', 'cancelled-today']
   );
   assert.deepEqual(
     filterAgendaEvents(statusEvents, { status: 'dijadwalkan_ulang' }).map((e) => e.id),
@@ -517,8 +534,8 @@ test('cancelled agendas are excluded from ticker & upcoming, while rescheduled a
 
   // Rekap stats & CSV include status counts and columns
   const stats = calculateAgendaRekapStats(statusEvents);
-  assert.equal(stats.totalAgenda, 2);
-  assert.equal(stats.totalDibatalkan, 1);
+  assert.equal(stats.totalAgenda, 3);
+  assert.equal(stats.totalDibatalkan, 2);
   assert.equal(stats.totalDijadwalkanUlang, 1);
   assert.equal(stats.totalAktif, 1);
 

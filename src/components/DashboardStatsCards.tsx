@@ -33,12 +33,8 @@ export const DashboardStatsCards: React.FC<DashboardStatsCardsProps> = ({
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 text-white shadow-sm border border-slate-800">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-blue-300 mb-1">
-              <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-              Pusat Kendali Administrasi Persuratan & Tindak Lanjut
-            </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Sistem Informasi Persuratan dan Pemantauan Tindak Lanjut
+              Sistem Informasi Persuratan, Agenda, dan Pemantauan
             </h1>
             <p className="text-sm sm:text-base font-medium text-blue-200 mt-1">
               Tim Pengendalian dan Pengawasan Perumahan

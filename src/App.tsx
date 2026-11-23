@@ -42,6 +42,7 @@ import {
   calculateDashboardStats, 
   TAHAP_TINDAK_LANJUT,
   canAccessBackup,
+  canAdvanceStage,
   canCreateDisposisi,
   canDeleteSurat,
   canManagePersonel,
@@ -278,33 +279,64 @@ export default function App() {
     let unsubSurat: (() => void) | undefined;
     let unsubAgenda: (() => void) | undefined;
 
+    const readyFlags = {
+      workspace: false,
+      personel: false,
+      akun: false,
+      agenda: false,
+      surat: false,
+    };
+    const markReady = (key: keyof typeof readyFlags) => {
+      if (cancelled || readyFlags[key]) return;
+      readyFlags[key] = true;
+      if (
+        readyFlags.workspace &&
+        readyFlags.personel &&
+        readyFlags.akun &&
+        readyFlags.agenda &&
+        readyFlags.surat
+      ) {
+        setDbReady(true);
+      }
+    };
+
     (async () => {
       try {
         await ensureWorkspaceInitialized();
         if (cancelled) return;
 
         unsubWorkspace = subscribeWorkspace(
-          (cfg) => setPejabatConfig(cfg),
+          (cfg) => {
+            setPejabatConfig(cfg);
+            markReady('workspace');
+          },
           (err) => setAsyncError(err)
         );
         unsubPersonel = subscribePersonel(
           (list) => {
             if (list.length > 0) setPersonelList(list);
+            markReady('personel');
           },
           (err) => setAsyncError(err)
         );
         unsubAkun = subscribeAkunKredensial(
-          (map) => setAkunKredensialMap(map),
+          (map) => {
+            setAkunKredensialMap(map);
+            markReady('akun');
+          },
           (err) => setAsyncError(err)
         );
         unsubAgenda = subscribeAgendaEvents(
-          (list) => setAgendaList(list),
+          (list) => {
+            setAgendaList(list);
+            markReady('agenda');
+          },
           (err) => setAsyncError(err)
         );
         unsubSurat = subscribeSuratMasuk(
           (list) => {
             setSuratList(list);
-            setDbReady(true);
+            markReady('surat');
           },
           (err) => setAsyncError(err)
         );
@@ -435,6 +467,10 @@ export default function App() {
   ) => {
     const item = suratList.find((s) => s.id === suratId);
     if (!item) return;
+    if (!canAdvanceStage(currentRole, item.tahapSaatIni)) {
+      showToast('Anda tidak memiliki wewenang untuk melanjutkan tahapan tindak lanjut ini.');
+      return;
+    }
     if (item.statusSelesai) {
       showToast('Surat sudah berstatus Selesai. Buka kembali status terlebih dahulu untuk mengubah tahapan.');
       return;
@@ -507,6 +543,10 @@ export default function App() {
 
   // Handler: Set Tahap Direct
   const handleSetTahapDirect = async (suratId: string, tahap: TahapTindakLanjutId, catatan?: string) => {
+    if (!isFullAccessRole(currentRole)) {
+      showToast('Hanya Ketua Tim atau Administrator yang berhak mengatur tahapan secara langsung.');
+      return;
+    }
     const item = suratList.find((s) => s.id === suratId);
     if (!item) return;
     if (item.statusSelesai) {
@@ -674,8 +714,30 @@ export default function App() {
       showToast('Hanya Ketua Tim atau Administrator yang berhak mengubah data personel.');
       return;
     }
+    const target = personelList.find((p) => p.id === id);
     try {
       await updatePersonelDb(id, updated);
+      const isKetuaAccount =
+        updated.peran === 'ketua_tim' ||
+        updated.isKetuaTim ||
+        (updated.peran === undefined && (target?.peran === 'ketua_tim' || target?.isKetuaTim));
+      if (isKetuaAccount) {
+        await updateWorkspacePejabatDb({
+          ...pejabatConfig,
+          ketuaTim: {
+            nama:
+              (updated.nama ?? target?.nama ?? pejabatConfig.ketuaTim.nama).trim() ||
+              pejabatConfig.ketuaTim.nama,
+            nip:
+              updated.nip !== undefined
+                ? updated.nip.trim()
+                : target?.nip ?? pejabatConfig.ketuaTim.nip,
+            jabatan:
+              (updated.jabatan ?? target?.jabatan ?? pejabatConfig.ketuaTim.jabatan).trim() ||
+              pejabatConfig.ketuaTim.jabatan,
+          },
+        });
+      }
       showToast('Data personel berhasil diperbarui di database.');
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));

@@ -128,7 +128,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 SIPANTAU-WASDAL
               </div>
               <p className="text-xs font-medium text-blue-200 leading-snug mt-0.5">
-                Sistem Informasi Persuratan dan Pemantauan Tindak Lanjut
+                Sistem Informasi Persuratan, Agenda, dan Pemantauan
               </p>
               <p className="text-[11px] text-slate-300 mt-0.5">
                 Tim Pengendalian dan Pengawasan Perumahan

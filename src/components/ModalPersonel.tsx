@@ -49,6 +49,7 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
   // Pejabat form state
   const [pejabat, setPejabat] = useState<PejabatConfig>(pejabatConfig);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [formErrorMsg, setFormErrorMsg] = useState('');
 
   // Sync state if pejabatConfig updates
   useEffect(() => {
@@ -80,14 +81,52 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
   const handleSavePejabat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!allowManage) return;
-    onUpdatePejabat(pejabat);
+    if (
+      !pejabat.kepalaDinas.nama.trim() ||
+      !pejabat.kepalaDinas.jabatan.trim() ||
+      !pejabat.kepalaDinas.instansi.trim() ||
+      !pejabat.kepalaBidang.nama.trim() ||
+      !pejabat.ketuaTim.nama.trim()
+    ) {
+      setSaveSuccessMsg('');
+      setFormErrorMsg('Nama, jabatan, dan instansi pejabat struktural wajib diisi.');
+      return;
+    }
+    setFormErrorMsg('');
+    onUpdatePejabat({
+      kepalaDinas: {
+        ...pejabat.kepalaDinas,
+        nama: pejabat.kepalaDinas.nama.trim(),
+        nip: pejabat.kepalaDinas.nip.trim(),
+        jabatan: pejabat.kepalaDinas.jabatan.trim(),
+        instansi: pejabat.kepalaDinas.instansi.trim(),
+      },
+      kepalaBidang: {
+        ...pejabat.kepalaBidang,
+        nama: pejabat.kepalaBidang.nama.trim(),
+        nip: pejabat.kepalaBidang.nip.trim(),
+        jabatan: pejabat.kepalaBidang.jabatan.trim(),
+      },
+      ketuaTim: {
+        ...pejabat.ketuaTim,
+        nama: pejabat.ketuaTim.nama.trim(),
+        nip: pejabat.ketuaTim.nip.trim(),
+        jabatan: pejabat.ketuaTim.jabatan.trim(),
+      },
+    });
     setSaveSuccessMsg('Data penandatangan dan pejabat struktural berhasil disimpan. Akses pengguna aktif langsung diperbarui!');
     setTimeout(() => setSaveSuccessMsg(''), 3500);
   };
 
   const handleAddPersonelSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNama.trim()) return;
+    if (!allowManage) return;
+    if (!newNama.trim() || !newJabatan.trim()) {
+      setSaveSuccessMsg('');
+      setFormErrorMsg('Nama lengkap dan jabatan personel baru wajib diisi.');
+      return;
+    }
+    setFormErrorMsg('');
 
     onAddPersonel({
       nama: newNama.trim(),
@@ -98,16 +137,19 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
       isKetuaTim: newPeran === 'ketua_tim',
     });
 
-    setSaveSuccessMsg(`Personel baru ${newNama} berhasil ditambahkan dengan password awal "wasdal".`);
+    setSaveSuccessMsg(`Personel baru ${newNama.trim()} berhasil ditambahkan dengan password awal "wasdal".`);
     setTimeout(() => setSaveSuccessMsg(''), 3500);
 
     setNewNama('');
     setNewNip('');
+    setNewJabatan('Staf Pengawasan dan Pengendalian Perumahan');
+    setNewPeran('staf');
     setNewEmail('');
     setIsAddingPersonel(false);
   };
 
   const startEditPersonel = (p: Personel) => {
+    setFormErrorMsg('');
     setEditingPersonelId(p.id);
     setEditNama(p.nama);
     setEditNip(p.nip || '');
@@ -116,17 +158,24 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
   };
 
   const saveEditPersonel = (id: string) => {
+    if (!allowManage) return;
+    if (!editNama.trim() || !editJabatan.trim()) {
+      setSaveSuccessMsg('');
+      setFormErrorMsg('Nama lengkap dan jabatan personel wajib diisi.');
+      return;
+    }
+    setFormErrorMsg('');
     const isKetua = editPeran === 'ketua_tim';
     const updated: Partial<Personel> = {
       nama: editNama.trim(),
-      nip: editNip.trim() || undefined,
+      nip: editNip.trim(),
       jabatan: editJabatan.trim(),
       peran: editPeran,
       isKetuaTim: isKetua,
     };
     onUpdatePersonel(id, updated);
     setEditingPersonelId(null);
-    setSaveSuccessMsg(`Data ${editNama} diperbarui. Akses pengguna aktif langsung diperbarui.`);
+    setSaveSuccessMsg(`Data ${editNama.trim()} diperbarui. Akses pengguna aktif langsung diperbarui.`);
     setTimeout(() => setSaveSuccessMsg(''), 3500);
   };
 
@@ -186,6 +235,13 @@ export const ModalPersonel: React.FC<ModalPersonelProps> = ({
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg flex items-center gap-2 font-medium">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{saveSuccessMsg}</span>
+            </div>
+          )}
+
+          {formErrorMsg && (
+            <div role="alert" className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{formErrorMsg}</span>
             </div>
           )}
 

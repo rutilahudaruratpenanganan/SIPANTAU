@@ -49,10 +49,18 @@ export const DashboardAgendaTicker: React.FC<DashboardAgendaTickerProps> = ({
     [agendaList, nowInfo.todayIso, nowInfo.nowMinutes]
   );
 
+  const cancelledCount = useMemo(
+    () => runningItems.filter((item) => item.status === 'dibatalkan').length,
+    [runningItems]
+  );
+  const activeCount = runningItems.length - cancelledCount;
+
   const durationSeconds = Math.max(22, runningItems.length * 14);
 
   const renderAgendaSegment = (item: TodayRunningAgendaItem, isDuplicate: boolean) => {
     const { event, status } = item;
+    const isCancelled = status === 'dibatalkan';
+    const isRescheduled = !isCancelled && event.status === 'dijadwalkan_ulang';
     const pesertaText =
       event.pesertaNama.length > 0
         ? event.pesertaNama.length > 2
@@ -66,30 +74,63 @@ export const DashboardAgendaTicker: React.FC<DashboardAgendaTickerProps> = ({
         type="button"
         tabIndex={isDuplicate ? -1 : undefined}
         onClick={() => onOpenEvent(event)}
-        className="inline-flex items-center gap-2 text-xs text-slate-700 hover:text-blue-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:underline"
+        data-status={status}
+        className={`inline-flex items-center gap-2 text-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:underline ${
+          isCancelled
+            ? 'text-slate-500 hover:text-rose-700'
+            : 'text-slate-700 hover:text-blue-700'
+        }`}
         title={`Klik untuk melihat detail agenda: ${event.judul}`}
       >
         <span
           className={`font-bold tracking-tight ${
-            status === 'sedang' ? 'text-emerald-700' : 'text-blue-700'
+            isCancelled
+              ? 'text-rose-700'
+              : status === 'sedang'
+              ? 'text-emerald-700'
+              : 'text-blue-700'
           }`}
         >
-          {status === 'sedang' ? 'SEDANG BERLANGSUNG' : 'AKAN BERJALAN'}
+          {isCancelled
+            ? 'DIBATALKAN'
+            : status === 'sedang'
+            ? 'SEDANG BERLANGSUNG'
+            : 'AKAN BERJALAN'}
         </span>
         <span aria-hidden="true" className="text-slate-300">
           ·
         </span>
-        <span className="font-mono font-semibold text-slate-900 tabular-nums">
+        <span
+          className={`font-mono font-semibold tabular-nums ${
+            isCancelled ? 'text-slate-500 line-through' : 'text-slate-900'
+          }`}
+        >
           {formatAgendaTimeRange(event)}
         </span>
         <span aria-hidden="true" className="text-slate-300">
           ·
         </span>
-        <span className="font-bold text-slate-900">{event.judul}</span>
+        <span
+          className={`font-bold ${
+            isCancelled ? 'text-slate-500 line-through' : 'text-slate-900'
+          }`}
+        >
+          {event.judul}
+        </span>
+        {isRescheduled && (
+          <>
+            <span aria-hidden="true" className="text-slate-300">
+              ·
+            </span>
+            <span className="font-semibold text-amber-700">Jadwal Ulang</span>
+          </>
+        )}
         <span aria-hidden="true" className="text-slate-300">
           ·
         </span>
-        <span className="text-slate-600">Lokasi: {event.lokasi}</span>
+        <span className={isCancelled ? 'text-slate-500' : 'text-slate-600'}>
+          Lokasi: {event.lokasi}
+        </span>
         <span aria-hidden="true" className="text-slate-300">
           ·
         </span>
@@ -100,7 +141,7 @@ export const DashboardAgendaTicker: React.FC<DashboardAgendaTickerProps> = ({
 
   return (
     <section
-      aria-label="Agenda Hari Ini yang Sedang dan Akan Berjalan"
+      aria-label="Agenda Hari Ini yang Sedang, Akan Berjalan, dan Dibatalkan"
       data-testid="dashboard-agenda-ticker"
       data-active-count={runningItems.length}
       className="w-full max-w-full bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col sm:flex-row sm:items-stretch"
@@ -113,7 +154,9 @@ export const DashboardAgendaTicker: React.FC<DashboardAgendaTickerProps> = ({
             Agenda Hari Ini
           </span>
           <span className="text-[11px] font-mono text-slate-300 tabular-nums whitespace-nowrap">
-            · {runningItems.length} aktif/terjadwal
+            {cancelledCount > 0
+              ? `· ${activeCount} aktif · ${cancelledCount} batal`
+              : `· ${runningItems.length} aktif/terjadwal`}
           </span>
         </div>
         <span className="sm:hidden text-[11px] font-mono text-slate-400 tabular-nums whitespace-nowrap">

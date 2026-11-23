@@ -55,6 +55,7 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
       surat.perihalSuratKeluar || `Jawaban / Tanggapan atas ${surat.perihal}`
     );
     setFilePreviewData(surat.fileSuratKeluar || null);
+    setTandaiSelesai(true);
     setSelectedFile(null);
     setIsReadingFile(false);
     setErrorMessage('');

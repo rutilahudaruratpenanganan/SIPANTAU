@@ -687,7 +687,7 @@ export function buildAgendaRekapCsvContent(
 // RUNNING TEXT AGENDA HARI INI (Sedang Berlangsung & Akan Berjalan)
 // ============================================================================
 
-export type TodayAgendaStatus = 'sedang' | 'akan';
+export type TodayAgendaStatus = 'sedang' | 'akan' | 'dibatalkan';
 
 export interface TodayRunningAgendaItem {
   event: AgendaEvent;
@@ -703,15 +703,17 @@ export function getTodayActiveAndUpcomingAgendas(
   const results: TodayRunningAgendaItem[] = [];
 
   for (const ev of events) {
-    if (normalizeAgendaStatus(ev.status) === 'dibatalkan') {
-      continue;
-    }
     if (normalizeIsoDateOnly(ev.tanggal) !== todayIso) {
       continue;
     }
 
+    const agendaStatus = normalizeAgendaStatus(ev.status);
+
     if (ev.sepanjangHari) {
-      results.push({ event: ev, status: 'sedang' });
+      results.push({
+        event: ev,
+        status: agendaStatus === 'dibatalkan' ? 'dibatalkan' : 'sedang',
+      });
       continue;
     }
 
@@ -723,13 +725,24 @@ export function getTodayActiveAndUpcomingAgendas(
       continue;
     }
 
-    const status: TodayAgendaStatus = startMin <= safeNow ? 'sedang' : 'akan';
+    const status: TodayAgendaStatus =
+      agendaStatus === 'dibatalkan'
+        ? 'dibatalkan'
+        : startMin <= safeNow
+        ? 'sedang'
+        : 'akan';
     results.push({ event: ev, status });
   }
 
+  const statusRank: Record<TodayAgendaStatus, number> = {
+    sedang: 0,
+    akan: 1,
+    dibatalkan: 2,
+  };
+
   return results.sort((a, b) => {
-    if (a.status !== b.status) {
-      return a.status === 'sedang' ? -1 : 1;
+    if (statusRank[a.status] !== statusRank[b.status]) {
+      return statusRank[a.status] - statusRank[b.status];
     }
     if (a.event.sepanjangHari !== b.event.sepanjangHari) {
       return a.event.sepanjangHari ? -1 : 1;
@@ -742,10 +755,19 @@ export function getTodayActiveAndUpcomingAgendas(
 
 export function formatAgendaTickerEntry(item: TodayRunningAgendaItem): string {
   const { event, status } = item;
-  const statusTag = status === 'sedang' ? 'SEDANG BERLANGSUNG' : 'AKAN BERJALAN';
+  const statusTag =
+    status === 'dibatalkan'
+      ? 'DIBATALKAN'
+      : status === 'sedang'
+      ? 'SEDANG BERLANGSUNG'
+      : 'AKAN BERJALAN';
   const timeText = formatAgendaTimeRange(event);
   const rescheduleNote =
-    normalizeAgendaStatus(event.status) === 'dijadwalkan_ulang' ? ' · Jadwal Ulang' : '';
+    status !== 'dibatalkan' && normalizeAgendaStatus(event.status) === 'dijadwalkan_ulang'
+      ? ' · Jadwal Ulang'
+      : '';
+  const cancelReasonNote =
+    status === 'dibatalkan' && event.alasanStatus ? ` · Alasan: ${event.alasanStatus}` : '';
   const pesertaText =
     event.pesertaNama.length > 0
       ? event.pesertaNama.length > 2
@@ -753,7 +775,7 @@ export function formatAgendaTickerEntry(item: TodayRunningAgendaItem): string {
         : event.pesertaNama.join(', ')
       : event.pesertaTambahan || '-';
 
-  return `[${statusTag}] ${timeText} · ${event.judul}${rescheduleNote} · Lokasi: ${event.lokasi} · Peserta: ${pesertaText}`;
+  return `[${statusTag}] ${timeText} · ${event.judul}${rescheduleNote}${cancelReasonNote} · Lokasi: ${event.lokasi} · Peserta: ${pesertaText}`;
 }
 
 
