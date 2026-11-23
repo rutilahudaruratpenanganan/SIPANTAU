@@ -19,7 +19,10 @@ import { RekapView } from './components/RekapView';
 import { BackupView } from './components/BackupView';
 import { LoginPage } from './components/LoginPage';
 import { AkunView } from './components/AkunView';
+import { AgendaView } from './components/AgendaView';
+import { ModalAgenda } from './components/ModalAgenda';
 import { 
+  AgendaEvent,
   AkunKredensial,
   LoginAccount,
   SuratMasuk, 
@@ -50,18 +53,23 @@ import {
 } from './utils/authLogic';
 import { CheckCircle2 } from 'lucide-react';
 import {
+  AgendaMutationPayload,
+  createAgendaEventDb,
   createPersonelDb,
   createSuratMasukDb,
+  deleteAgendaEventDb,
   deletePersonelDb,
   deleteSuratDb,
   ensureWorkspaceInitialized,
   isChunkedPdfUrl,
   loadPdfDataUrlFromFirestore,
   saveAkunPasswordDb,
+  subscribeAgendaEvents,
   subscribeAkunKredensial,
   subscribePersonel,
   subscribeSuratMasuk,
   subscribeWorkspace,
+  updateAgendaEventDb,
   updateDisposisiDb,
   updatePersonelDb,
   updateStageOrCatatanDb,
@@ -84,6 +92,7 @@ export default function App() {
 
   // Real-time Firestore-backed state
   const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
+  const [agendaList, setAgendaList] = useState<AgendaEvent[]>([]);
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
   const [akunKredensialMap, setAkunKredensialMap] = useState<Record<string, AkunKredensial>>({});
@@ -171,12 +180,21 @@ export default function App() {
   const [isModalDeleteOpen, setIsModalDeleteOpen] = useState(false);
   const [selectedSuratForDeleteId, setSelectedSuratForDeleteId] = useState<string | null>(null);
 
+  const [isModalAgendaOpen, setIsModalAgendaOpen] = useState(false);
+  const [selectedAgendaForEditId, setSelectedAgendaForEditId] = useState<string | null>(null);
+  const [agendaInitialOpts, setAgendaInitialOpts] = useState<{
+    date?: string;
+    jamMulai?: string;
+    jamSelesai?: string;
+  }>({});
+
   const selectedSuratForEdit = suratList.find((s) => s.id === selectedSuratForEditId) || null;
   const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
   const selectedSuratForTindakLanjut = suratList.find((s) => s.id === selectedSuratForTindakLanjutId) || null;
   const selectedSuratForSuratKeluar = suratList.find((s) => s.id === selectedSuratForSuratKeluarId) || null;
   const selectedSuratForLembar = suratList.find((s) => s.id === selectedSuratForLembarId) || null;
   const selectedSuratForDelete = suratList.find((s) => s.id === selectedSuratForDeleteId) || null;
+  const selectedAgendaForEdit = agendaList.find((a) => a.id === selectedAgendaForEditId) || null;
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -211,6 +229,7 @@ export default function App() {
     let unsubPersonel: (() => void) | undefined;
     let unsubAkun: (() => void) | undefined;
     let unsubSurat: (() => void) | undefined;
+    let unsubAgenda: (() => void) | undefined;
 
     (async () => {
       try {
@@ -229,6 +248,10 @@ export default function App() {
         );
         unsubAkun = subscribeAkunKredensial(
           (map) => setAkunKredensialMap(map),
+          (err) => setAsyncError(err)
+        );
+        unsubAgenda = subscribeAgendaEvents(
+          (list) => setAgendaList(list),
           (err) => setAsyncError(err)
         );
         unsubSurat = subscribeSuratMasuk(
@@ -250,6 +273,7 @@ export default function App() {
       unsubWorkspace?.();
       unsubPersonel?.();
       unsubAkun?.();
+      unsubAgenda?.();
       unsubSurat?.();
     };
   }, []);
@@ -642,7 +666,33 @@ export default function App() {
     setIsModalDisposisiOpen(false);
     setIsModalTindakLanjutOpen(false);
     setIsModalUploadSuratKeluarOpen(false);
+    setIsModalAgendaOpen(false);
+    setSelectedAgendaForEditId(null);
     showToast('Anda telah keluar dari akun.');
+  };
+
+  const handleSaveAgenda = async (
+    payload: AgendaMutationPayload,
+    editingId?: string
+  ) => {
+    if (editingId) {
+      await updateAgendaEventDb(editingId, payload);
+      showToast(`Agenda "${payload.judul}" berhasil diperbarui.`);
+    } else {
+      await createAgendaEventDb(payload, {
+        id: currentUser.id,
+        nama: currentUser.nama,
+      });
+      showToast(`Agenda "${payload.judul}" berhasil ditambahkan ke kalender.`);
+    }
+  };
+
+  const handleDeleteAgenda = async (agendaId: string) => {
+    const target = agendaList.find((a) => a.id === agendaId);
+    await deleteAgendaEventDb(agendaId);
+    showToast(
+      `Agenda ${target ? `"${target.judul}"` : ''} berhasil dihapus dari kalender.`
+    );
   };
 
   const handleSaveNewPassword = async (accountId: string, newHash: string) => {
@@ -749,10 +799,10 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6">
+      <main className="flex-1 w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 print:p-0 print:space-y-0">
         
         {/* Role & Access Info Bar */}
-        <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+        <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs print:hidden">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">Akses Pengguna Aktif:</span>
             <span className={`px-2 py-0.5 rounded-md font-bold ${
@@ -1073,6 +1123,27 @@ export default function App() {
           />
         )}
 
+        {/* VIEW 7: KALENDER & AGENDA KEGIATAN */}
+        {activeTab === 'agenda' && (
+          <AgendaView
+            agendaList={agendaList}
+            personelList={personelList}
+            pejabatConfig={pejabatConfig}
+            currentUser={currentUser}
+            onOpenCreate={(opts) => {
+              setSelectedAgendaForEditId(null);
+              setAgendaInitialOpts(opts || {});
+              setIsModalAgendaOpen(true);
+            }}
+            onOpenEvent={(ev) => {
+              setSelectedAgendaForEditId(ev.id);
+              setAgendaInitialOpts({});
+              setIsModalAgendaOpen(true);
+            }}
+            onNotify={showToast}
+          />
+        )}
+
       </main>
 
       {/* ALL MODALS */}
@@ -1209,6 +1280,26 @@ export default function App() {
           }}
           surat={selectedSuratForDelete}
           onConfirmDelete={handleConfirmDeleteSurat}
+        />
+      )}
+
+      {/* 9. Modal Tambah / Edit Agenda Kegiatan */}
+      {isModalAgendaOpen && (
+        <ModalAgenda
+          isOpen={isModalAgendaOpen}
+          onClose={() => {
+            setIsModalAgendaOpen(false);
+            setSelectedAgendaForEditId(null);
+            setAgendaInitialOpts({});
+          }}
+          initialEvent={selectedAgendaForEdit}
+          initialDate={agendaInitialOpts.date}
+          initialJamMulai={agendaInitialOpts.jamMulai}
+          initialJamSelesai={agendaInitialOpts.jamSelesai}
+          personelList={personelList}
+          currentUser={currentUser}
+          onSave={handleSaveAgenda}
+          onDelete={handleDeleteAgenda}
         />
       )}
 

@@ -10,12 +10,13 @@ import {
   HardDriveDownload,
   KeyRound,
   LogOut,
-  UserCog
+  UserCog,
+  CalendarDays
 } from 'lucide-react';
 import { LoginAccount, Role } from '../types';
 import { canAccessBackup, canManagePersonel, isFullAccessRole } from '../utils/disposisiLogic';
 
-export type NavTab = 'dashboard' | 'surat' | 'personel' | 'rekap' | 'backup' | 'akun';
+export type NavTab = 'dashboard' | 'surat' | 'agenda' | 'personel' | 'rekap' | 'backup' | 'akun';
 
 interface NavbarProps {
   currentRole: Role;
@@ -35,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserDropdown, setShowUserDropdown] = React.useState(false);
 
   return (
-    <header className="sticky top-0 z-30 bg-slate-900 border-b border-slate-800 text-white shadow-sm">
+    <header className="sticky top-0 z-30 bg-slate-900 border-b border-slate-800 text-white shadow-sm print:hidden">
       <div className="w-full max-w-[2000px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
           
@@ -86,6 +87,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <FileText className="w-4 h-4 text-emerald-400" />
               <span>Daftar Surat & Disposisi</span>
+            </button>
+            <button
+              onClick={() => onChangeTab('agenda')}
+              className={`flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                activeTab === 'agenda'
+                  ? 'bg-slate-800 text-white font-semibold'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+              title="Kalender & Agenda Kegiatan Tim"
+            >
+              <CalendarDays className="w-4 h-4 text-cyan-400" />
+              <span>Agenda</span>
             </button>
             {canManagePersonel(currentRole) && (
               <button
@@ -242,6 +255,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <FileText className="w-3.5 h-3.5 text-emerald-400" />
           <span>Daftar Surat</span>
+        </button>
+        <button
+          onClick={() => onChangeTab('agenda')}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 ${
+            activeTab === 'agenda' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-300'
+          }`}
+        >
+          <CalendarDays className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Agenda</span>
         </button>
         {canManagePersonel(currentRole) && (
           <button

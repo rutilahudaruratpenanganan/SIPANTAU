@@ -160,6 +160,41 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidAgendaEvent(data) {
+      return data.keys().hasAll([
+          'ownerId', 'judul', 'kategori', 'tanggal', 'sepanjangHari',
+          'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
+          'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'judul', 'kategori', 'tanggal', 'sepanjangHari',
+          'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
+          'pesertaTambahan', 'catatan', 'dibuatOlehId', 'dibuatOlehNama',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 200
+        && (data.kategori in ['Rapat Koordinasi', 'Tinjauan Lapangan', 'Asistensi', 'Audiensi', 'Lainnya'])
+        && data.tanggal is string && data.tanggal.size() >= 4 && data.tanggal.size() <= 40
+        && data.sepanjangHari is bool
+        && data.jamMulai is string && data.jamMulai.size() >= 1 && data.jamMulai.size() <= 10
+        && data.jamSelesai is string && data.jamSelesai.size() >= 1 && data.jamSelesai.size() <= 10
+        && data.lokasi is string && data.lokasi.size() >= 1 && data.lokasi.size() <= 250
+        && data.pesertaIds is list
+        && data.pesertaIds.size() <= 30
+        && (data.pesertaIds.size() == 0 || (data.pesertaIds[0] is string && data.pesertaIds[0].size() <= 128))
+        && data.pesertaNama is list
+        && data.pesertaNama.size() <= 30
+        && (data.pesertaNama.size() == 0 || (data.pesertaNama[0] is string && data.pesertaNama[0].size() <= 150))
+        && (!('pesertaTambahan' in data) || (data.pesertaTambahan is string && data.pesertaTambahan.size() <= 300))
+        && (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 1500))
+        && data.dibuatOlehId is string && data.dibuatOlehId.size() >= 1 && data.dibuatOlehId.size() <= 128
+        && data.dibuatOlehNama is string && data.dibuatOlehNama.size() >= 1 && data.dibuatOlehNama.size() <= 150
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // ------------------------------------------------------------------
     // Collection Rules (Internal Shared Workspace)
     // ------------------------------------------------------------------
@@ -321,6 +356,30 @@ service cloud.firestore {
           'passwordHash', 'isDefaultReset', 'updatedAt'
         ]);
       allow delete: if isValidId(accountId) && isInternalWorkspaceDoc(resource.data);
+    }
+
+    // 6. Agenda Kegiatan Tim (Kalender)
+    match /agenda/{agendaId} {
+      allow get: if isValidId(agendaId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
+      allow create: if isValidId(agendaId)
+        && isValidAgendaEvent(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isValidId(agendaId)
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidAgendaEvent(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.dibuatOlehId == resource.data.dibuatOlehId
+        && request.resource.data.dibuatOlehNama == resource.data.dibuatOlehNama
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'judul', 'kategori', 'tanggal', 'sepanjangHari',
+          'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
+          'pesertaTambahan', 'catatan', 'updatedAt'
+        ]);
+      allow delete: if isValidId(agendaId) && isInternalWorkspaceDoc(resource.data);
     }
   }
 }

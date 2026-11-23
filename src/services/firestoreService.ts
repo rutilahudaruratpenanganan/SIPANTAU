@@ -16,6 +16,8 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
+  AgendaEvent,
+  AgendaKategori,
   AkunKredensial,
   DokumenFile,
   PejabatConfig,
@@ -55,6 +57,11 @@ const LIMITS = {
   PDF_MAX_CHUNKS: 30,
   MAX_DISPOSISI_ARRAY: 30,
   MAX_RIWAYAT_ARRAY: 50,
+  JUDUL_AGENDA: 200,
+  LOKASI_AGENDA: 250,
+  PESERTA_TAMBAHAN: 300,
+  TIME_STR: 10,
+  CATATAN_AGENDA: 1500,
 };
 
 const pdfMemoryCache = new Map<string, string>();
@@ -927,3 +934,168 @@ export async function saveAkunPasswordDb(
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
+
+function docToAgendaEvent(id: string, data: Record<string, unknown>): AgendaEvent {
+  return {
+    id,
+    judul: (data.judul as string) || '',
+    kategori: (data.kategori as AgendaKategori) || 'Rapat Koordinasi',
+    tanggal: (data.tanggal as string) || '',
+    sepanjangHari: Boolean(data.sepanjangHari),
+    jamMulai: (data.jamMulai as string) || '09:00',
+    jamSelesai: (data.jamSelesai as string) || '10:00',
+    lokasi: (data.lokasi as string) || '',
+    pesertaIds: Array.isArray(data.pesertaIds) ? (data.pesertaIds as string[]) : [],
+    pesertaNama: Array.isArray(data.pesertaNama) ? (data.pesertaNama as string[]) : [],
+    pesertaTambahan: (data.pesertaTambahan as string | undefined) || undefined,
+    catatan: (data.catatan as string | undefined) || undefined,
+    dibuatOlehId: (data.dibuatOlehId as string) || '',
+    dibuatOlehNama: (data.dibuatOlehNama as string) || '',
+    createdAt: formatTimestamp(data.createdAt),
+    updatedAt: formatTimestamp(data.updatedAt),
+  };
+}
+
+export function subscribeAgendaEvents(
+  onData: (list: AgendaEvent[]) => void,
+  onError: (err: Error) => void
+) {
+  const path = 'agenda';
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) =>
+        docToAgendaEvent(docSnap.id, docSnap.data() as Record<string, unknown>)
+      );
+      list.sort((a, b) => {
+        const cmpDate = (a.tanggal || '').localeCompare(b.tanggal || '');
+        if (cmpDate !== 0) return cmpDate;
+        if (a.sepanjangHari !== b.sepanjangHari) return a.sepanjangHari ? -1 : 1;
+        return (a.jamMulai || '').localeCompare(b.jamMulai || '');
+      });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export interface AgendaMutationPayload {
+  judul: string;
+  kategori: AgendaKategori;
+  tanggal: string;
+  sepanjangHari: boolean;
+  jamMulai: string;
+  jamSelesai: string;
+  lokasi: string;
+  pesertaIds: string[];
+  pesertaNama: string[];
+  pesertaTambahan?: string;
+  catatan?: string;
+}
+
+export async function createAgendaEventDb(
+  input: AgendaMutationPayload,
+  creator: { id: string; nama: string }
+): Promise<string> {
+  const id = `agenda-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const path = `agenda/${id}`;
+
+  const payload: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    judul: clampStr(input.judul, LIMITS.JUDUL_AGENDA) || 'Agenda Kegiatan',
+    kategori: input.kategori,
+    tanggal: clampStr(input.tanggal, LIMITS.DATE_STR),
+    sepanjangHari: Boolean(input.sepanjangHari),
+    jamMulai: input.sepanjangHari
+      ? '00:00'
+      : clampStr(input.jamMulai, LIMITS.TIME_STR) || '09:00',
+    jamSelesai: input.sepanjangHari
+      ? '23:59'
+      : clampStr(input.jamSelesai, LIMITS.TIME_STR) || '10:00',
+    lokasi: clampStr(input.lokasi, LIMITS.LOKASI_AGENDA) || '-',
+    pesertaIds: input.pesertaIds
+      .slice(0, LIMITS.MAX_DISPOSISI_ARRAY)
+      .map((p) => clampStr(p, LIMITS.ID))
+      .filter(Boolean),
+    pesertaNama: input.pesertaNama
+      .slice(0, LIMITS.MAX_DISPOSISI_ARRAY)
+      .map((n) => clampStr(n, LIMITS.NAMA))
+      .filter(Boolean),
+    dibuatOlehId: clampStr(creator.id, LIMITS.ID) || 'system',
+    dibuatOlehNama: clampStr(creator.nama, LIMITS.NAMA) || 'Tim Wasdal',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (input.pesertaTambahan?.trim()) {
+    payload.pesertaTambahan = clampStr(input.pesertaTambahan, LIMITS.PESERTA_TAMBAHAN);
+  }
+  if (input.catatan?.trim()) {
+    payload.catatan = clampStr(input.catatan, LIMITS.CATATAN_AGENDA);
+  }
+
+  try {
+    await setDoc(doc(db, 'agenda', id), payload);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function updateAgendaEventDb(
+  agendaId: string,
+  input: AgendaMutationPayload
+): Promise<void> {
+  const path = `agenda/${agendaId}`;
+  const updatePayload: Record<string, unknown> = {
+    judul: clampStr(input.judul, LIMITS.JUDUL_AGENDA) || 'Agenda Kegiatan',
+    kategori: input.kategori,
+    tanggal: clampStr(input.tanggal, LIMITS.DATE_STR),
+    sepanjangHari: Boolean(input.sepanjangHari),
+    jamMulai: input.sepanjangHari
+      ? '00:00'
+      : clampStr(input.jamMulai, LIMITS.TIME_STR) || '09:00',
+    jamSelesai: input.sepanjangHari
+      ? '23:59'
+      : clampStr(input.jamSelesai, LIMITS.TIME_STR) || '10:00',
+    lokasi: clampStr(input.lokasi, LIMITS.LOKASI_AGENDA) || '-',
+    pesertaIds: input.pesertaIds
+      .slice(0, LIMITS.MAX_DISPOSISI_ARRAY)
+      .map((p) => clampStr(p, LIMITS.ID))
+      .filter(Boolean),
+    pesertaNama: input.pesertaNama
+      .slice(0, LIMITS.MAX_DISPOSISI_ARRAY)
+      .map((n) => clampStr(n, LIMITS.NAMA))
+      .filter(Boolean),
+    pesertaTambahan: input.pesertaTambahan?.trim()
+      ? clampStr(input.pesertaTambahan, LIMITS.PESERTA_TAMBAHAN)
+      : deleteField(),
+    catatan: input.catatan?.trim()
+      ? clampStr(input.catatan, LIMITS.CATATAN_AGENDA)
+      : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'agenda', agendaId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteAgendaEventDb(agendaId: string): Promise<void> {
+  const path = `agenda/${agendaId}`;
+  try {
+    await deleteDoc(doc(db, 'agenda', agendaId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+

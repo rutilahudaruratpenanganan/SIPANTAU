@@ -115,3 +115,30 @@ export interface SuratMasuk {
   createdAt: string;
   updatedAt: string;
 }
+
+export type AgendaKategori =
+  | 'Rapat Koordinasi'
+  | 'Tinjauan Lapangan'
+  | 'Asistensi'
+  | 'Audiensi'
+  | 'Lainnya';
+
+export interface AgendaEvent {
+  id: string;
+  judul: string;
+  kategori: AgendaKategori;
+  tanggal: string; // YYYY-MM-DD
+  sepanjangHari: boolean;
+  jamMulai: string; // HH:mm
+  jamSelesai: string; // HH:mm
+  lokasi: string;
+  pesertaIds: string[];
+  pesertaNama: string[];
+  pesertaTambahan?: string;
+  catatan?: string;
+  dibuatOlehId: string;
+  dibuatOlehNama: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

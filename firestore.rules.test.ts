@@ -195,3 +195,87 @@ test('AkunKredensial enforces accountId binding, hash bounds, and immutable keys
   assert.equal(allowedUpdateKeys.has('ownerId'), false);
 });
 
+const AGENDA_ALLOWED_KEYS = new Set([
+  'ownerId', 'judul', 'kategori', 'tanggal', 'sepanjangHari',
+  'jamMulai', 'jamSelesai', 'lokasi', 'pesertaIds', 'pesertaNama',
+  'pesertaTambahan', 'catatan', 'dibuatOlehId', 'dibuatOlehNama',
+  'createdAt', 'updatedAt',
+]);
+const VALID_AGENDA_KATEGORI = new Set([
+  'Rapat Koordinasi',
+  'Tinjauan Lapangan',
+  'Asistensi',
+  'Audiensi',
+  'Lainnya',
+]);
+
+function evaluateAgendaCreate(
+  docId: string,
+  payload: Record<string, unknown>,
+  usesServerTime: boolean
+): 'ALLOW' | 'PERMISSION_DENIED' {
+  if (!docId || docId.length > 128 || !VALID_ID_REGEX.test(docId)) return 'PERMISSION_DENIED';
+  if (!usesServerTime) return 'PERMISSION_DENIED';
+  for (const key of Object.keys(payload)) {
+    if (!AGENDA_ALLOWED_KEYS.has(key)) return 'PERMISSION_DENIED';
+  }
+  if (payload.ownerId !== INTERNAL_WORKSPACE_ID) return 'PERMISSION_DENIED';
+  if (typeof payload.judul !== 'string' || payload.judul.length < 1 || payload.judul.length > 200) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.kategori !== 'string' || !VALID_AGENDA_KATEGORI.has(payload.kategori)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.lokasi !== 'string' || payload.lokasi.length < 1 || payload.lokasi.length > 250) {
+    return 'PERMISSION_DENIED';
+  }
+  if (!Array.isArray(payload.pesertaIds) || payload.pesertaIds.length > 30) {
+    return 'PERMISSION_DENIED';
+  }
+  if (!Array.isArray(payload.pesertaNama) || payload.pesertaNama.length > 30) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.catatan === 'string' && payload.catatan.length > 1500) {
+    return 'PERMISSION_DENIED';
+  }
+  return 'ALLOW';
+}
+
+test('AgendaEvent enforces workspace binding, bounds, allowed keys, and immutable fields', () => {
+  const validAgenda: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    judul: 'Rapat Koordinasi Evaluasi PPPSRS',
+    kategori: 'Rapat Koordinasi',
+    tanggal: '2026-11-25',
+    sepanjangHari: false,
+    jamMulai: '09:00',
+    jamSelesai: '11:00',
+    lokasi: 'Ruang Rapat DPKP Lt. 2',
+    pesertaIds: ['internal_wasdal_p-chafidz'],
+    pesertaNama: ['Chafidz Ginanjar, ST'],
+    pesertaTambahan: 'Perwakilan Bagian Hukum',
+    catatan: 'Membahas kelengkapan berkas.',
+    dibuatOlehId: 'internal_wasdal_p-chafidz',
+    dibuatOlehNama: 'Chafidz Ginanjar, ST',
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+
+  assert.equal(evaluateAgendaCreate('agenda-170000-ab12', validAgenda, true), 'ALLOW');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, ownerId: 'other' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, shadowField: 1 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, kategori: 'Unknown' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', { ...validAgenda, judul: 'a'.repeat(201) }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateAgendaCreate('agenda-1', validAgenda, false), 'PERMISSION_DENIED');
+
+  const agendaUpdateAllowedKeys = new Set([
+    'judul', 'kategori', 'tanggal', 'sepanjangHari', 'jamMulai', 'jamSelesai',
+    'lokasi', 'pesertaIds', 'pesertaNama', 'pesertaTambahan', 'catatan', 'updatedAt',
+  ]);
+  assert.equal(agendaUpdateAllowedKeys.has('ownerId'), false);
+  assert.equal(agendaUpdateAllowedKeys.has('createdAt'), false);
+  assert.equal(agendaUpdateAllowedKeys.has('dibuatOlehId'), false);
+  assert.equal(agendaUpdateAllowedKeys.has('dibuatOlehNama'), false);
+});
+
+
