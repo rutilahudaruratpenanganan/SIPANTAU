@@ -422,6 +422,104 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "NotifikasiDisposisi": {
+      "title": "NotifikasiDisposisi",
+      "description": "Notifikasi disposisi surat khusus untuk akun personel penerima disposisi",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "suratId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientNama": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "nomorSurat": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "asalSurat": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "perihal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "sifat": {
+          "type": "string",
+          "enum": ["Biasa", "Penting", "Segera", "Sangat Segera", "Rahasia"]
+        },
+        "instruksiDisposisi": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "tenggatWaktu": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "pengirimNama": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "jenis": {
+          "type": "string",
+          "enum": ["disposisi_baru", "disposisi_diperbarui"]
+        },
+        "dibaca": {
+          "type": "boolean"
+        },
+        "dibacaPada": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "suratId",
+        "recipientId",
+        "recipientNama",
+        "nomorSurat",
+        "asalSurat",
+        "perihal",
+        "sifat",
+        "instruksiDisposisi",
+        "pengirimNama",
+        "jenis",
+        "dibaca",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -448,6 +546,10 @@
     "/agenda/{agendaId}": {
       "schema": { "$ref": "#/entities/AgendaEvent" },
       "description": "Jadwal agenda kegiatan tim (waktu, lokasi, dan personel peserta)"
+    },
+    "/notifikasi/{notifId}": {
+      "schema": { "$ref": "#/entities/NotifikasiDisposisi" },
+      "description": "Notifikasi disposisi surat yang ditujukan khusus bagi akun penerima disposisi"
     }
   }
 }

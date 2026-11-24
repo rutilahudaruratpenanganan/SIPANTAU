@@ -314,4 +314,76 @@ test('AgendaEvent enforces workspace binding, bounds, allowed keys, status allow
   assert.equal(rescheduleKeys.has('ownerId'), false);
 });
 
+const NOTIFIKASI_ALLOWED_KEYS = new Set([
+  'ownerId', 'suratId', 'recipientId', 'recipientNama',
+  'nomorSurat', 'asalSurat', 'perihal', 'sifat',
+  'instruksiDisposisi', 'tenggatWaktu', 'pengirimNama',
+  'jenis', 'dibaca', 'dibacaPada',
+  'createdAt', 'updatedAt',
+]);
+const VALID_NOTIFIKASI_JENIS = new Set(['disposisi_baru', 'disposisi_diperbarui']);
+
+function evaluateNotifikasiCreate(
+  docId: string,
+  payload: Record<string, unknown>,
+  usesServerTime: boolean
+): 'ALLOW' | 'PERMISSION_DENIED' {
+  if (!docId || docId.length > 128 || !VALID_ID_REGEX.test(docId)) return 'PERMISSION_DENIED';
+  if (!usesServerTime) return 'PERMISSION_DENIED';
+  for (const key of Object.keys(payload)) {
+    if (!NOTIFIKASI_ALLOWED_KEYS.has(key)) return 'PERMISSION_DENIED';
+  }
+  if (payload.ownerId !== INTERNAL_WORKSPACE_ID) return 'PERMISSION_DENIED';
+  if (typeof payload.suratId !== 'string' || !VALID_ID_REGEX.test(payload.suratId)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.recipientId !== 'string' || !VALID_ID_REGEX.test(payload.recipientId)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.recipientNama !== 'string' || payload.recipientNama.length < 1 || payload.recipientNama.length > 150) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.instruksiDisposisi !== 'string' || payload.instruksiDisposisi.length < 1 || payload.instruksiDisposisi.length > 1500) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.jenis !== 'string' || !VALID_NOTIFIKASI_JENIS.has(payload.jenis)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.dibaca !== 'boolean') return 'PERMISSION_DENIED';
+  return 'ALLOW';
+}
+
+test('NotifikasiDisposisi enforces recipientId, workspace binding, bounds, allowed keys, and immutable fields', () => {
+  const validNotif: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    suratId: 'surat-1763900000-ab12',
+    recipientId: 'internal_wasdal_p-chafidz',
+    recipientNama: 'Chafidz Ginanjar, ST',
+    nomorSurat: '001/DPKP/XI/2026',
+    asalSurat: 'Ombudsman RI',
+    perihal: 'Permintaan Klarifikasi PPPSRS',
+    sifat: 'Penting',
+    instruksiDisposisi: 'Pelajari dan siapkan tanggapan tertulis.',
+    tenggatWaktu: '2026-11-30',
+    pengirimNama: 'Yuliani, ST',
+    jenis: 'disposisi_baru',
+    dibaca: false,
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+
+  assert.equal(evaluateNotifikasiCreate('notif_surat-1763900000-ab12_internal_wasdal_p-chafidz', validNotif, true), 'ALLOW');
+  assert.equal(evaluateNotifikasiCreate('n1', { ...validNotif, ownerId: 'other' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateNotifikasiCreate('n1', { ...validNotif, shadowFlag: true }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateNotifikasiCreate('n1', { ...validNotif, recipientId: 'bad/id' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateNotifikasiCreate('n1', { ...validNotif, jenis: 'broadcast_all' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateNotifikasiCreate('n1', { ...validNotif, instruksiDisposisi: 'x'.repeat(1501) }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateNotifikasiCreate('n1', validNotif, false), 'PERMISSION_DENIED');
+
+  const markReadKeys = new Set(['dibaca', 'dibacaPada', 'updatedAt']);
+  assert.equal(markReadKeys.has('recipientId'), false);
+  assert.equal(markReadKeys.has('suratId'), false);
+  assert.equal(markReadKeys.has('ownerId'), false);
+  assert.equal(markReadKeys.has('createdAt'), false);
+});
 

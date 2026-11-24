@@ -26,6 +26,7 @@ import {
   AgendaEvent,
   AkunKredensial,
   LoginAccount,
+  NotifikasiDisposisi,
   SuratMasuk, 
   Personel, 
   PejabatConfig, 
@@ -48,6 +49,10 @@ import {
   canManagePersonel,
   isFullAccessRole
 } from './utils/disposisiLogic';
+import {
+  countUnreadNotifications,
+  filterNotificationsForAccount,
+} from './utils/notifikasiLogic';
 import {
   DEFAULT_INITIAL_PASSWORD,
   IDLE_TIMEOUT_MS,
@@ -72,14 +77,18 @@ import {
   ensureWorkspaceInitialized,
   isChunkedPdfUrl,
   loadPdfDataUrlFromFirestore,
+  markAllNotifikasiReadDb,
+  markNotifikasiReadDb,
   reactivateAgendaEventDb,
   rescheduleAgendaEventDb,
   saveAkunPasswordDb,
   subscribeAgendaEvents,
   subscribeAkunKredensial,
+  subscribeNotifikasiDisposisi,
   subscribePersonel,
   subscribeSuratMasuk,
   subscribeWorkspace,
+  syncDisposisiNotificationsDb,
   updateAgendaEventDb,
   updateDisposisiDb,
   updatePersonelDb,
@@ -107,9 +116,11 @@ export default function App() {
   // Real-time Firestore-backed state
   const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
   const [agendaList, setAgendaList] = useState<AgendaEvent[]>([]);
+  const [notifikasiList, setNotifikasiList] = useState<NotifikasiDisposisi[]>([]);
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
   const [akunKredensialMap, setAkunKredensialMap] = useState<Record<string, AkunKredensial>>({});
+  const [highlightedSuratId, setHighlightedSuratId] = useState<string | null>(null);
 
   // Authenticated logged-in account (with automatic 30-minute idle expiration check on boot)
   const [initialBootExpired] = useState<boolean>(() => {
@@ -278,6 +289,7 @@ export default function App() {
     let unsubAkun: (() => void) | undefined;
     let unsubSurat: (() => void) | undefined;
     let unsubAgenda: (() => void) | undefined;
+    let unsubNotifikasi: (() => void) | undefined;
 
     const readyFlags = {
       workspace: false,
@@ -285,6 +297,7 @@ export default function App() {
       akun: false,
       agenda: false,
       surat: false,
+      notifikasi: false,
     };
     const markReady = (key: keyof typeof readyFlags) => {
       if (cancelled || readyFlags[key]) return;
@@ -294,7 +307,8 @@ export default function App() {
         readyFlags.personel &&
         readyFlags.akun &&
         readyFlags.agenda &&
-        readyFlags.surat
+        readyFlags.surat &&
+        readyFlags.notifikasi
       ) {
         setDbReady(true);
       }
@@ -340,6 +354,13 @@ export default function App() {
           },
           (err) => setAsyncError(err)
         );
+        unsubNotifikasi = subscribeNotifikasiDisposisi(
+          (list) => {
+            setNotifikasiList(list);
+            markReady('notifikasi');
+          },
+          (err) => setAsyncError(err)
+        );
       } catch (err) {
         if (!cancelled) {
           setAsyncError(err instanceof Error ? err : new Error(String(err)));
@@ -354,8 +375,67 @@ export default function App() {
       unsubAkun?.();
       unsubAgenda?.();
       unsubSurat?.();
+      unsubNotifikasi?.();
     };
   }, []);
+
+  // Notifications strictly scoped to the currently logged-in disposition recipient
+  const accountNotifications = filterNotificationsForAccount(
+    notifikasiList,
+    loggedInAccount,
+    suratList
+  );
+  const unreadNotificationsCount = countUnreadNotifications(accountNotifications);
+
+  // Subtle live toast if a new unread disposition arrives for the active account while online
+  const notifToastTrackerRef = useRef<{
+    accountId: string;
+    initialized: boolean;
+    seenKeys: Set<string>;
+  }>({ accountId: '', initialized: false, seenKeys: new Set() });
+
+  useEffect(() => {
+    if (!dbReady || !loggedInAccount) {
+      notifToastTrackerRef.current = {
+        accountId: '',
+        initialized: false,
+        seenKeys: new Set(),
+      };
+      return;
+    }
+
+    const tracker = notifToastTrackerRef.current;
+    const currentKeys = new Set(
+      accountNotifications.map((n) => `${n.id}:${n.updatedAt}:${n.dibaca}`)
+    );
+
+    if (tracker.accountId !== loggedInAccount.id || !tracker.initialized) {
+      notifToastTrackerRef.current = {
+        accountId: loggedInAccount.id,
+        initialized: true,
+        seenKeys: currentKeys,
+      };
+      return;
+    }
+
+    const incomingUnread = accountNotifications.find(
+      (n) => !n.dibaca && !tracker.seenKeys.has(`${n.id}:${n.updatedAt}:${n.dibaca}`)
+    );
+    tracker.seenKeys = currentKeys;
+
+    if (incomingUnread && incomingUnread.pengirimNama !== loggedInAccount.nama) {
+      showToast(
+        `Disposisi ${incomingUnread.jenis === 'disposisi_diperbarui' ? 'diperbarui' : 'baru'} untuk Anda: ${incomingUnread.asalSurat}`
+      );
+    }
+  }, [dbReady, loggedInAccount?.id, loggedInAccount?.nama, accountNotifications]);
+
+  // Clear row highlight automatically after 4 seconds
+  useEffect(() => {
+    if (!highlightedSuratId) return;
+    const timer = window.setTimeout(() => setHighlightedSuratId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedSuratId]);
 
   // Handler: Tambah Surat Masuk
   const handleAddSuratMasuk = async (suratData: Partial<SuratMasuk>) => {
@@ -449,11 +529,64 @@ export default function App() {
         newTahap,
         newRiwayat
       );
+      const recipientsForNotif = penerimaIds.map((pid, idx) => {
+        const matched = personelList.find((p) => p.id === pid);
+        return {
+          id: pid,
+          nama: matched?.nama || penerimaNama[idx] || 'Personel Tim',
+        };
+      });
+      await syncDisposisiNotificationsDb({
+        suratId,
+        recipients: recipientsForNotif,
+        nomorSurat: item.nomorSurat,
+        asalSurat: item.asalSurat,
+        perihal: item.perihal,
+        sifat: item.sifat,
+        instruksiDisposisi: instruksi,
+        tenggatWaktu,
+        pengirimNama: currentUser.nama,
+      });
       showToast(
         wasEditing
           ? `Perubahan disposisi, instruksi & tenggat waktu untuk ${penerimaNama.join(', ')} berhasil disimpan.`
           : `Disposisi berhasil diteruskan kepada ${penerimaNama.join(', ')}.`
       );
+    } catch (err) {
+      setAsyncError(err instanceof Error ? err : new Error(String(err)));
+    }
+  };
+
+  // Handler: Klik notifikasi disposisi -> tandai dibaca, arahkan ke surat terkait, buka modal tindak lanjut
+  const handleClickNotification = async (notif: NotifikasiDisposisi) => {
+    if (!notif.dibaca) {
+      markNotifikasiReadDb(notif.id, true).catch((err) => {
+        setAsyncError(err instanceof Error ? err : new Error(String(err)));
+      });
+    }
+
+    const targetSurat = suratList.find((s) => s.id === notif.suratId);
+    if (!targetSurat) {
+      showToast('Surat terkait disposisi ini sudah tidak tersedia atau telah dihapus.');
+      return;
+    }
+
+    setSearchQuery('');
+    setSelectedTahap('all');
+    setSelectedPersonel('all');
+    setSelectedStatus('all');
+    setActiveTab('dashboard');
+    setHighlightedSuratId(targetSurat.id);
+    setSelectedSuratForTindakLanjutId(targetSurat.id);
+    setIsModalTindakLanjutOpen(true);
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const unreadIds = accountNotifications.filter((n) => !n.dibaca).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    try {
+      await markAllNotifikasiReadDb(unreadIds);
+      showToast('Semua notifikasi disposisi ditandai sudah dibaca.');
     } catch (err) {
       setAsyncError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -1108,13 +1241,18 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Navbar with Branding & Authenticated Account Menu */}
+      {/* Top Navbar with Branding, Notification Bell & Authenticated Account Menu */}
       <Navbar
         currentRole={currentRole}
         currentAccount={loggedInAccount}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={() => handleLogout('manual')}
+        notifications={accountNotifications}
+        unreadNotificationsCount={unreadNotificationsCount}
+        suratList={suratList}
+        onClickNotification={handleClickNotification}
+        onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
       />
 
       {/* Main Container */}
@@ -1238,6 +1376,7 @@ export default function App() {
                   setIsModalDeleteOpen(true);
                 }}
                 onExportCsv={handleExportCsv}
+                highlightedSuratId={highlightedSuratId}
               />
             </div>
           </div>
@@ -1302,6 +1441,7 @@ export default function App() {
                 setIsModalDeleteOpen(true);
               }}
               onExportCsv={handleExportCsv}
+              highlightedSuratId={highlightedSuratId}
             />
           </div>
         )}

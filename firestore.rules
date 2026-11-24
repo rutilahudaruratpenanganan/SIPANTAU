@@ -407,5 +407,68 @@ service cloud.firestore {
         && isAllowedAgendaUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if isValidId(agendaId) && isInternalWorkspaceDoc(resource.data);
     }
+
+    function isValidNotifikasiDisposisi(data) {
+      return data.keys().hasAll([
+          'ownerId', 'suratId', 'recipientId', 'recipientNama',
+          'nomorSurat', 'asalSurat', 'perihal', 'sifat',
+          'instruksiDisposisi', 'pengirimNama', 'jenis', 'dibaca',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'suratId', 'recipientId', 'recipientNama',
+          'nomorSurat', 'asalSurat', 'perihal', 'sifat',
+          'instruksiDisposisi', 'tenggatWaktu', 'pengirimNama',
+          'jenis', 'dibaca', 'dibacaPada',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && isValidId(data.suratId)
+        && isValidId(data.recipientId)
+        && data.recipientNama is string && data.recipientNama.size() >= 1 && data.recipientNama.size() <= 150
+        && data.nomorSurat is string && data.nomorSurat.size() >= 1 && data.nomorSurat.size() <= 150
+        && data.asalSurat is string && data.asalSurat.size() >= 1 && data.asalSurat.size() <= 250
+        && data.perihal is string && data.perihal.size() >= 1 && data.perihal.size() <= 1500
+        && (data.sifat in ['Biasa', 'Penting', 'Segera', 'Sangat Segera', 'Rahasia'])
+        && data.instruksiDisposisi is string && data.instruksiDisposisi.size() >= 1 && data.instruksiDisposisi.size() <= 1500
+        && (!('tenggatWaktu' in data) || (data.tenggatWaktu is string && data.tenggatWaktu.size() <= 40))
+        && data.pengirimNama is string && data.pengirimNama.size() >= 1 && data.pengirimNama.size() <= 150
+        && (data.jenis in ['disposisi_baru', 'disposisi_diperbarui'])
+        && data.dibaca is bool
+        && (!('dibacaPada' in data) || (data.dibacaPada is string && data.dibacaPada.size() <= 40))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isAllowedNotifikasiUpdateAction(affected) {
+      return affected.hasOnly(['dibaca', 'dibacaPada', 'updatedAt'])
+        || affected.hasOnly([
+          'recipientNama', 'nomorSurat', 'asalSurat', 'perihal', 'sifat',
+          'instruksiDisposisi', 'tenggatWaktu', 'pengirimNama',
+          'jenis', 'dibaca', 'dibacaPada', 'updatedAt'
+        ])
+        || affected.hasOnly(['nomorSurat', 'asalSurat', 'perihal', 'sifat', 'updatedAt']);
+    }
+
+    // 7. Notifikasi Disposisi (Per Penerima Disposisi)
+    match /notifikasi/{notifId} {
+      allow get: if isValidId(notifId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
+      allow create: if isValidId(notifId)
+        && isValidNotifikasiDisposisi(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isValidId(notifId)
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidNotifikasiDisposisi(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.suratId == resource.data.suratId
+        && request.resource.data.recipientId == resource.data.recipientId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && isAllowedNotifikasiUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isValidId(notifId) && isInternalWorkspaceDoc(resource.data);
+    }
   }
 }

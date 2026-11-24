@@ -149,3 +149,23 @@ export interface AgendaEvent {
   updatedAt: string;
 }
 
+export type NotifikasiJenis = 'disposisi_baru' | 'disposisi_diperbarui';
+
+export interface NotifikasiDisposisi {
+  id: string;
+  suratId: string;
+  recipientId: string;
+  recipientNama: string;
+  nomorSurat: string;
+  asalSurat: string;
+  perihal: string;
+  sifat: SuratMasuk['sifat'];
+  instruksiDisposisi: string;
+  tenggatWaktu?: string;
+  pengirimNama: string;
+  jenis: NotifikasiJenis;
+  dibaca: boolean;
+  dibacaPada?: string;
+  createdAt: string;
+  updatedAt: string;
+}

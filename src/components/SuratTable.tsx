@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
   Search, 
   Filter, 
@@ -44,6 +44,7 @@ interface SuratTableProps {
   onOpenLembarDisposisi: (surat: SuratMasuk) => void;
   onDeleteSurat: (surat: SuratMasuk) => void;
   onExportCsv: () => void;
+  highlightedSuratId?: string | null;
 }
 
 export const SuratTable: React.FC<SuratTableProps> = ({
@@ -66,7 +67,18 @@ export const SuratTable: React.FC<SuratTableProps> = ({
   onOpenLembarDisposisi,
   onDeleteSurat,
   onExportCsv,
+  highlightedSuratId,
 }) => {
+  useEffect(() => {
+    if (!highlightedSuratId) return;
+    const row = document.querySelector<HTMLElement>(
+      `tr[data-surat-id="${CSS.escape(highlightedSuratId)}"]`
+    );
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightedSuratId]);
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       
@@ -212,10 +224,17 @@ export const SuratTable: React.FC<SuratTableProps> = ({
               suratList.map((item, index) => {
                 const hasDisposisi = item.penerimaDisposisiNama && item.penerimaDisposisiNama.length > 0;
 
+                const isHighlighted = highlightedSuratId === item.id;
+
                 return (
                   <tr 
-                    key={item.id} 
-                    className="hover:bg-blue-50/40 transition-colors group"
+                    key={item.id}
+                    data-surat-id={item.id}
+                    className={`transition-colors group ${
+                      isHighlighted
+                        ? 'bg-blue-50/90 ring-2 ring-inset ring-blue-500'
+                        : 'hover:bg-blue-50/40'
+                    }`}
                   >
                     
                     {/* Index */}

@@ -13,8 +13,9 @@ import {
   UserCog,
   CalendarDays
 } from 'lucide-react';
-import { LoginAccount, Role } from '../types';
+import { LoginAccount, NotifikasiDisposisi, Role, SuratMasuk } from '../types';
 import { canAccessBackup, canManagePersonel, isFullAccessRole } from '../utils/disposisiLogic';
+import { NotificationBell } from './NotificationBell';
 
 export type NavTab = 'dashboard' | 'surat' | 'agenda' | 'personel' | 'rekap' | 'backup' | 'akun';
 
@@ -24,6 +25,11 @@ interface NavbarProps {
   activeTab: NavTab;
   onChangeTab: (tab: NavTab) => void;
   onLogout: () => void;
+  notifications: NotifikasiDisposisi[];
+  unreadNotificationsCount: number;
+  suratList: SuratMasuk[];
+  onClickNotification: (notif: NotifikasiDisposisi) => void;
+  onMarkAllNotificationsRead: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +38,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onChangeTab,
   onLogout,
+  notifications,
+  unreadNotificationsCount,
+  suratList,
+  onClickNotification,
+  onMarkAllNotificationsRead,
 }) => {
   const [showUserDropdown, setShowUserDropdown] = React.useState(false);
 
@@ -152,8 +163,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Active Authenticated Account Menu */}
+          {/* Notification Bell & Active Authenticated Account Menu */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <NotificationBell
+              currentAccountName={currentAccount.nama}
+              notifications={notifications}
+              unreadCount={unreadNotificationsCount}
+              suratList={suratList}
+              onClickNotification={onClickNotification}
+              onMarkAllRead={onMarkAllNotificationsRead}
+            />
+
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}

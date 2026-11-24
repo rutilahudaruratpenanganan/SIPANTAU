@@ -21,6 +21,8 @@ import {
   AgendaStatus,
   AkunKredensial,
   DokumenFile,
+  NotifikasiDisposisi,
+  NotifikasiJenis,
   PejabatConfig,
   Personel,
   RiwayatTindakLanjut,
@@ -34,6 +36,7 @@ import {
   INITIAL_SURAT_MASUK,
 } from '../data/initialData';
 import { normalizeRiwayatCatatan } from '../utils/disposisiLogic';
+import { buildNotifikasiDocId } from '../utils/notifikasiLogic';
 
 export const INTERNAL_WORKSPACE_ID = 'internal_wasdal';
 
@@ -645,6 +648,25 @@ export async function updateSuratMasukDb(
     }
 
     await updateDoc(doc(db, 'suratMasuk', suratId), updatePayload);
+
+    // Sync updated surat metadata onto any existing disposition notifications
+    const notifSnap = await getDocs(
+      query(collection(db, 'notifikasi'), where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+    );
+    const matchingNotifs = notifSnap.docs.filter((d) => d.data().suratId === suratId);
+    if (matchingNotifs.length > 0) {
+      const notifBatch = writeBatch(db);
+      for (const nDoc of matchingNotifs) {
+        notifBatch.update(nDoc.ref, {
+          nomorSurat: updatePayload.nomorSurat,
+          asalSurat: updatePayload.asalSurat,
+          perihal: updatePayload.perihal,
+          sifat: updatePayload.sifat,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await notifBatch.commit();
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -777,6 +799,20 @@ export async function deleteSuratDb(suratId: string): Promise<void> {
       }
       await batch.commit();
     }
+
+    // Delete any disposition notifications linked to this surat
+    const notifSnap = await getDocs(
+      query(collection(db, 'notifikasi'), where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+    );
+    const matchingNotifs = notifSnap.docs.filter((d) => d.data().suratId === suratId);
+    if (matchingNotifs.length > 0) {
+      const notifBatch = writeBatch(db);
+      for (const nDoc of matchingNotifs) {
+        notifBatch.delete(nDoc.ref);
+      }
+      await notifBatch.commit();
+    }
+
     await deleteDoc(doc(db, 'suratMasuk', suratId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
@@ -1200,4 +1236,213 @@ export async function deleteAgendaEventDb(agendaId: string): Promise<void> {
   }
 }
 
+function docToNotifikasiDisposisi(
+  id: string,
+  data: Record<string, unknown>
+): NotifikasiDisposisi {
+  const rawJenis = data.jenis as NotifikasiJenis | undefined;
+  const jenis: NotifikasiJenis =
+    rawJenis === 'disposisi_diperbarui' ? 'disposisi_diperbarui' : 'disposisi_baru';
 
+  return {
+    id,
+    suratId: (data.suratId as string) || '',
+    recipientId: (data.recipientId as string) || '',
+    recipientNama: (data.recipientNama as string) || '',
+    nomorSurat: (data.nomorSurat as string) || '',
+    asalSurat: (data.asalSurat as string) || '',
+    perihal: (data.perihal as string) || '',
+    sifat: (data.sifat as SuratMasuk['sifat']) || 'Biasa',
+    instruksiDisposisi: (data.instruksiDisposisi as string) || '',
+    tenggatWaktu: (data.tenggatWaktu as string | undefined) || undefined,
+    pengirimNama: (data.pengirimNama as string) || '',
+    jenis,
+    dibaca: Boolean(data.dibaca),
+    dibacaPada: (data.dibacaPada as string | undefined) || undefined,
+    createdAt: formatTimestamp(data.createdAt),
+    updatedAt: formatTimestamp(data.updatedAt),
+  };
+}
+
+export function subscribeNotifikasiDisposisi(
+  onData: (list: NotifikasiDisposisi[]) => void,
+  onError: (err: Error) => void
+) {
+  const path = 'notifikasi';
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) =>
+        docToNotifikasiDisposisi(docSnap.id, docSnap.data() as Record<string, unknown>)
+      );
+      list.sort((a, b) => {
+        const cmpUpdated = (b.updatedAt || b.createdAt || '').localeCompare(
+          a.updatedAt || a.createdAt || ''
+        );
+        if (cmpUpdated !== 0) return cmpUpdated;
+        return b.id.localeCompare(a.id);
+      });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export interface SyncDisposisiNotifikasiParams {
+  suratId: string;
+  recipients: Array<{ id: string; nama: string }>;
+  nomorSurat: string;
+  asalSurat: string;
+  perihal: string;
+  sifat: SuratMasuk['sifat'];
+  instruksiDisposisi: string;
+  tenggatWaktu?: string;
+  pengirimNama: string;
+}
+
+export async function syncDisposisiNotificationsDb(
+  params: SyncDisposisiNotifikasiParams
+): Promise<void> {
+  const path = `notifikasi`;
+  try {
+    const existingSnap = await getDocs(
+      query(collection(db, 'notifikasi'), where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+    );
+
+    const existingForSurat = existingSnap.docs.filter(
+      (d) => d.data().suratId === params.suratId
+    );
+    const existingByDocId = new Map(existingForSurat.map((d) => [d.id, d]));
+
+    const nextRecipientsMap = new Map<string, { id: string; nama: string }>();
+    for (const r of params.recipients.slice(0, LIMITS.MAX_DISPOSISI_ARRAY)) {
+      const cleanId = clampStr(r.id, LIMITS.ID);
+      if (cleanId && !nextRecipientsMap.has(cleanId)) {
+        nextRecipientsMap.set(cleanId, {
+          id: cleanId,
+          nama: clampStr(r.nama, LIMITS.NAMA) || 'Personel Tim',
+        });
+      }
+    }
+
+    const batch = writeBatch(db);
+    let opCount = 0;
+
+    // 1. Delete notifications for recipients who were removed from this surat's disposition
+    for (const existingDoc of existingForSurat) {
+      const existingRecipientId = String(existingDoc.data().recipientId || '');
+      const expectedDocId = buildNotifikasiDocId(params.suratId, existingRecipientId);
+      if (!nextRecipientsMap.has(existingRecipientId) || existingDoc.id !== expectedDocId) {
+        batch.delete(existingDoc.ref);
+        opCount++;
+      }
+    }
+
+    const cleanNomorSurat = clampStr(params.nomorSurat, LIMITS.NOMOR_SURAT) || 'SM/DPKP';
+    const cleanAsalSurat = clampStr(params.asalSurat, LIMITS.ASAL_SURAT) || '-';
+    const cleanPerihal = clampStr(params.perihal, LIMITS.PERIHAL) || '-';
+    const cleanInstruksi =
+      clampStr(params.instruksiDisposisi, LIMITS.INSTRUKSI) ||
+      'Disposisi surat masuk untuk segera ditindaklanjuti.';
+    const cleanPengirim = clampStr(params.pengirimNama, LIMITS.NAMA) || 'Ketua Tim';
+    const cleanTenggat = params.tenggatWaktu?.trim()
+      ? clampStr(params.tenggatWaktu, LIMITS.DATE_STR)
+      : '';
+
+    // 2. Create or update notifications exclusively for the chosen recipients
+    for (const recipient of nextRecipientsMap.values()) {
+      const docId = buildNotifikasiDocId(params.suratId, recipient.id);
+      const docRef = doc(db, 'notifikasi', docId);
+      const alreadyExists = existingByDocId.has(docId);
+
+      if (alreadyExists) {
+        batch.update(docRef, {
+          recipientNama: recipient.nama,
+          nomorSurat: cleanNomorSurat,
+          asalSurat: cleanAsalSurat,
+          perihal: cleanPerihal,
+          sifat: params.sifat || 'Biasa',
+          instruksiDisposisi: cleanInstruksi,
+          tenggatWaktu: cleanTenggat ? cleanTenggat : deleteField(),
+          pengirimNama: cleanPengirim,
+          jenis: 'disposisi_diperbarui',
+          dibaca: false,
+          dibacaPada: deleteField(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        const createPayload: Record<string, unknown> = {
+          ownerId: INTERNAL_WORKSPACE_ID,
+          suratId: clampStr(params.suratId, LIMITS.ID),
+          recipientId: recipient.id,
+          recipientNama: recipient.nama,
+          nomorSurat: cleanNomorSurat,
+          asalSurat: cleanAsalSurat,
+          perihal: cleanPerihal,
+          sifat: params.sifat || 'Biasa',
+          instruksiDisposisi: cleanInstruksi,
+          pengirimNama: cleanPengirim,
+          jenis: 'disposisi_baru',
+          dibaca: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (cleanTenggat) {
+          createPayload.tenggatWaktu = cleanTenggat;
+        }
+        batch.set(docRef, createPayload);
+      }
+      opCount++;
+    }
+
+    if (opCount > 0) {
+      await batch.commit();
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function markNotifikasiReadDb(
+  notifId: string,
+  dibaca = true
+): Promise<void> {
+  const path = `notifikasi/${notifId}`;
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  try {
+    await updateDoc(doc(db, 'notifikasi', notifId), {
+      dibaca,
+      dibacaPada: dibaca ? clampStr(nowStamp, LIMITS.DATE_STR) : deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function markAllNotifikasiReadDb(notifIds: string[]): Promise<void> {
+  const cleanIds = Array.from(new Set(notifIds.map((id) => id.trim()).filter(Boolean)));
+  if (cleanIds.length === 0) return;
+
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  try {
+    const batch = writeBatch(db);
+    for (const id of cleanIds) {
+      batch.update(doc(db, 'notifikasi', id), {
+        dibaca: true,
+        dibacaPada: clampStr(nowStamp, LIMITS.DATE_STR),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, 'notifikasi');
+  }
+}
