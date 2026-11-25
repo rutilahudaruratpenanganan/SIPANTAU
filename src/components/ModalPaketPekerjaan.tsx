@@ -54,6 +54,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
 
   const [namaKegiatan, setNamaKegiatan] = useState('');
   const [subKegiatan, setSubKegiatan] = useState('');
+  const [pekerjaan, setPekerjaan] = useState('');
   const [jenisPelaksanaan, setJenisPelaksanaan] = useState<JenisPelaksanaan>('Perorangan');
   const [tahunAnggaranText, setTahunAnggaranText] = useState<string>(() =>
     String(new Date().getFullYear())
@@ -81,6 +82,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     if (initialPaket) {
       setNamaKegiatan(initialPaket.namaKegiatan);
       setSubKegiatan(initialPaket.subKegiatan);
+      setPekerjaan(initialPaket.pekerjaan || '');
       setJenisPelaksanaan(initialPaket.jenisPelaksanaan);
       setTahunAnggaranText(String(getPaketTahunAnggaran(initialPaket)));
       setNilaiAnggaran(initialPaket.nilaiAnggaran || 0);
@@ -106,6 +108,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       const today = getTodayLocalIso();
       setNamaKegiatan('');
       setSubKegiatan('');
+      setPekerjaan('');
       setJenisPelaksanaan('Perorangan');
       setTahunAnggaranText(today.slice(0, 4));
       setNilaiAnggaran(0);
@@ -255,6 +258,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
         {
           namaKegiatan: namaKegiatan.trim(),
           subKegiatan: subKegiatan.trim(),
+          pekerjaan: pekerjaan.trim() || undefined,
           jenisPelaksanaan,
           tahunAnggaran,
           nilaiAnggaran,
@@ -368,6 +372,24 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
                 />
               </div>
+
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="paket-pekerjaan"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Pekerjaan
+                </label>
+                <input
+                  id="paket-pekerjaan"
+                  type="text"
+                  maxLength={300}
+                  value={pekerjaan}
+                  onChange={(e) => setPekerjaan(e.target.value)}
+                  placeholder="Contoh: Pengawasan Teknis Pembangunan Perumahan Wilayah Timur"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
@@ -437,7 +459,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   htmlFor="paket-nilai-anggaran"
                   className="block font-semibold text-slate-700 mb-1"
                 >
-                  Nilai Anggaran / Kontrak (Rp) <span className="text-rose-600">*</span>
+                  Pagu Anggaran (Rp) <span className="text-rose-600">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">

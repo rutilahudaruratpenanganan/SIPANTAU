@@ -388,7 +388,7 @@ test('NotifikasiDisposisi enforces recipientId, workspace binding, bounds, allow
 });
 
 const PAKET_ALLOWED_KEYS = new Set([
-  'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+  'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'tahunAnggaran',
   'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
   'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
   'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
@@ -413,6 +413,12 @@ function evaluatePaketCreate(
     return 'PERMISSION_DENIED';
   }
   if (typeof payload.subKegiatan !== 'string' || payload.subKegiatan.length < 1 || payload.subKegiatan.length > 300) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.pekerjaan !== undefined &&
+    (typeof payload.pekerjaan !== 'string' || payload.pekerjaan.length > 300)
+  ) {
     return 'PERMISSION_DENIED';
   }
   if (typeof payload.jenisPelaksanaan !== 'string' || !VALID_JENIS_PELAKSANAAN.has(payload.jenisPelaksanaan)) {
@@ -456,6 +462,7 @@ test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tah
     ownerId: INTERNAL_WORKSPACE_ID,
     namaKegiatan: 'Pengawasan dan Pengendalian Perumahan',
     subKegiatan: 'Kajian Teknis Kelaikan Fungsi Bangunan Perumahan',
+    pekerjaan: 'Pengawasan Pembangunan Perumahan Wilayah Barat',
     jenisPelaksanaan: 'Perorangan',
     tahunAnggaran: 2026,
     nilaiAnggaran: 75000000,
@@ -482,6 +489,7 @@ test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tah
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Swakelola/Rutin' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 1999 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 2101 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, pekerjaan: 'x'.repeat(301) }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, kodeRup: 'x'.repeat(101) }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, nilaiAnggaran: -1000 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, durasiHariKerja: 0 }, true), 'PERMISSION_DENIED');

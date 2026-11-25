@@ -306,7 +306,7 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
     }
   }
   if (!Number.isFinite(input.nilaiAnggaran) || input.nilaiAnggaran < 0) {
-    return 'Nilai Anggaran/Kontrak harus berupa angka bernilai 0 atau lebih.';
+    return 'Pagu Anggaran harus berupa angka bernilai 0 atau lebih.';
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test((input.tanggalMulai || '').trim())) {
     return 'Tanggal Mulai wajib diisi dengan format tanggal yang valid.';
@@ -389,13 +389,14 @@ export function filterPaketPekerjaan(
       const q = filters.searchQuery.toLowerCase().trim();
       const matchKegiatan = item.namaKegiatan.toLowerCase().includes(q);
       const matchSub = item.subKegiatan.toLowerCase().includes(q);
+      const matchPekerjaan = (item.pekerjaan || '').toLowerCase().includes(q);
       const matchPenyedia = (item.penyedia || '').toLowerCase().includes(q);
       const matchKodeRup = (item.kodeRup || '').toLowerCase().includes(q);
       const matchKontrak = (item.nomorKontrak || '').toLowerCase().includes(q);
       const matchPic = (item.picNama || '').toLowerCase().includes(q);
       const matchTahun = String(getPaketTahunAnggaran(item)).includes(q);
       const matchTahap = item.tahapan.some((t) => t.nama.toLowerCase().includes(q));
-      if (!matchKegiatan && !matchSub && !matchPenyedia && !matchKodeRup && !matchKontrak && !matchPic && !matchTahun && !matchTahap) {
+      if (!matchKegiatan && !matchSub && !matchPekerjaan && !matchPenyedia && !matchKodeRup && !matchKontrak && !matchPic && !matchTahun && !matchTahap) {
         return false;
       }
     }
@@ -530,12 +531,13 @@ export function buildPekerjaanCsvContent(
     'Tahun Anggaran',
     'Nama Kegiatan',
     'Sub Kegiatan',
+    'Pekerjaan',
     'Jenis Pelaksanaan',
     'Kode RUP',
     'Nomor Kontrak / SPK',
     'Penyedia / Pelaksana',
     'PIC / Penanggung Jawab',
-    'Nilai Anggaran / Kontrak (Rp)',
+    'Pagu Anggaran (Rp)',
     'Tanggal Mulai',
     'Durasi (Hari Kalender)',
     'Tanggal Selesai',
@@ -567,6 +569,7 @@ export function buildPekerjaanCsvContent(
       String(tahunAnggaran),
       escapeCsv(item.namaKegiatan),
       escapeCsv(item.subKegiatan),
+      escapeCsv(item.pekerjaan || ''),
       escapeCsv(item.jenisPelaksanaan),
       escapeCsv(item.kodeRup || ''),
       escapeCsv(item.nomorKontrak || ''),

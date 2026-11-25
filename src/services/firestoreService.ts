@@ -1504,6 +1504,7 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
     id,
     namaKegiatan: (data.namaKegiatan as string) || '',
     subKegiatan: (data.subKegiatan as string) || '',
+    pekerjaan: (data.pekerjaan as string | undefined) || undefined,
     jenisPelaksanaan,
     tahunAnggaran:
       typeof data.tahunAnggaran === 'number' ? data.tahunAnggaran : undefined,
@@ -1558,6 +1559,7 @@ export function subscribePaketPekerjaan(
 export interface PaketPekerjaanMutationPayload {
   namaKegiatan: string;
   subKegiatan: string;
+  pekerjaan?: string;
   jenisPelaksanaan: JenisPelaksanaan;
   tahunAnggaran?: number;
   nilaiAnggaran: number;
@@ -1606,6 +1608,9 @@ export async function createPaketPekerjaanDb(
     updatedAt: serverTimestamp(),
   };
 
+  if (input.pekerjaan?.trim()) {
+    payload.pekerjaan = clampStr(input.pekerjaan, LIMITS.KEGIATAN_NAMA);
+  }
   if (cleanTahun !== undefined) {
     payload.tahunAnggaran = cleanTahun;
   }
@@ -1659,6 +1664,9 @@ export async function updatePaketPekerjaanDb(
   const updatePayload: Record<string, unknown> = {
     namaKegiatan: clampStr(input.namaKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
     subKegiatan: clampStr(input.subKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
+    pekerjaan: input.pekerjaan?.trim()
+      ? clampStr(input.pekerjaan, LIMITS.KEGIATAN_NAMA)
+      : deleteField(),
     jenisPelaksanaan: input.jenisPelaksanaan,
     tahunAnggaran: cleanTahun !== undefined ? cleanTahun : deleteField(),
     nilaiAnggaran: cleanBudget,

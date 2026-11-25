@@ -542,6 +542,11 @@
           "minLength": 1,
           "maxLength": 300
         },
+        "pekerjaan": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Nama paket pekerjaan setelah Sub Kegiatan"
+        },
         "jenisPelaksanaan": {
           "type": "string",
           "enum": ["Perorangan", "Badan Usaha"]
@@ -552,7 +557,7 @@
         },
         "nilaiAnggaran": {
           "type": "number",
-          "description": "Nilai anggaran atau kontrak dalam Rupiah (Rp)"
+          "description": "Pagu anggaran dalam Rupiah (Rp)"
         },
         "tanggalMulai": {
           "type": "string",

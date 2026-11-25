@@ -178,6 +178,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
               </h2>
               <p className="text-[11px] text-slate-300 truncate">
                 {paket.namaKegiatan} · {paket.subKegiatan}
+                {paket.pekerjaan ? ` · ${paket.pekerjaan}` : ''}
               </p>
             </div>
           </div>

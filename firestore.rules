@@ -478,7 +478,7 @@ service cloud.firestore {
           'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+          'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'tahunAnggaran',
           'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
           'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
@@ -487,6 +487,7 @@ service cloud.firestore {
         && data.ownerId == 'internal_wasdal'
         && data.namaKegiatan is string && data.namaKegiatan.size() >= 1 && data.namaKegiatan.size() <= 300
         && data.subKegiatan is string && data.subKegiatan.size() >= 1 && data.subKegiatan.size() <= 300
+        && (!('pekerjaan' in data) || (data.pekerjaan is string && data.pekerjaan.size() <= 300))
         && (data.jenisPelaksanaan in ['Perorangan', 'Badan Usaha'])
         && (!('tahunAnggaran' in data) || (data.tahunAnggaran is int && data.tahunAnggaran >= 2000 && data.tahunAnggaran <= 2100))
         && (data.nilaiAnggaran is int || data.nilaiAnggaran is float)
@@ -512,7 +513,7 @@ service cloud.firestore {
 
     function isAllowedPaketPekerjaanUpdateAction(affected) {
       return affected.hasOnly([
-          'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+          'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'tahunAnggaran',
           'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'
         ])

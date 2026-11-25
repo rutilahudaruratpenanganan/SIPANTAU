@@ -283,6 +283,7 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
       id: 'pkt-1',
       namaKegiatan: 'Kajian Teknis A',
       subKegiatan: 'Penyusunan Dokumen',
+      pekerjaan: 'Pengawasan Pembangunan Perumahan Wilayah Barat',
       jenisPelaksanaan: 'Perorangan',
       tahunAnggaran: 2025,
       nilaiAnggaran: 45000000,
@@ -352,8 +353,15 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
   assert.equal(byRup.length, 1);
   assert.equal(byRup[0].id, 'pkt-1');
 
+  const byPekerjaan = filterPaketPekerjaan(list, { searchQuery: 'Wilayah Barat' }, '2026-11-24');
+  assert.equal(byPekerjaan.length, 1);
+  assert.equal(byPekerjaan[0].id, 'pkt-1');
+
   const csv = buildPekerjaanCsvContent(list, '2026-11-24');
   assert.equal(csv.includes('Tahun Anggaran'), true);
+  assert.equal(csv.includes('Pekerjaan'), true);
+  assert.equal(csv.includes('Pengawasan Pembangunan Perumahan Wilayah Barat'), true);
+  assert.equal(csv.includes('Pagu Anggaran (Rp)'), true);
   assert.equal(csv.includes('Kode RUP'), true);
   assert.equal(csv.includes('51234567'), true);
   assert.equal(csv.includes('2025'), true);

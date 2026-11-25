@@ -121,7 +121,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
             Kegiatan &amp; Pekerjaan
           </h1>
           <p className="text-xs text-slate-500">
-            Pantau paket kegiatan, nilai anggaran, durasi hari kalender, dan progres alur tahapan pelaksanaan
+            Pantau paket kegiatan, pagu anggaran, durasi hari kalender, dan progres alur tahapan pelaksanaan
           </p>
         </div>
 
@@ -150,7 +150,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl border border-slate-200 bg-white">
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
-            <span className="text-xs font-medium">Nilai Anggaran</span>
+            <span className="text-xs font-medium">Pagu Anggaran</span>
             <Wallet className="w-4 h-4 text-slate-600" />
           </div>
           <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">
@@ -210,7 +210,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari kegiatan, sub kegiatan, Kode RUP, penyedia, PIC..."
+              placeholder="Cari kegiatan, sub kegiatan, pekerjaan, Kode RUP, penyedia, PIC..."
               aria-label="Cari paket pekerjaan"
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
@@ -325,9 +325,9 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                    <th className="py-3 px-4">Kegiatan &amp; Sub Kegiatan</th>
+                    <th className="py-3 px-4">Kegiatan, Sub Kegiatan &amp; Pekerjaan</th>
                     <th className="py-3 px-3">Pelaksanaan</th>
-                    <th className="py-3 px-3 text-right">Nilai Anggaran/Kontrak</th>
+                    <th className="py-3 px-3 text-right">Pagu Anggaran</th>
                     <th className="py-3 px-3">Jadwal &amp; Durasi</th>
                     <th className="py-3 px-3 w-[320px]">Progres &amp; Alur Tahapan</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
@@ -358,6 +358,11 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           <div className="text-slate-600 mt-0.5 leading-snug">
                             {paket.subKegiatan}
                           </div>
+                          {paket.pekerjaan && (
+                            <div className="text-slate-800 font-medium mt-0.5 leading-snug">
+                              {paket.pekerjaan}
+                            </div>
+                          )}
                           {(paket.kodeRup || paket.nomorKontrak || paket.penyedia || paket.picNama) && (
                             <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                               {paket.kodeRup && (
@@ -552,6 +557,9 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                     <div className="min-w-0">
                       <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
                       <div className="text-slate-600 mt-0.5">{paket.subKegiatan}</div>
+                      {paket.pekerjaan && (
+                        <div className="text-slate-800 font-medium mt-0.5">{paket.pekerjaan}</div>
+                      )}
                     </div>
                     <span
                       className={`text-[11px] font-bold shrink-0 ${

@@ -658,7 +658,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
 
             <div className="p-4">
               <div className="text-[11px] font-semibold text-slate-500">
-                Total Pagu / Nilai Kontrak
+                Total Pagu Anggaran
               </div>
               <div className="text-lg font-bold text-slate-900 font-mono tabular-nums mt-1">
                 {formatRupiah(paketStats.totalAnggaran)}
@@ -713,7 +713,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
                       <th className="py-2.5 px-3">Tahun Anggaran</th>
                       <th className="py-2.5 px-3 text-right">Jumlah Paket</th>
                       <th className="py-2.5 px-3 text-right">Tuntas</th>
-                      <th className="py-2.5 px-3 text-right">Total Pagu / Kontrak</th>
+                      <th className="py-2.5 px-3 text-right">Total Pagu Anggaran</th>
                       <th className="py-2.5 px-3 text-right">Nilai Realisasi Selesai</th>
                       <th className="py-2.5 px-3 text-right">Serapan (%)</th>
                       <th className="py-2.5 px-3 text-right">Rata-Rata Progres</th>
@@ -807,10 +807,12 @@ export const RekapView: React.FC<RekapViewProps> = ({
                   <tr className="bg-slate-100 border-b border-slate-800 font-bold text-slate-900 uppercase">
                     <th className="border border-slate-800 p-2 text-center w-9">No.</th>
                     <th className="border border-slate-800 p-2 text-center w-16">TA</th>
-                    <th className="border border-slate-800 p-2">Kegiatan &amp; Sub Kegiatan</th>
+                    <th className="border border-slate-800 p-2">
+                      Kegiatan, Sub Kegiatan &amp; Pekerjaan
+                    </th>
                     <th className="border border-slate-800 p-2 w-40">Pelaksanaan &amp; PIC</th>
                     <th className="border border-slate-800 p-2 text-right w-36">
-                      Nilai Anggaran/Kontrak
+                      Pagu Anggaran
                     </th>
                     <th className="border border-slate-800 p-2 w-36">Durasi &amp; Jadwal</th>
                     <th className="border border-slate-800 p-2 min-w-[200px]">
@@ -834,6 +836,11 @@ export const RekapView: React.FC<RekapViewProps> = ({
                         <td className="border border-slate-800 p-2">
                           <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
                           <div className="text-slate-700 mt-0.5">{paket.subKegiatan}</div>
+                          {paket.pekerjaan && (
+                            <div className="text-slate-900 font-medium mt-0.5">
+                              Pekerjaan: {paket.pekerjaan}
+                            </div>
+                          )}
                           {paket.kodeRup && (
                             <div className="text-[10px] font-mono text-slate-600 mt-0.5">
                               Kode RUP: {paket.kodeRup}
@@ -911,7 +918,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
                       colSpan={4}
                       className="border border-slate-800 p-2 text-right uppercase"
                     >
-                      Total Nilai Anggaran / Kontrak (
+                      Total Pagu Anggaran (
                       {selectedTahunAnggaran === 'all'
                         ? 'Semua Tahun Anggaran'
                         : `TA ${selectedTahunAnggaran}`}

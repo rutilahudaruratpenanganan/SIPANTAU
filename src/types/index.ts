@@ -190,6 +190,7 @@ export interface PaketPekerjaan {
   id: string;
   namaKegiatan: string;
   subKegiatan: string;
+  pekerjaan?: string;
   jenisPelaksanaan: JenisPelaksanaan;
   tahunAnggaran?: number; // Tahun anggaran kegiatan (mis. 2026)
   nilaiAnggaran: number;
