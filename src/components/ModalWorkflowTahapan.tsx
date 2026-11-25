@@ -14,15 +14,20 @@ import {
   X,
 } from 'lucide-react';
 import {
+  MekanismePencairan,
   PaketPekerjaan,
   Personel,
+  StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
 } from '../types';
 import {
+  MEKANISME_PENCAIRAN_LIST,
+  STATUS_PENCAIRAN_LIST,
   computePaketProgress,
   createTahapId,
   formatRupiah,
+  formatTanggalDisplay,
   getPaketTahunAnggaran,
   getTodayLocalIso,
   normalizeTahapanOrder,
@@ -37,7 +42,11 @@ interface ModalWorkflowTahapanProps {
   onSaveProgress: (
     paketId: string,
     tahapan: TahapPekerjaan[],
-    tanggalSelesai?: string
+    tanggalSelesai?: string,
+    pencairan?: {
+      statusPencairan?: StatusPencairan;
+      mekanismePencairan?: MekanismePencairan;
+    }
   ) => Promise<void>;
   onOpenEditPaket: (paket: PaketPekerjaan) => void;
 }
@@ -52,6 +61,8 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 }) => {
   const [tahapan, setTahapan] = useState<TahapPekerjaan[]>([]);
   const [tanggalSelesaiPaket, setTanggalSelesaiPaket] = useState('');
+  const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
+  const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [newStageName, setNewStageName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -60,6 +71,8 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     if (!isOpen || !paket) return;
     setTahapan(paket.tahapan.map((t, idx) => ({ ...t, urutan: idx + 1 })));
     setTanggalSelesaiPaket(paket.tanggalSelesai || '');
+    setStatusPencairan(paket.statusPencairan || 'Belum');
+    setMekanismePencairan(paket.mekanismePencairan || '');
     setNewStageName('');
     setErrorMessage('');
     setIsSaving(false);
@@ -178,7 +191,10 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     setErrorMessage('');
     setIsSaving(true);
     try {
-      await onSaveProgress(paket.id, cleaned, resolvedTanggalSelesai);
+      await onSaveProgress(paket.id, cleaned, resolvedTanggalSelesai, {
+        statusPencairan,
+        mekanismePencairan: mekanismePencairan || undefined,
+      });
       onClose();
     } catch (err) {
       setErrorMessage(
@@ -241,6 +257,14 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600">
               <span className="font-semibold text-slate-900">{paket.jenisPelaksanaan}</span>
+              {paket.skemaKontrak && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  <span className="font-semibold text-indigo-700">{paket.skemaKontrak}</span>
+                </>
+              )}
               <span aria-hidden="true" className="text-slate-300">
                 ·
               </span>
@@ -259,14 +283,34 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                 ·
               </span>
               <span className="font-mono font-bold text-slate-900 tabular-nums">
-                {formatRupiah(paket.nilaiAnggaran)}
+                Pagu: {formatRupiah(paket.nilaiAnggaran)}
               </span>
+              {typeof paket.hps === 'number' && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  <span className="font-mono text-slate-700 tabular-nums">
+                    HPS: {formatRupiah(paket.hps)}
+                  </span>
+                </>
+              )}
+              {typeof paket.nilaiKontrak === 'number' && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  <span className="font-mono font-semibold text-emerald-700 tabular-nums">
+                    Kontrak: {formatRupiah(paket.nilaiKontrak)}
+                  </span>
+                </>
+              )}
               <span aria-hidden="true" className="text-slate-300">
                 ·
               </span>
-              <span className="font-mono tabular-nums">
-                Mulai {paket.tanggalMulai} · {liveProgress.durasiHariKerja} hari kalender → Selesai{' '}
-                {paket.tenggatWaktu}
+              <span className="tabular-nums">
+                Mulai {formatTanggalDisplay(paket.tanggalMulai)} · {liveProgress.durasiHariKerja}{' '}
+                hari kalender → Selesai {formatTanggalDisplay(paket.tenggatWaktu)}
               </span>
               {paket.penyedia && (
                 <>
@@ -319,6 +363,53 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
               <span className="font-medium">{errorMessage}</span>
             </div>
           )}
+
+          {/* Status & Mekanisme Pencairan */}
+          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="workflow-status-pencairan"
+                className="block text-[11px] font-semibold text-slate-700 mb-1"
+              >
+                Tahapan Pencairan
+              </label>
+              <select
+                id="workflow-status-pencairan"
+                value={statusPencairan}
+                onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                {STATUS_PENCAIRAN_LIST.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="workflow-mekanisme-pencairan"
+                className="block text-[11px] font-semibold text-slate-700 mb-1"
+              >
+                Mekanisme Pencairan
+              </label>
+              <select
+                id="workflow-mekanisme-pencairan"
+                value={mekanismePencairan}
+                onChange={(e) =>
+                  setMekanismePencairan(e.target.value as MekanismePencairan | '')
+                }
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="">-- Pilih Mekanisme Pencairan --</option>
+                {MEKANISME_PENCAIRAN_LIST.map((mek) => (
+                  <option key={mek} value={mek}>
+                    {mek}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           {tahapan.map((stage, idx) => {
             const isDone = stage.status === 'selesai';
             const isRunning = stage.status === 'sedang_berjalan';
@@ -513,11 +604,12 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 
         {/* Footer Summary & Save */}
         <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 text-xs">
-          <div className="text-slate-600 font-mono tabular-nums text-[11px]">
+          <div className="text-slate-600 tabular-nums text-[11px]">
             {liveProgress.overallStatus === 'selesai' ? (
               <span>
-                Target Selesai: <strong className="text-slate-900">{paket.tenggatWaktu}</strong> ·
-                Tuntas seluruh tahapan ({tanggalSelesaiPaket || todayIso})
+                Target Selesai:{' '}
+                <strong className="text-slate-900">{formatTanggalDisplay(paket.tenggatWaktu)}</strong> ·
+                Tuntas seluruh tahapan ({formatTanggalDisplay(tanggalSelesaiPaket || todayIso)})
               </span>
             ) : (
               <span>
@@ -526,7 +618,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                   {liveProgress.durasiHariKerja} hari kalender
                 </strong>{' '}
                 · Tanggal Selesai (Otomatis):{' '}
-                <strong className="text-slate-900">{paket.tenggatWaktu}</strong>
+                <strong className="text-slate-900">{formatTanggalDisplay(paket.tenggatWaktu)}</strong>
               </span>
             )}
           </div>

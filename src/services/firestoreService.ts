@@ -1479,6 +1479,24 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
   const jenisPelaksanaan: JenisPelaksanaan =
     rawJenis === 'Badan Usaha' ? 'Badan Usaha' : 'Perorangan';
 
+  const rawSkema = data.skemaKontrak as PaketPekerjaan['skemaKontrak'];
+  const skemaKontrak =
+    rawSkema === 'Lump Sum' || rawSkema === 'Waktu Penugasan' ? rawSkema : undefined;
+
+  const rawStatusPencairan = data.statusPencairan as PaketPekerjaan['statusPencairan'];
+  const statusPencairan =
+    rawStatusPencairan === 'Sudah' || rawStatusPencairan === 'Belum'
+      ? rawStatusPencairan
+      : undefined;
+
+  const rawMekanisme = data.mekanismePencairan as PaketPekerjaan['mekanismePencairan'];
+  const mekanismePencairan =
+    rawMekanisme === 'Langsung (LS)' ||
+    rawMekanisme === 'Ganti Uang Persediaan (GU)' ||
+    rawMekanisme === 'Tambahan Uang Persediaan (TU)'
+      ? rawMekanisme
+      : undefined;
+
   const rawTahapan = Array.isArray(data.tahapan)
     ? (data.tahapan as Record<string, unknown>[])
     : [];
@@ -1506,14 +1524,19 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
     subKegiatan: (data.subKegiatan as string) || '',
     pekerjaan: (data.pekerjaan as string | undefined) || undefined,
     jenisPelaksanaan,
+    skemaKontrak,
     tahunAnggaran:
       typeof data.tahunAnggaran === 'number' ? data.tahunAnggaran : undefined,
     nilaiAnggaran: typeof data.nilaiAnggaran === 'number' ? data.nilaiAnggaran : 0,
+    hps: typeof data.hps === 'number' ? data.hps : undefined,
+    nilaiKontrak: typeof data.nilaiKontrak === 'number' ? data.nilaiKontrak : undefined,
     tanggalMulai: (data.tanggalMulai as string) || '',
     durasiHariKerja:
       typeof data.durasiHariKerja === 'number' ? data.durasiHariKerja : undefined,
     tenggatWaktu: (data.tenggatWaktu as string) || '',
     tanggalSelesai: (data.tanggalSelesai as string | undefined) || undefined,
+    statusPencairan,
+    mekanismePencairan,
     kodeRup: (data.kodeRup as string | undefined) || undefined,
     nomorKontrak: (data.nomorKontrak as string | undefined) || undefined,
     penyedia: (data.penyedia as string | undefined) || undefined,
@@ -1561,12 +1584,17 @@ export interface PaketPekerjaanMutationPayload {
   subKegiatan: string;
   pekerjaan?: string;
   jenisPelaksanaan: JenisPelaksanaan;
+  skemaKontrak?: PaketPekerjaan['skemaKontrak'];
   tahunAnggaran?: number;
   nilaiAnggaran: number;
+  hps?: number;
+  nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
   tanggalSelesai?: string;
+  statusPencairan?: PaketPekerjaan['statusPencairan'];
+  mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
   kodeRup?: string;
   nomorKontrak?: string;
   penyedia?: string;
@@ -1575,15 +1603,20 @@ export interface PaketPekerjaanMutationPayload {
   tahapan: TahapPekerjaan[];
 }
 
+function clampMoney(val: number | undefined): number | undefined {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return undefined;
+  return Math.max(0, Math.min(1_000_000_000_000, Math.round(val)));
+}
+
 export async function createPaketPekerjaanDb(
   input: PaketPekerjaanMutationPayload,
   creator: { id: string; nama: string }
 ): Promise<string> {
   const id = `paket-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const path = `paketPekerjaan/${id}`;
-  const cleanBudget = Number.isFinite(input.nilaiAnggaran)
-    ? Math.max(0, Math.min(1_000_000_000_000, Math.round(input.nilaiAnggaran)))
-    : 0;
+  const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
+  const cleanHps = clampMoney(input.hps);
+  const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
       ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
@@ -1611,14 +1644,29 @@ export async function createPaketPekerjaanDb(
   if (input.pekerjaan?.trim()) {
     payload.pekerjaan = clampStr(input.pekerjaan, LIMITS.KEGIATAN_NAMA);
   }
+  if (input.skemaKontrak) {
+    payload.skemaKontrak = input.skemaKontrak;
+  }
   if (cleanTahun !== undefined) {
     payload.tahunAnggaran = cleanTahun;
+  }
+  if (cleanHps !== undefined) {
+    payload.hps = cleanHps;
+  }
+  if (cleanNilaiKontrak !== undefined) {
+    payload.nilaiKontrak = cleanNilaiKontrak;
   }
   if (cleanDurasi !== undefined) {
     payload.durasiHariKerja = cleanDurasi;
   }
   if (input.tanggalSelesai?.trim()) {
     payload.tanggalSelesai = clampStr(input.tanggalSelesai, LIMITS.DATE_STR);
+  }
+  if (input.statusPencairan) {
+    payload.statusPencairan = input.statusPencairan;
+  }
+  if (input.mekanismePencairan) {
+    payload.mekanismePencairan = input.mekanismePencairan;
   }
   if (input.kodeRup?.trim()) {
     payload.kodeRup = clampStr(input.kodeRup, LIMITS.KODE_RUP);
@@ -1649,9 +1697,9 @@ export async function updatePaketPekerjaanDb(
   input: PaketPekerjaanMutationPayload
 ): Promise<void> {
   const path = `paketPekerjaan/${paketId}`;
-  const cleanBudget = Number.isFinite(input.nilaiAnggaran)
-    ? Math.max(0, Math.min(1_000_000_000_000, Math.round(input.nilaiAnggaran)))
-    : 0;
+  const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
+  const cleanHps = clampMoney(input.hps);
+  const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
       ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
@@ -1668,14 +1716,19 @@ export async function updatePaketPekerjaanDb(
       ? clampStr(input.pekerjaan, LIMITS.KEGIATAN_NAMA)
       : deleteField(),
     jenisPelaksanaan: input.jenisPelaksanaan,
+    skemaKontrak: input.skemaKontrak ? input.skemaKontrak : deleteField(),
     tahunAnggaran: cleanTahun !== undefined ? cleanTahun : deleteField(),
     nilaiAnggaran: cleanBudget,
+    hps: cleanHps !== undefined ? cleanHps : deleteField(),
+    nilaiKontrak: cleanNilaiKontrak !== undefined ? cleanNilaiKontrak : deleteField(),
     tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
     durasiHariKerja: cleanDurasi !== undefined ? cleanDurasi : deleteField(),
     tenggatWaktu: clampStr(input.tenggatWaktu, LIMITS.DATE_STR),
     tanggalSelesai: input.tanggalSelesai?.trim()
       ? clampStr(input.tanggalSelesai, LIMITS.DATE_STR)
       : deleteField(),
+    statusPencairan: input.statusPencairan ? input.statusPencairan : deleteField(),
+    mekanismePencairan: input.mekanismePencairan ? input.mekanismePencairan : deleteField(),
     kodeRup: input.kodeRup?.trim()
       ? clampStr(input.kodeRup, LIMITS.KODE_RUP)
       : deleteField(),
@@ -1705,17 +1758,32 @@ export async function updatePaketPekerjaanDb(
 export async function updatePaketPekerjaanTahapanDb(
   paketId: string,
   tahapan: TahapPekerjaan[],
-  tanggalSelesai?: string
+  tanggalSelesai?: string,
+  pencairan?: {
+    statusPencairan?: PaketPekerjaan['statusPencairan'];
+    mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
+  }
 ): Promise<void> {
   const path = `paketPekerjaan/${paketId}`;
+  const updatePayload: Record<string, unknown> = {
+    tahapan: sanitizeTahapanPekerjaan(tahapan),
+    tanggalSelesai: tanggalSelesai?.trim()
+      ? clampStr(tanggalSelesai, LIMITS.DATE_STR)
+      : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+  if (pencairan) {
+    if (pencairan.statusPencairan !== undefined) {
+      updatePayload.statusPencairan = pencairan.statusPencairan;
+    }
+    if (pencairan.mekanismePencairan !== undefined) {
+      updatePayload.mekanismePencairan = pencairan.mekanismePencairan
+        ? pencairan.mekanismePencairan
+        : deleteField();
+    }
+  }
   try {
-    await updateDoc(doc(db, 'paketPekerjaan', paketId), {
-      tahapan: sanitizeTahapanPekerjaan(tahapan),
-      tanggalSelesai: tanggalSelesai?.trim()
-        ? clampStr(tanggalSelesai, LIMITS.DATE_STR)
-        : deleteField(),
-      updatedAt: serverTimestamp(),
-    });
+    await updateDoc(doc(db, 'paketPekerjaan', paketId), updatePayload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }

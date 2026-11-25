@@ -25,6 +25,10 @@ import { ModalAgenda } from './components/ModalAgenda';
 import { PekerjaanView } from './components/PekerjaanView';
 import { ModalPaketPekerjaan } from './components/ModalPaketPekerjaan';
 import { ModalWorkflowTahapan } from './components/ModalWorkflowTahapan';
+import {
+  ModalCetakPekerjaan,
+  ModalCetakPekerjaanInitialState,
+} from './components/ModalCetakPekerjaan';
 import { 
   AgendaEvent,
   AkunKredensial,
@@ -260,6 +264,10 @@ export default function App() {
   const [selectedPaketForEditId, setSelectedPaketForEditId] = useState<string | null>(null);
   const [isModalWorkflowOpen, setIsModalWorkflowOpen] = useState(false);
   const [selectedPaketForWorkflowId, setSelectedPaketForWorkflowId] = useState<string | null>(null);
+  const [isModalCetakPekerjaanOpen, setIsModalCetakPekerjaanOpen] = useState(false);
+  const [cetakPekerjaanInit, setCetakPekerjaanInit] = useState<
+    ModalCetakPekerjaanInitialState | undefined
+  >(undefined);
 
   const selectedSuratForEdit = suratList.find((s) => s.id === selectedSuratForEditId) || null;
   const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
@@ -1172,10 +1180,17 @@ export default function App() {
   const handleSavePaketTahapan = async (
     paketId: string,
     tahapan: TahapPekerjaan[],
-    tanggalSelesai?: string
+    tanggalSelesai?: string,
+    pencairan?: {
+      statusPencairan?: 'Belum' | 'Sudah';
+      mekanismePencairan?:
+        | 'Langsung (LS)'
+        | 'Ganti Uang Persediaan (GU)'
+        | 'Tambahan Uang Persediaan (TU)';
+    }
   ) => {
     const target = paketPekerjaanList.find((p) => p.id === paketId);
-    await updatePaketPekerjaanTahapanDb(paketId, tahapan, tanggalSelesai);
+    await updatePaketPekerjaanTahapanDb(paketId, tahapan, tanggalSelesai, pencairan);
     showToast(
       `Progres tahapan ${target ? `"${target.subKegiatan}"` : 'paket pekerjaan'} berhasil diperbarui.`
     );
@@ -1324,7 +1339,11 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 print:p-0 print:space-y-0">
+      <main
+        className={`flex-1 w-full max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 print:p-0 print:space-y-0 ${
+          isModalLembarDisposisiOpen || isModalCetakPekerjaanOpen ? 'print:hidden' : ''
+        }`}
+      >
         
         {/* Role & Access Info Bar */}
         <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs print:hidden">
@@ -1677,6 +1696,18 @@ export default function App() {
               setSelectedPaketForWorkflowId(paket.id);
               setIsModalWorkflowOpen(true);
             }}
+            onOpenPrint={(opts) => {
+              setCetakPekerjaanInit({
+                mode: opts.selectedPaketId ? 'kartu' : 'rekap',
+                selectedPaketId: opts.selectedPaketId || 'all',
+                tahunAnggaran: opts.tahunAnggaran,
+                jenisPelaksanaan: opts.jenisPelaksanaan,
+                statusPencairan: opts.statusPencairan,
+                status: opts.status,
+                searchQuery: opts.searchQuery,
+              });
+              setIsModalCetakPekerjaanOpen(true);
+            }}
             onDeletePaket={handleDeletePaketPekerjaan}
             onNotify={showToast}
           />
@@ -1874,6 +1905,21 @@ export default function App() {
             setSelectedPaketForEditId(paket.id);
             setIsModalPaketOpen(true);
           }}
+        />
+      )}
+
+      {/* 12. Modal Menu Cetak Pekerjaan (Rekap & Kartu Kendali) */}
+      {isModalCetakPekerjaanOpen && (
+        <ModalCetakPekerjaan
+          isOpen={isModalCetakPekerjaanOpen}
+          onClose={() => {
+            setIsModalCetakPekerjaanOpen(false);
+            setCetakPekerjaanInit(undefined);
+          }}
+          paketList={paketPekerjaanList}
+          pejabatConfig={pejabatConfig}
+          initialState={cetakPekerjaanInit}
+          onNotify={showToast}
         />
       )}
 

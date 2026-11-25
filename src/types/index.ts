@@ -174,6 +174,15 @@ export type JenisPelaksanaan = 'Perorangan' | 'Badan Usaha';
 
 export type StatusTahapPekerjaan = 'belum_mulai' | 'sedang_berjalan' | 'selesai';
 
+export type StatusPencairan = 'Belum' | 'Sudah';
+
+export type MekanismePencairan =
+  | 'Langsung (LS)'
+  | 'Ganti Uang Persediaan (GU)'
+  | 'Tambahan Uang Persediaan (TU)';
+
+export type SkemaKontrak = 'Lump Sum' | 'Waktu Penugasan';
+
 export interface TahapPekerjaan {
   id: string;
   urutan: number;
@@ -192,12 +201,17 @@ export interface PaketPekerjaan {
   subKegiatan: string;
   pekerjaan?: string;
   jenisPelaksanaan: JenisPelaksanaan;
+  skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number; // Tahun anggaran kegiatan (mis. 2026)
-  nilaiAnggaran: number;
+  nilaiAnggaran: number; // Pagu Anggaran (Rp)
+  hps?: number; // Harga Perkiraan Sendiri (Rp)
+  nilaiKontrak?: number; // Nilai Kontrak / Realisasi (Rp)
   tanggalMulai: string; // YYYY-MM-DD
   durasiHariKerja?: number; // Jumlah hari kalender (Senin-Minggu)
   tenggatWaktu: string; // YYYY-MM-DD (Tanggal selesai rencana otomatis)
   tanggalSelesai?: string; // YYYY-MM-DD (Tanggal tuntas aktual)
+  statusPencairan?: StatusPencairan;
+  mekanismePencairan?: MekanismePencairan;
   kodeRup?: string;
   nomorKontrak?: string;
   penyedia?: string;
@@ -209,4 +223,3 @@ export interface PaketPekerjaan {
   createdAt: string;
   updatedAt: string;
 }
-

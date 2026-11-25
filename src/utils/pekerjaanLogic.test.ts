@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   JENIS_PELAKSANAAN_LIST,
+  MEKANISME_PENCAIRAN_LIST,
+  SKEMA_KONTRAK_LIST,
+  STATUS_PENCAIRAN_LIST,
   TEMPLATE_TAHAPAN_PEKERJAAN,
   addCalendarDaysIso,
   buildPekerjaanCsvContent,
@@ -11,6 +14,9 @@ import {
   countCalendarDaysBetweenIso,
   filterPaketPekerjaan,
   formatRupiah,
+  formatTanggalDdMmYyyy,
+  formatTanggalDisplay,
+  getAvailablePicNames,
   getAvailableTahunAnggaran,
   getPaketDurasiHariKerja,
   getPaketTahunAnggaran,
@@ -20,7 +26,13 @@ import {
   summarizePaketByTahunAnggaran,
   validatePaketPekerjaanInput,
 } from './pekerjaanLogic.ts';
-import type { JenisPelaksanaan, PaketPekerjaan } from '../types/index.ts';
+import type {
+  JenisPelaksanaan,
+  MekanismePencairan,
+  PaketPekerjaan,
+  SkemaKontrak,
+  StatusPencairan,
+} from '../types/index.ts';
 
 test('Auto-templates match exact requested workflow stages per Jenis Pelaksanaan', () => {
   assert.deepEqual(JENIS_PELAKSANAAN_LIST, ['Perorangan', 'Badan Usaha']);
@@ -93,27 +105,32 @@ test('Rupiah formatting and parsing handle Indonesian currency safely', () => {
   assert.equal(formatted.includes('125.000.000'), true);
 });
 
-test('Calendar-days calculation includes weekends and handles month/leap-year rollovers accurately', () => {
-  // 2026-11-02 (Monday) + 5 calendar days => 2026-11-07 (Saturday)
-  assert.equal(addCalendarDaysIso('2026-11-02', 5), '2026-11-07');
-  // 2026-11-06 (Friday) + 1 calendar day => 2026-11-07 (Saturday)
-  assert.equal(addCalendarDaysIso('2026-11-06', 1), '2026-11-07');
-  // Month rollover: 2026-11-28 + 5 calendar days => 2026-12-03
-  assert.equal(addCalendarDaysIso('2026-11-28', 5), '2026-12-03');
-  // Leap year check: 2024-02-28 + 2 calendar days => 2024-03-01
-  assert.equal(addCalendarDaysIso('2024-02-28', 2), '2024-03-01');
+test('Calendar-days calculation counts tanggalMulai as Day 1 and formats Indonesian display dates accurately', () => {
+  // User example: start 19-08-2026 + 93 calendar days (Day 1 = 19 Aug) => 19-11-2026
+  assert.equal(addCalendarDaysIso('2026-08-19', 93), '2026-11-19');
+  assert.equal(countCalendarDaysBetweenIso('2026-08-19', '2026-11-19'), 93);
+
+  // 2026-11-01 + 30 calendar days (Day 1 = 01 Nov) => 2026-11-30
+  assert.equal(addCalendarDaysIso('2026-11-01', 30), '2026-11-30');
+  // 2026-11-06 + 1 calendar day (same day) => 2026-11-06
+  assert.equal(addCalendarDaysIso('2026-11-06', 1), '2026-11-06');
+  // Month rollover: 2026-11-28 + 5 calendar days => 2026-12-02 (Nov 28,29,30, Dec 1,2)
+  assert.equal(addCalendarDaysIso('2026-11-28', 5), '2026-12-02');
+  // Leap year check: 2024-02-28 + 3 calendar days => 2024-03-01 (Feb 28, Feb 29, Mar 1)
+  assert.equal(addCalendarDaysIso('2024-02-28', 3), '2024-03-01');
   // Invalid inputs return empty string
   assert.equal(addCalendarDaysIso('2026-11-02', 0), '');
   assert.equal(addCalendarDaysIso('', 5), '');
 
-  assert.equal(countCalendarDaysBetweenIso('2026-11-02', '2026-11-09'), 7);
+  assert.equal(countCalendarDaysBetweenIso('2026-11-02', '2026-11-09'), 8);
+  assert.equal(countCalendarDaysBetweenIso('2026-11-02', '2026-11-02'), 1);
   assert.equal(
     getPaketDurasiHariKerja({
       tanggalMulai: '2026-11-02',
       tenggatWaktu: '2026-11-09',
       durasiHariKerja: undefined,
     }),
-    7
+    8
   );
   assert.equal(
     getPaketDurasiHariKerja({
@@ -123,6 +140,20 @@ test('Calendar-days calculation includes weekends and handles month/leap-year ro
     }),
     12
   );
+
+  assert.equal(formatTanggalDisplay('2000-01-01'), '1 Januari 2000');
+  assert.equal(formatTanggalDisplay('2026-08-19'), '19 Agustus 2026');
+  assert.equal(formatTanggalDisplay('2026-11-19'), '19 November 2026');
+  assert.equal(formatTanggalDdMmYyyy('2026-08-19'), '19-08-2026');
+  assert.equal(formatTanggalDdMmYyyy('2026-11-19'), '19-11-2026');
+
+  assert.deepEqual(SKEMA_KONTRAK_LIST, ['Lump Sum', 'Waktu Penugasan']);
+  assert.deepEqual(STATUS_PENCAIRAN_LIST, ['Belum', 'Sudah']);
+  assert.deepEqual(MEKANISME_PENCAIRAN_LIST, [
+    'Langsung (LS)',
+    'Ganti Uang Persediaan (GU)',
+    'Tambahan Uang Persediaan (TU)',
+  ]);
 });
 
 test('validatePaketPekerjaanInput rejects invalid dates, durasiHariKerja, budgets, and empty stages', () => {
@@ -233,11 +264,96 @@ test('validatePaketPekerjaanInput rejects invalid dates, durasiHariKerja, budget
       namaKegiatan: 'Keg A',
       subKegiatan: 'Sub A',
       jenisPelaksanaan: 'Perorangan',
+      skemaKontrak: 'Turnkey' as SkemaKontrak,
       tahunAnggaran: 2026,
       nilaiAnggaran: 10000000,
       tanggalMulai: '2026-11-01',
       durasiHariKerja: 22,
-      tenggatWaktu: '2026-12-01',
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Skema Kontrak tidak valid.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      hps: -500,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Harga Perkiraan Sendiri (HPS) harus berupa angka bernilai 0 atau lebih.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      nilaiKontrak: -1,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Nilai Kontrak / Realisasi harus berupa angka bernilai 0 atau lebih.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      statusPencairan: 'Proses' as StatusPencairan,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Status Tahapan Pencairan tidak valid.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      mekanismePencairan: 'UP' as MekanismePencairan,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Mekanisme Pencairan tidak valid.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      skemaKontrak: 'Lump Sum',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      hps: 9500000,
+      nilaiKontrak: 9200000,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      statusPencairan: 'Sudah',
+      mekanismePencairan: 'Langsung (LS)',
       tahapan: validStages,
     }),
     null
@@ -301,10 +417,15 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
       subKegiatan: 'Penyusunan Dokumen',
       pekerjaan: 'Pengawasan Pembangunan Perumahan Wilayah Barat',
       jenisPelaksanaan: 'Perorangan',
+      skemaKontrak: 'Lump Sum',
       tahunAnggaran: 2025,
       nilaiAnggaran: 45000000,
+      hps: 44000000,
+      nilaiKontrak: 43500000,
       tanggalMulai: '2025-11-01',
       tenggatWaktu: '2025-12-10',
+      statusPencairan: 'Sudah',
+      mekanismePencairan: 'Langsung (LS)',
       kodeRup: '51234567',
       penyedia: 'Tenaga Ahli Sipil',
       tahapan: [
@@ -321,10 +442,15 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
       namaKegiatan: 'Perbaikan Drainase B',
       subKegiatan: 'Konsultansi Badan Usaha',
       jenisPelaksanaan: 'Badan Usaha',
+      skemaKontrak: 'Waktu Penugasan',
       tahunAnggaran: 2026,
       nilaiAnggaran: 155000000,
+      hps: 150000000,
+      nilaiKontrak: 148000000,
       tanggalMulai: '2026-11-05',
       tenggatWaktu: '2026-11-20',
+      statusPencairan: 'Belum',
+      mekanismePencairan: 'Ganti Uang Persediaan (GU)',
       tahapan: [
         { id: '1', urutan: 1, nama: 'Rapat Persiapan/PCM', status: 'sedang_berjalan' },
         { id: '2', urutan: 2, nama: 'Laporan Pendahuluan', status: 'belum_mulai' },
@@ -353,6 +479,8 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
   const stats = calculatePekerjaanStats(list, '2026-11-24');
   assert.equal(stats.totalPaket, 2);
   assert.equal(stats.totalAnggaran, 200000000);
+  assert.equal(stats.totalHps, 194000000);
+  assert.equal(stats.totalNilaiKontrak, 191500000);
   assert.equal(stats.anggaranSelesai, 45000000);
   assert.equal(stats.selesai, 1);
   assert.equal(stats.terlambat, 1);
@@ -365,6 +493,10 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
   assert.equal(filtered.length, 1);
   assert.equal(filtered[0].id, 'pkt-2');
 
+  const byPencairan = filterPaketPekerjaan(list, { statusPencairan: 'Sudah' }, '2026-11-24');
+  assert.equal(byPencairan.length, 1);
+  assert.equal(byPencairan[0].id, 'pkt-1');
+
   const byRup = filterPaketPekerjaan(list, { searchQuery: '51234567' }, '2026-11-24');
   assert.equal(byRup.length, 1);
   assert.equal(byRup[0].id, 'pkt-1');
@@ -376,8 +508,17 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
   const csv = buildPekerjaanCsvContent(list, '2026-11-24');
   assert.equal(csv.includes('Tahun Anggaran'), true);
   assert.equal(csv.includes('Pekerjaan'), true);
+  assert.equal(csv.includes('Skema Kontrak'), true);
+  assert.equal(csv.includes('Lump Sum'), true);
+  assert.equal(csv.includes('Waktu Penugasan'), true);
   assert.equal(csv.includes('Pengawasan Pembangunan Perumahan Wilayah Barat'), true);
   assert.equal(csv.includes('Pagu Anggaran (Rp)'), true);
+  assert.equal(csv.includes('Harga Perkiraan Sendiri / HPS (Rp)'), true);
+  assert.equal(csv.includes('Nilai Kontrak / Realisasi (Rp)'), true);
+  assert.equal(csv.includes('Tahapan Pencairan'), true);
+  assert.equal(csv.includes('Mekanisme Pencairan'), true);
+  assert.equal(csv.includes('Langsung (LS)'), true);
+  assert.equal(csv.includes('1 November 2025'), true);
   assert.equal(csv.includes('Kode RUP'), true);
   assert.equal(csv.includes('51234567'), true);
   assert.equal(csv.includes('2025'), true);
@@ -385,4 +526,29 @@ test('filterPaketPekerjaan, calculatePekerjaanStats, Tahun Anggaran summaries, a
   assert.equal(csv.includes('Tanggal Selesai'), true);
   assert.equal(csv.includes('Kajian Teknis A'), true);
   assert.equal(csv.includes('Badan Usaha'), true);
+
+  assert.equal(stats.sudahCairCount, 1);
+  assert.equal(stats.belumCairCount, 1);
+  assert.equal(stats.efisiensiKontrakVsHps, 2500000);
+
+  const bySkema = filterPaketPekerjaan(list, { skemaKontrak: 'Waktu Penugasan' }, '2026-11-24');
+  assert.equal(bySkema.length, 1);
+  assert.equal(bySkema[0].id, 'pkt-2');
+
+  const byMekanisme = filterPaketPekerjaan(
+    list,
+    { mekanismePencairan: 'Ganti Uang Persediaan (GU)' },
+    '2026-11-24'
+  );
+  assert.equal(byMekanisme.length, 1);
+  assert.equal(byMekanisme[0].id, 'pkt-2');
+
+  const listWithPic: PaketPekerjaan[] = [
+    { ...list[0], picNama: 'Wahyudi, ST' },
+    { ...list[1], picNama: 'Chafidz Ginanjar, ST' },
+  ];
+  assert.deepEqual(getAvailablePicNames(listWithPic), ['Chafidz Ginanjar, ST', 'Wahyudi, ST']);
+  const byPic = filterPaketPekerjaan(listWithPic, { picNama: 'Wahyudi, ST' }, '2026-11-24');
+  assert.equal(byPic.length, 1);
+  assert.equal(byPic[0].id, 'pkt-1');
 });

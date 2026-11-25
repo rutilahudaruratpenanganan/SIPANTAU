@@ -12,8 +12,11 @@ import {
 } from 'lucide-react';
 import {
   JenisPelaksanaan,
+  MekanismePencairan,
   PaketPekerjaan,
   Personel,
+  SkemaKontrak,
+  StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
 } from '../types';
@@ -22,11 +25,16 @@ import {
   JENIS_PELAKSANAAN_LIST,
   MAX_DURASI_HARI_KERJA,
   MAX_TAHUN_ANGGARAN,
+  MEKANISME_PENCAIRAN_LIST,
   MIN_TAHUN_ANGGARAN,
+  SKEMA_KONTRAK_LIST,
+  STATUS_PENCAIRAN_LIST,
   addCalendarDaysIso,
   buildTemplateTahapan,
   createTahapId,
   formatRupiah,
+  formatTanggalDdMmYyyy,
+  formatTanggalDisplay,
   getPaketDurasiHariKerja,
   getPaketTahunAnggaran,
   getTodayLocalIso,
@@ -59,13 +67,20 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   const [subKegiatan, setSubKegiatan] = useState('');
   const [pekerjaan, setPekerjaan] = useState('');
   const [jenisPelaksanaan, setJenisPelaksanaan] = useState<JenisPelaksanaan>('Perorangan');
+  const [skemaKontrak, setSkemaKontrak] = useState<SkemaKontrak | ''>('');
   const [tahunAnggaranText, setTahunAnggaranText] = useState<string>(() =>
     String(new Date().getFullYear())
   );
   const [nilaiAnggaran, setNilaiAnggaran] = useState<number>(0);
   const [nilaiAnggaranText, setNilaiAnggaranText] = useState<string>('');
+  const [hps, setHps] = useState<number | undefined>(undefined);
+  const [hpsText, setHpsText] = useState<string>('');
+  const [nilaiKontrak, setNilaiKontrak] = useState<number | undefined>(undefined);
+  const [nilaiKontrakText, setNilaiKontrakText] = useState<string>('');
   const [tanggalMulai, setTanggalMulai] = useState(getTodayLocalIso());
   const [durasiHariText, setDurasiHariText] = useState('30');
+  const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
+  const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [kodeRup, setKodeRup] = useState('');
   const [nomorKontrak, setNomorKontrak] = useState('');
   const [penyedia, setPenyedia] = useState('');
@@ -89,6 +104,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setSubKegiatan(initialPaket.subKegiatan);
       setPekerjaan(initialPaket.pekerjaan || '');
       setJenisPelaksanaan(initialPaket.jenisPelaksanaan);
+      setSkemaKontrak(initialPaket.skemaKontrak || '');
       setTahunAnggaranText(String(getPaketTahunAnggaran(initialPaket)));
       setNilaiAnggaran(initialPaket.nilaiAnggaran || 0);
       setNilaiAnggaranText(
@@ -96,8 +112,20 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           ? initialPaket.nilaiAnggaran.toLocaleString('id-ID')
           : '0'
       );
+      setHps(initialPaket.hps);
+      setHpsText(
+        typeof initialPaket.hps === 'number' ? initialPaket.hps.toLocaleString('id-ID') : ''
+      );
+      setNilaiKontrak(initialPaket.nilaiKontrak);
+      setNilaiKontrakText(
+        typeof initialPaket.nilaiKontrak === 'number'
+          ? initialPaket.nilaiKontrak.toLocaleString('id-ID')
+          : ''
+      );
       setTanggalMulai(initialPaket.tanggalMulai || getTodayLocalIso());
       setDurasiHariText(String(getPaketDurasiHariKerja(initialPaket)));
+      setStatusPencairan(initialPaket.statusPencairan || 'Belum');
+      setMekanismePencairan(initialPaket.mekanismePencairan || '');
       setKodeRup(initialPaket.kodeRup || '');
       setNomorKontrak(initialPaket.nomorKontrak || '');
       setPenyedia(initialPaket.penyedia || '');
@@ -115,11 +143,18 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setSubKegiatan('');
       setPekerjaan('');
       setJenisPelaksanaan('Perorangan');
+      setSkemaKontrak('');
       setTahunAnggaranText(today.slice(0, 4));
       setNilaiAnggaran(0);
       setNilaiAnggaranText('');
+      setHps(undefined);
+      setHpsText('');
+      setNilaiKontrak(undefined);
+      setNilaiKontrakText('');
       setTanggalMulai(today);
       setDurasiHariText('30');
+      setStatusPencairan('Belum');
+      setMekanismePencairan('');
       setKodeRup('');
       setNomorKontrak('');
       setPenyedia('');
@@ -155,6 +190,28 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     const parsed = parseRupiahInput(raw);
     setNilaiAnggaran(parsed);
     setNilaiAnggaranText(raw.trim() === '' ? '' : parsed.toLocaleString('id-ID'));
+  };
+
+  const handleHpsInputChange = (raw: string) => {
+    if (raw.trim() === '') {
+      setHps(undefined);
+      setHpsText('');
+      return;
+    }
+    const parsed = parseRupiahInput(raw);
+    setHps(parsed);
+    setHpsText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleNilaiKontrakInputChange = (raw: string) => {
+    if (raw.trim() === '') {
+      setNilaiKontrak(undefined);
+      setNilaiKontrakText('');
+      return;
+    }
+    const parsed = parseRupiahInput(raw);
+    setNilaiKontrak(parsed);
+    setNilaiKontrakText(parsed.toLocaleString('id-ID'));
   };
 
   const handleStageNameChange = (id: string, nextName: string) => {
@@ -265,12 +322,17 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       namaKegiatan,
       subKegiatan,
       jenisPelaksanaan,
+      skemaKontrak: skemaKontrak || undefined,
       tahunAnggaran,
       nilaiAnggaran,
+      hps,
+      nilaiKontrak,
       tanggalMulai,
       durasiHariKerja,
       tenggatWaktu: computedTanggalSelesai,
       tanggalSelesai: resolvedTanggalSelesai,
+      statusPencairan,
+      mekanismePencairan: mekanismePencairan || undefined,
       tahapan: cleanedTahapan,
     });
 
@@ -288,12 +350,17 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           subKegiatan: subKegiatan.trim(),
           pekerjaan: pekerjaan.trim() || undefined,
           jenisPelaksanaan,
+          skemaKontrak: skemaKontrak || undefined,
           tahunAnggaran,
           nilaiAnggaran,
+          hps,
+          nilaiKontrak,
           tanggalMulai: tanggalMulai.trim(),
           durasiHariKerja,
           tenggatWaktu: computedTanggalSelesai,
           tanggalSelesai: resolvedTanggalSelesai,
+          statusPencairan,
+          mekanismePencairan: mekanismePencairan || undefined,
           kodeRup: kodeRup.trim() || undefined,
           nomorKontrak: nomorKontrak.trim() || undefined,
           penyedia: penyedia.trim() || undefined,
@@ -420,8 +487,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-              <div className="sm:col-span-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
                 <label
                   htmlFor="paket-jenis-pelaksanaan"
                   className="block font-semibold text-slate-700 mb-1"
@@ -447,7 +514,59 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                 </p>
               </div>
 
-              <div className="sm:col-span-3">
+              <div>
+                <label
+                  htmlFor="paket-skema-kontrak"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Skema Kontrak
+                </label>
+                <select
+                  id="paket-skema-kontrak"
+                  value={skemaKontrak}
+                  onChange={(e) => setSkemaKontrak(e.target.value as SkemaKontrak | '')}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900 font-medium"
+                >
+                  <option value="">-- Pilih Skema Kontrak --</option>
+                  {SKEMA_KONTRAK_LIST.map((skema) => (
+                    <option key={skema} value={skema}>
+                      {skema}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Lump Sum atau Waktu Penugasan.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="paket-mekanisme-pencairan"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Mekanisme Pencairan
+                </label>
+                <select
+                  id="paket-mekanisme-pencairan"
+                  value={mekanismePencairan}
+                  onChange={(e) =>
+                    setMekanismePencairan(e.target.value as MekanismePencairan | '')
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900 font-medium"
+                >
+                  <option value="">-- Pilih Mekanisme --</option>
+                  {MEKANISME_PENCAIRAN_LIST.map((mek) => (
+                    <option key={mek} value={mek}>
+                      {mek}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  LS, GU, atau TU.
+                </p>
+              </div>
+
+              <div>
                 <label
                   htmlFor="paket-tahun-anggaran"
                   className="block font-semibold text-slate-700 mb-1"
@@ -481,8 +600,10 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   Dasar pengelompokan rekap tahunan.
                 </p>
               </div>
+            </div>
 
-              <div className="sm:col-span-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
                 <label
                   htmlFor="paket-nilai-anggaran"
                   className="block font-semibold text-slate-700 mb-1"
@@ -508,6 +629,60 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   Terbaca: {formatRupiah(nilaiAnggaran)}
                 </p>
               </div>
+
+              <div>
+                <label
+                  htmlFor="paket-hps"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Harga Perkiraan Sendiri (HPS) (Rp)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
+                    Rp
+                  </span>
+                  <input
+                    id="paket-hps"
+                    type="text"
+                    inputMode="numeric"
+                    value={hpsText}
+                    onChange={(e) => handleHpsInputChange(e.target.value)}
+                    placeholder="0"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
+                  {hps !== undefined ? `Terbaca: ${formatRupiah(hps)}` : 'Opsional (Rp)'}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="paket-nilai-kontrak"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Nilai Kontrak / Realisasi (Rp)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
+                    Rp
+                  </span>
+                  <input
+                    id="paket-nilai-kontrak"
+                    type="text"
+                    inputMode="numeric"
+                    value={nilaiKontrakText}
+                    onChange={(e) => handleNilaiKontrakInputChange(e.target.value)}
+                    placeholder="0"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
+                  {nilaiKontrak !== undefined
+                    ? `Terbaca: ${formatRupiah(nilaiKontrak)}`
+                    : 'Opsional (Rp)'}
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -526,6 +701,11 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   onChange={(e) => setTanggalMulai(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
+                <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                  {tanggalMulai
+                    ? `${formatTanggalDisplay(tanggalMulai)} (${formatTanggalDdMmYyyy(tanggalMulai)})`
+                    : 'Format DD-MM-YYYY'}
+                </p>
               </div>
 
               <div>
@@ -553,7 +733,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Menghitung hari kalender (Senin–Minggu)
+                  Tanggal Mulai dihitung sebagai hari ke-1 (Senin–Minggu)
                 </p>
               </div>
 
@@ -569,14 +749,17 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   type="text"
                   readOnly
                   aria-readonly="true"
-                  value={computedTanggalSelesai || '-'}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 font-mono tabular-nums text-slate-700 cursor-not-allowed focus:outline-none"
+                  value={computedTanggalSelesai ? formatTanggalDisplay(computedTanggalSelesai) : '-'}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 font-semibold tabular-nums text-slate-800 cursor-not-allowed focus:outline-none"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Otomatis: Tanggal Mulai + Durasi hari kalender
+                <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                  {computedTanggalSelesai
+                    ? `DD-MM-YYYY: ${formatTanggalDdMmYyyy(computedTanggalSelesai)}`
+                    : 'Otomatis: Tanggal Mulai (hari ke-1) + Durasi'}
                 </p>
               </div>
             </div>
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
@@ -687,6 +870,35 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>Tambah Tahapan</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Tahapan Pencairan dalam Alur Tahapan Pekerjaan */}
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <label
+                  htmlFor="paket-status-pencairan"
+                  className="block font-semibold text-slate-800"
+                >
+                  Tahapan Pencairan
+                </label>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Status pencairan anggaran sebagai bagian dari alur tahapan pekerjaan.
+                </p>
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <select
+                  id="paket-status-pencairan"
+                  value={statusPencairan}
+                  onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 font-medium"
+                >
+                  {STATUS_PENCAIRAN_LIST.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

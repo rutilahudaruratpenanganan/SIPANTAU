@@ -1,6 +1,9 @@
 import type {
   JenisPelaksanaan,
+  MekanismePencairan,
   PaketPekerjaan,
+  SkemaKontrak,
+  StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
 } from '../types/index.ts';
@@ -8,6 +11,22 @@ import type {
 export const JENIS_PELAKSANAAN_LIST: JenisPelaksanaan[] = [
   'Perorangan',
   'Badan Usaha',
+];
+
+export const SKEMA_KONTRAK_LIST: SkemaKontrak[] = [
+  'Lump Sum',
+  'Waktu Penugasan',
+];
+
+export const STATUS_PENCAIRAN_LIST: StatusPencairan[] = [
+  'Belum',
+  'Sudah',
+];
+
+export const MEKANISME_PENCAIRAN_LIST: MekanismePencairan[] = [
+  'Langsung (LS)',
+  'Ganti Uang Persediaan (GU)',
+  'Tambahan Uang Persediaan (TU)',
 ];
 
 export const TEMPLATE_TAHAPAN_PEKERJAAN: Record<JenisPelaksanaan, string[]> = {
@@ -109,10 +128,52 @@ function utcDaysToIso(days: number): string {
   return `${y}-${m}-${day}`;
 }
 
+const BULAN_INDONESIA = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
+
+/**
+ * Formats YYYY-MM-DD into readable Indonesian date format (e.g., "1 Januari 2000").
+ */
+export function formatTanggalDisplay(iso?: string): string {
+  const raw = (iso || '').trim();
+  if (!raw) return '-';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return raw;
+  const year = Number(m[1]);
+  const monthIdx = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  if (monthIdx < 0 || monthIdx > 11 || day < 1 || day > 31) return raw;
+  return `${day} ${BULAN_INDONESIA[monthIdx]} ${year}`;
+}
+
+/**
+ * Formats YYYY-MM-DD into numeric DD-MM-YYYY format (e.g., "01-01-2000").
+ */
+export function formatTanggalDdMmYyyy(iso?: string): string {
+  const raw = (iso || '').trim();
+  if (!raw) return '-';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return raw;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
 export const MAX_DURASI_HARI_KERJA = 1825;
 
 /**
- * Adds N calendar days (Senin-Minggu) to an ISO date string.
+ * Calculates end date with Tanggal Mulai counted as Day 1 (Hari ke-1):
+ * e.g. 2026-08-19 + 93 calendar days = 2026-11-19 (startDays + steps - 1).
  * Returns '' if startIso is invalid or calendarDays < 1.
  */
 export function addCalendarDaysIso(startIso: string, calendarDays: number): string {
@@ -121,19 +182,19 @@ export function addCalendarDaysIso(startIso: string, calendarDays: number): stri
   const steps = Math.floor(calendarDays);
   if (steps < 1) return '';
   const clampedSteps = Math.min(MAX_DURASI_HARI_KERJA, steps);
-  return utcDaysToIso(startDays + clampedSteps);
+  return utcDaysToIso(startDays + clampedSteps - 1);
 }
 
 /**
- * Counts calendar days (Senin-Minggu) strictly after startIso up to and including endIso.
+ * Counts inclusive calendar days from startIso (Day 1) up to and including endIso.
  */
 export function countCalendarDaysBetweenIso(startIso: string, endIso: string): number {
   const startDays = isoToUtcDays(startIso);
   const endDays = isoToUtcDays(endIso);
-  if (startDays === null || endDays === null || endDays <= startDays) {
+  if (startDays === null || endDays === null || endDays < startDays) {
     return 0;
   }
-  return Math.min(MAX_DURASI_HARI_KERJA, endDays - startDays);
+  return Math.min(MAX_DURASI_HARI_KERJA, endDays - startDays + 1);
 }
 
 export const MIN_TAHUN_ANGGARAN = 2000;
@@ -166,6 +227,15 @@ export function getAvailableTahunAnggaran(list: PaketPekerjaan[]): number[] {
     years.add(getPaketTahunAnggaran(item));
   }
   return Array.from(years).sort((a, b) => b - a);
+}
+
+export function getAvailablePicNames(list: PaketPekerjaan[]): string[] {
+  const names = new Set<string>();
+  for (const item of list) {
+    const pic = (item.picNama || '').trim();
+    if (pic) names.add(pic);
+  }
+  return Array.from(names).sort((a, b) => a.localeCompare(b, 'id-ID'));
 }
 
 export function getPaketDurasiHariKerja(
@@ -258,7 +328,7 @@ export function computePaketProgress(
   let deadlineLabel = '-';
   if (isCompleted) {
     deadlineLabel = paket.tanggalSelesai
-      ? `Selesai (${paket.tanggalSelesai})`
+      ? `Selesai (${formatTanggalDisplay(paket.tanggalSelesai)})`
       : 'Seluruh Tahapan Selesai';
   } else if (daysRemaining !== null) {
     if (daysRemaining < 0) {
@@ -296,12 +366,17 @@ export interface PaketValidationInput {
   namaKegiatan: string;
   subKegiatan: string;
   jenisPelaksanaan: JenisPelaksanaan;
+  skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number;
   nilaiAnggaran: number;
+  hps?: number;
+  nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
   tanggalSelesai?: string;
+  statusPencairan?: StatusPencairan;
+  mekanismePencairan?: MekanismePencairan;
   tahapan: TahapPekerjaan[];
 }
 
@@ -315,6 +390,9 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
   if (!JENIS_PELAKSANAAN_LIST.includes(input.jenisPelaksanaan)) {
     return 'Jenis Pelaksanaan tidak valid.';
   }
+  if (input.skemaKontrak !== undefined && !SKEMA_KONTRAK_LIST.includes(input.skemaKontrak)) {
+    return 'Skema Kontrak tidak valid.';
+  }
   if (input.tahunAnggaran !== undefined) {
     if (
       !Number.isFinite(input.tahunAnggaran) ||
@@ -327,6 +405,15 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
   }
   if (!Number.isFinite(input.nilaiAnggaran) || input.nilaiAnggaran < 0) {
     return 'Pagu Anggaran harus berupa angka bernilai 0 atau lebih.';
+  }
+  if (input.hps !== undefined && (!Number.isFinite(input.hps) || input.hps < 0)) {
+    return 'Harga Perkiraan Sendiri (HPS) harus berupa angka bernilai 0 atau lebih.';
+  }
+  if (
+    input.nilaiKontrak !== undefined &&
+    (!Number.isFinite(input.nilaiKontrak) || input.nilaiKontrak < 0)
+  ) {
+    return 'Nilai Kontrak / Realisasi harus berupa angka bernilai 0 atau lebih.';
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test((input.tanggalMulai || '').trim())) {
     return 'Tanggal Mulai wajib diisi dengan format tanggal yang valid.';
@@ -357,6 +444,18 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
       return 'Tanggal Selesai tidak boleh lebih awal daripada Tanggal Mulai.';
     }
   }
+  if (
+    input.statusPencairan !== undefined &&
+    !STATUS_PENCAIRAN_LIST.includes(input.statusPencairan)
+  ) {
+    return 'Status Tahapan Pencairan tidak valid.';
+  }
+  if (
+    input.mekanismePencairan !== undefined &&
+    !MEKANISME_PENCAIRAN_LIST.includes(input.mekanismePencairan)
+  ) {
+    return 'Mekanisme Pencairan tidak valid.';
+  }
   if (!Array.isArray(input.tahapan) || input.tahapan.length === 0) {
     return 'Minimal harus terdapat 1 tahapan dalam alur kerja paket pekerjaan.';
   }
@@ -372,8 +471,12 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
 export interface PekerjaanFilterOptions {
   searchQuery?: string;
   jenisPelaksanaan?: JenisPelaksanaan | 'all';
+  skemaKontrak?: SkemaKontrak | 'all';
   status?: PaketOverallStatus | 'all';
   tahunAnggaran?: number | 'all';
+  statusPencairan?: StatusPencairan | 'all';
+  mekanismePencairan?: MekanismePencairan | 'all';
+  picNama?: string | 'all';
 }
 
 export function filterPaketPekerjaan(
@@ -398,6 +501,38 @@ export function filterPaketPekerjaan(
       return false;
     }
 
+    if (
+      filters.skemaKontrak &&
+      filters.skemaKontrak !== 'all' &&
+      item.skemaKontrak !== filters.skemaKontrak
+    ) {
+      return false;
+    }
+
+    if (
+      filters.statusPencairan &&
+      filters.statusPencairan !== 'all' &&
+      (item.statusPencairan || 'Belum') !== filters.statusPencairan
+    ) {
+      return false;
+    }
+
+    if (
+      filters.mekanismePencairan &&
+      filters.mekanismePencairan !== 'all' &&
+      item.mekanismePencairan !== filters.mekanismePencairan
+    ) {
+      return false;
+    }
+
+    if (
+      filters.picNama &&
+      filters.picNama !== 'all' &&
+      (item.picNama || '').trim() !== filters.picNama
+    ) {
+      return false;
+    }
+
     if (filters.status && filters.status !== 'all') {
       const progress = computePaketProgress(item, todayIso);
       if (progress.overallStatus !== filters.status) {
@@ -410,13 +545,27 @@ export function filterPaketPekerjaan(
       const matchKegiatan = item.namaKegiatan.toLowerCase().includes(q);
       const matchSub = item.subKegiatan.toLowerCase().includes(q);
       const matchPekerjaan = (item.pekerjaan || '').toLowerCase().includes(q);
+      const matchSkema = (item.skemaKontrak || '').toLowerCase().includes(q);
+      const matchMekanisme = (item.mekanismePencairan || '').toLowerCase().includes(q);
       const matchPenyedia = (item.penyedia || '').toLowerCase().includes(q);
       const matchKodeRup = (item.kodeRup || '').toLowerCase().includes(q);
       const matchKontrak = (item.nomorKontrak || '').toLowerCase().includes(q);
       const matchPic = (item.picNama || '').toLowerCase().includes(q);
       const matchTahun = String(getPaketTahunAnggaran(item)).includes(q);
       const matchTahap = item.tahapan.some((t) => t.nama.toLowerCase().includes(q));
-      if (!matchKegiatan && !matchSub && !matchPekerjaan && !matchPenyedia && !matchKodeRup && !matchKontrak && !matchPic && !matchTahun && !matchTahap) {
+      if (
+        !matchKegiatan &&
+        !matchSub &&
+        !matchPekerjaan &&
+        !matchSkema &&
+        !matchMekanisme &&
+        !matchPenyedia &&
+        !matchKodeRup &&
+        !matchKontrak &&
+        !matchPic &&
+        !matchTahun &&
+        !matchTahap
+      ) {
         return false;
       }
     }
@@ -428,7 +577,12 @@ export function filterPaketPekerjaan(
 export interface PekerjaanDashboardStats {
   totalPaket: number;
   totalAnggaran: number;
+  totalHps: number;
+  totalNilaiKontrak: number;
+  efisiensiKontrakVsHps: number;
   anggaranSelesai: number;
+  sudahCairCount: number;
+  belumCairCount: number;
   belumMulai: number;
   sedangBerjalan: number;
   terlambat: number;
@@ -444,7 +598,12 @@ export function calculatePekerjaanStats(
   const stats: PekerjaanDashboardStats = {
     totalPaket: list.length,
     totalAnggaran: 0,
+    totalHps: 0,
+    totalNilaiKontrak: 0,
+    efisiensiKontrakVsHps: 0,
     anggaranSelesai: 0,
+    sudahCairCount: 0,
+    belumCairCount: 0,
     belumMulai: 0,
     sedangBerjalan: 0,
     terlambat: 0,
@@ -458,7 +617,29 @@ export function calculatePekerjaanStats(
   let totalPct = 0;
   for (const item of list) {
     const val = Number.isFinite(item.nilaiAnggaran) ? item.nilaiAnggaran : 0;
+    const hpsVal = typeof item.hps === 'number' && Number.isFinite(item.hps) ? item.hps : 0;
+    const kontrakVal =
+      typeof item.nilaiKontrak === 'number' && Number.isFinite(item.nilaiKontrak)
+        ? item.nilaiKontrak
+        : 0;
     stats.totalAnggaran += val;
+    stats.totalHps += hpsVal;
+    stats.totalNilaiKontrak += kontrakVal;
+    if (
+      typeof item.hps === 'number' &&
+      Number.isFinite(item.hps) &&
+      typeof item.nilaiKontrak === 'number' &&
+      Number.isFinite(item.nilaiKontrak)
+    ) {
+      stats.efisiensiKontrakVsHps += item.hps - item.nilaiKontrak;
+    }
+
+    if ((item.statusPencairan || 'Belum') === 'Sudah') {
+      stats.sudahCairCount += 1;
+    } else {
+      stats.belumCairCount += 1;
+    }
+
     const progress = computePaketProgress(item, todayIso);
     totalPct += progress.persentase;
 
@@ -553,11 +734,16 @@ export function buildPekerjaanCsvContent(
     'Sub Kegiatan',
     'Pekerjaan',
     'Jenis Pelaksanaan',
+    'Skema Kontrak',
     'Kode RUP',
     'Nomor Kontrak / SPK',
     'Penyedia / Pelaksana',
     'PIC / Penanggung Jawab',
     'Pagu Anggaran (Rp)',
+    'Harga Perkiraan Sendiri / HPS (Rp)',
+    'Nilai Kontrak / Realisasi (Rp)',
+    'Tahapan Pencairan',
+    'Mekanisme Pencairan',
     'Tanggal Mulai',
     'Durasi (Hari Kalender)',
     'Tanggal Selesai',
@@ -580,7 +766,7 @@ export function buildPekerjaanCsvContent(
               : t.status === 'sedang_berjalan'
               ? 'Sedang Berjalan'
               : 'Belum Mulai'
-          }${t.tanggalSelesai ? ` · ${t.tanggalSelesai}` : ''}]`
+          }${t.tanggalSelesai ? ` · ${formatTanggalDisplay(t.tanggalSelesai)}` : ''}]`
       )
       .join(' | ');
 
@@ -591,15 +777,20 @@ export function buildPekerjaanCsvContent(
       escapeCsv(item.subKegiatan),
       escapeCsv(item.pekerjaan || ''),
       escapeCsv(item.jenisPelaksanaan),
+      escapeCsv(item.skemaKontrak || '-'),
       escapeCsv(item.kodeRup || ''),
       escapeCsv(item.nomorKontrak || ''),
       escapeCsv(item.penyedia || ''),
       escapeCsv(item.picNama || ''),
       String(item.nilaiAnggaran || 0),
-      item.tanggalMulai || '',
+      String(item.hps ?? 0),
+      String(item.nilaiKontrak ?? 0),
+      escapeCsv(item.statusPencairan || 'Belum'),
+      escapeCsv(item.mekanismePencairan || '-'),
+      escapeCsv(item.tanggalMulai ? formatTanggalDisplay(item.tanggalMulai) : ''),
       String(progress.durasiHariKerja),
-      item.tenggatWaktu || '',
-      item.tanggalSelesai || '',
+      escapeCsv(item.tenggatWaktu ? formatTanggalDisplay(item.tenggatWaktu) : ''),
+      escapeCsv(item.tanggalSelesai ? formatTanggalDisplay(item.tanggalSelesai) : ''),
       escapeCsv(progress.overallStatusLabel),
       `${progress.persentase}%`,
       escapeCsv(progress.activeStage?.nama || '-'),
@@ -609,3 +800,4 @@ export function buildPekerjaanCsvContent(
 
   return '\uFEFF' + [headers.join(','), ...rows].join('\n');
 }
+

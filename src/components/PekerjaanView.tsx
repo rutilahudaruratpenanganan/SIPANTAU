@@ -8,19 +8,22 @@ import {
   Layers,
   Pencil,
   Plus,
+  Printer,
   Search,
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { JenisPelaksanaan, PaketPekerjaan, Personel, Role } from '../types';
+import { JenisPelaksanaan, PaketPekerjaan, Personel, Role, StatusPencairan } from '../types';
 import {
   JENIS_PELAKSANAAN_LIST,
   PaketOverallStatus,
+  STATUS_PENCAIRAN_LIST,
   buildPekerjaanCsvContent,
   calculatePekerjaanStats,
   computePaketProgress,
   filterPaketPekerjaan,
   formatRupiah,
+  formatTanggalDisplay,
   getAvailableTahunAnggaran,
   getPaketTahunAnggaran,
   getTodayLocalIso,
@@ -34,6 +37,14 @@ interface PekerjaanViewProps {
   onOpenCreate: () => void;
   onOpenEdit: (paket: PaketPekerjaan) => void;
   onOpenWorkflow: (paket: PaketPekerjaan) => void;
+  onOpenPrint?: (opts: {
+    selectedPaketId?: string;
+    tahunAnggaran: number | 'all';
+    jenisPelaksanaan: JenisPelaksanaan | 'all';
+    statusPencairan: StatusPencairan | 'all';
+    status: PaketOverallStatus | 'all';
+    searchQuery: string;
+  }) => void;
   onDeletePaket: (paketId: string) => Promise<void>;
   onNotify: (msg: string) => void;
 }
@@ -43,6 +54,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
   onOpenCreate,
   onOpenEdit,
   onOpenWorkflow,
+  onOpenPrint,
   onDeletePaket,
   onNotify,
 }) => {
@@ -50,6 +62,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTahun, setSelectedTahun] = useState<number | 'all'>('all');
   const [selectedJenis, setSelectedJenis] = useState<JenisPelaksanaan | 'all'>('all');
+  const [selectedPencairan, setSelectedPencairan] = useState<StatusPencairan | 'all'>('all');
   const [selectedStatus, setSelectedStatus] = useState<PaketOverallStatus | 'all'>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -72,11 +85,12 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           searchQuery,
           tahunAnggaran: selectedTahun,
           jenisPelaksanaan: selectedJenis,
+          statusPencairan: selectedPencairan,
           status: selectedStatus,
         },
         todayIso
       ),
-    [paketList, searchQuery, selectedTahun, selectedJenis, selectedStatus, todayIso]
+    [paketList, searchQuery, selectedTahun, selectedJenis, selectedPencairan, selectedStatus, todayIso]
   );
 
   const handleExportCsv = () => {
@@ -124,6 +138,25 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onOpenPrint && (
+            <button
+              type="button"
+              onClick={() =>
+                onOpenPrint({
+                  tahunAnggaran: selectedTahun,
+                  jenisPelaksanaan: selectedJenis,
+                  statusPencairan: selectedPencairan,
+                  status: selectedStatus,
+                  searchQuery,
+                })
+              }
+              disabled={paketList.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-800 text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              <Printer className="w-4 h-4 text-blue-600" />
+              <span>Cetak Pekerjaan</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleExportCsv}
@@ -154,8 +187,15 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">
             {formatRupiah(stats.totalAnggaran)}
           </div>
-          <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
-            {stats.totalPaket} paket terdaftar · Rata-rata progres {stats.rataRataProgres}%
+          <div className="text-[11px] text-slate-500 mt-1 tabular-nums space-y-0.5">
+            <div>
+              {stats.totalPaket} paket terdaftar · Rata-rata progres {stats.rataRataProgres}%
+            </div>
+            {(stats.totalHps > 0 || stats.totalNilaiKontrak > 0) && (
+              <div className="font-mono text-[10px] text-slate-600">
+                HPS: {formatRupiah(stats.totalHps)} · Kontrak: {formatRupiah(stats.totalNilaiKontrak)}
+              </div>
+            )}
           </div>
         </div>
 
@@ -243,6 +283,20 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               </option>
             ))}
           </select>
+
+          <select
+            aria-label="Filter tahapan pencairan"
+            value={selectedPencairan}
+            onChange={(e) => setSelectedPencairan(e.target.value as StatusPencairan | 'all')}
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="all">Semua Status Pencairan</option>
+            {STATUS_PENCAIRAN_LIST.map((st) => (
+              <option key={st} value={st}>
+                Pencairan: {st}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Status Segmented Filter */}
@@ -307,6 +361,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               setSearchQuery('');
               setSelectedTahun('all');
               setSelectedJenis('all');
+              setSelectedPencairan('all');
               setSelectedStatus('all');
             }}
             className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline"
@@ -320,15 +375,20 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           {/* Desktop Table */}
           <div className="hidden lg:block bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-[11px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                    <th className="py-3 px-4">Kegiatan, Sub Kegiatan &amp; Pekerjaan</th>
-                    <th className="py-3 px-3">Pelaksanaan</th>
-                    <th className="py-3 px-3 text-right">Pagu Anggaran</th>
-                    <th className="py-3 px-3">Jadwal &amp; Durasi</th>
-                    <th className="py-3 px-3 w-[320px]">Progres &amp; Alur Tahapan</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
+                    <th className="py-2.5 pl-3 pr-2 min-w-[180px] max-w-[215px]">
+                      Kegiatan, Sub Kegiatan &amp; Pekerjaan
+                    </th>
+                    <th className="py-2.5 px-2">Pelaksanaan &amp; Kontrak</th>
+                    <th className="py-2.5 px-2 text-right whitespace-nowrap">Pagu Anggaran</th>
+                    <th className="py-2.5 px-2 text-right whitespace-nowrap">HPS</th>
+                    <th className="py-2.5 px-2 text-right whitespace-nowrap">Nilai Kontrak</th>
+                    <th className="py-2.5 px-2 whitespace-nowrap">Pencairan</th>
+                    <th className="py-2.5 px-2 whitespace-nowrap">Jadwal &amp; Durasi</th>
+                    <th className="py-2.5 px-2 w-[165px]">Progres &amp; Alur Tahapan</th>
+                    <th className="py-2.5 pl-2 pr-3 text-right whitespace-nowrap">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -349,8 +409,8 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                         data-testid={`paket-row-${paket.id}`}
                         className="hover:bg-slate-50/80 transition-colors align-top"
                       >
-                        <td className="py-3.5 px-4 max-w-xs">
-                          <div className="font-bold text-slate-900 leading-snug">
+                        <td className="py-3 pl-3 pr-2 min-w-[180px] max-w-[215px] break-words">
+                          <div className="text-xs font-bold text-slate-900 leading-snug">
                             {paket.namaKegiatan}
                           </div>
                           <div className="text-slate-600 mt-0.5 leading-snug">
@@ -362,7 +422,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                             </div>
                           )}
                           {(paket.kodeRup || paket.nomorKontrak || paket.penyedia || paket.picNama) && (
-                            <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                               {paket.kodeRup && (
                                 <span className="font-mono text-slate-700 font-medium">
                                   RUP: {paket.kodeRup}
@@ -372,7 +432,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                                 <span aria-hidden="true">·</span>
                               )}
                               {paket.nomorKontrak && (
-                                <span className="font-mono">No. {paket.nomorKontrak}</span>
+                                <span className="font-mono break-all">No. {paket.nomorKontrak}</span>
                               )}
                               {paket.nomorKontrak && (paket.penyedia || paket.picNama) && (
                                 <span aria-hidden="true">·</span>
@@ -386,33 +446,75 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           )}
                         </td>
 
-                        <td className="py-3.5 px-3 whitespace-nowrap">
+                        <td className="py-3 px-2 whitespace-nowrap">
                           <div className="font-semibold text-slate-800">
                             {paket.jenisPelaksanaan}
                           </div>
-                          <div className="text-[11px] font-mono text-slate-500 tabular-nums mt-0.5">
+                          {paket.skemaKontrak && (
+                            <div className="text-[10px] font-medium text-indigo-700 mt-0.5">
+                              {paket.skemaKontrak}
+                            </div>
+                          )}
+                          <div className="text-[10px] font-mono text-slate-500 tabular-nums mt-0.5">
                             TA {getPaketTahunAnggaran(paket)}
                           </div>
-                          <div className={`text-[11px] font-semibold mt-0.5 ${statusColor}`}>
+                          <div className={`text-[10px] font-semibold mt-0.5 ${statusColor}`}>
                             {progress.overallStatusLabel}
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
                           {formatRupiah(paket.nilaiAnggaran)}
                         </td>
 
-                        <td className="py-3.5 px-3 whitespace-nowrap font-mono tabular-nums text-[11px]">
-                          <div className="text-slate-700">Mulai: {paket.tanggalMulai}</div>
+                        <td className="py-3 px-2 text-right font-mono text-slate-700 tabular-nums whitespace-nowrap">
+                          {typeof paket.hps === 'number' ? (
+                            formatRupiah(paket.hps)
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
+                          {typeof paket.nilaiKontrak === 'number' ? (
+                            <span className="font-semibold text-emerald-700">
+                              {formatRupiah(paket.nilaiKontrak)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-2 min-w-[78px] max-w-[110px]">
+                          <div
+                            className={`text-[11px] font-semibold ${
+                              paket.statusPencairan === 'Sudah'
+                                ? 'text-emerald-700'
+                                : 'text-amber-700'
+                            }`}
+                          >
+                            {paket.statusPencairan || 'Belum'}
+                          </div>
+                          {paket.mekanismePencairan && (
+                            <div className="text-[10px] text-slate-600 mt-0.5 leading-tight">
+                              {paket.mekanismePencairan}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-2 whitespace-nowrap tabular-nums text-[11px] space-y-0.5">
                           <div className="text-slate-700">
+                            Mulai: {formatTanggalDisplay(paket.tanggalMulai)}
+                          </div>
+                          <div className="text-slate-600 font-mono">
                             Durasi: {progress.durasiHariKerja} hari kalender
                           </div>
                           <div className="text-slate-900 font-semibold">
-                            Selesai: {paket.tenggatWaktu}
+                            Selesai: {formatTanggalDisplay(paket.tenggatWaktu)}
                           </div>
                           {paket.tanggalSelesai && (
                             <div className="text-emerald-700 font-semibold">
-                              Tuntas Aktual: {paket.tanggalSelesai}
+                              Tuntas Aktual: {formatTanggalDisplay(paket.tanggalSelesai)}
                             </div>
                           )}
                           <div
@@ -430,9 +532,9 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3 px-2 w-[165px] max-w-[175px]">
                           <div className="space-y-1.5">
-                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <div className="flex items-center justify-between gap-1.5 text-[10px]">
                               <span className="font-medium text-slate-700 truncate">
                                 {progress.activeStage
                                   ? `Tahap ${progress.activeStage.urutan}: ${progress.activeStage.nama}`
@@ -482,35 +584,35 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <td className="py-3 pl-2 pr-3 text-right whitespace-nowrap">
                           {confirmDeleteId === paket.id ? (
-                            <div className="inline-flex items-center gap-1.5">
+                            <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => handleConfirmDelete(paket)}
                                 disabled={isDeletingId === paket.id}
-                                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold"
+                                className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold"
                               >
                                 {isDeletingId === paket.id ? 'Menghapus...' : 'Ya, Hapus'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteId(null)}
-                                className="px-2 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-[11px] font-semibold"
+                                className="px-2 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 text-[11px] font-semibold"
                               >
                                 Batal
                               </button>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1.5">
+                            <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => onOpenWorkflow(paket)}
                                 aria-label={`Edit per tahap ${paket.subKegiatan}`}
                                 title="Edit per tahap pekerjaan"
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition-colors"
                               >
-                                <Layers className="w-3.5 h-3.5" />
+                                <Layers className="w-3 h-3" />
                                 <span>Edit Tahap</span>
                               </button>
                               <button
@@ -518,19 +620,39 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                                 onClick={() => onOpenEdit(paket)}
                                 aria-label={`Edit keseluruhan ${paket.subKegiatan}`}
                                 title="Edit keseluruhan paket & tahapan"
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition-colors"
                               >
-                                <Pencil className="w-3.5 h-3.5" />
+                                <Pencil className="w-3 h-3" />
                                 <span>Edit</span>
                               </button>
+                              {onOpenPrint && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onOpenPrint({
+                                      selectedPaketId: paket.id,
+                                      tahunAnggaran: selectedTahun,
+                                      jenisPelaksanaan: selectedJenis,
+                                      statusPencairan: selectedPencairan,
+                                      status: selectedStatus,
+                                      searchQuery,
+                                    })
+                                  }
+                                  aria-label={`Cetak kartu kendali ${paket.subKegiatan}`}
+                                  title="Cetak Kartu Kendali Pekerjaan"
+                                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-blue-700 transition-colors"
+                                >
+                                  <Printer className="w-3 h-3" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteId(paket.id)}
                                 aria-label={`Hapus paket ${paket.subKegiatan}`}
                                 title="Hapus Paket"
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 text-[11px] font-semibold transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 text-[11px] font-semibold transition-colors"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3 h-3" />
                                 <span>Hapus</span>
                               </button>
                             </div>
@@ -576,17 +698,47 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
 
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
                     <span className="font-semibold text-slate-800">{paket.jenisPelaksanaan}</span>
+                    {paket.skemaKontrak && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-semibold text-indigo-700">{paket.skemaKontrak}</span>
+                      </>
+                    )}
                     <span aria-hidden="true">·</span>
                     <span className="font-mono font-semibold text-slate-700 tabular-nums">
                       TA {getPaketTahunAnggaran(paket)}
                     </span>
                     <span aria-hidden="true">·</span>
                     <span className="font-mono font-bold text-slate-900 tabular-nums">
-                      {formatRupiah(paket.nilaiAnggaran)}
+                      Pagu: {formatRupiah(paket.nilaiAnggaran)}
+                    </span>
+                    {typeof paket.hps === 'number' && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-mono tabular-nums">HPS: {formatRupiah(paket.hps)}</span>
+                      </>
+                    )}
+                    {typeof paket.nilaiKontrak === 'number' && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-mono font-semibold text-emerald-700 tabular-nums">
+                          Kontrak: {formatRupiah(paket.nilaiKontrak)}
+                        </span>
+                      </>
+                    )}
+                    <span aria-hidden="true">·</span>
+                    <span className="tabular-nums">
+                      {formatTanggalDisplay(paket.tanggalMulai)} ({progress.durasiHariKerja} hari) →{' '}
+                      {formatTanggalDisplay(paket.tenggatWaktu)}
                     </span>
                     <span aria-hidden="true">·</span>
-                    <span className="font-mono tabular-nums">
-                      {progress.durasiHariKerja} hari kalender · Selesai {paket.tenggatWaktu}
+                    <span
+                      className={`font-semibold ${
+                        paket.statusPencairan === 'Sudah' ? 'text-emerald-700' : 'text-amber-700'
+                      }`}
+                    >
+                      Pencairan: {paket.statusPencairan || 'Belum'}
+                      {paket.mekanismePencairan ? ` (${paket.mekanismePencairan})` : ''}
                     </span>
                     {paket.kodeRup && (
                       <>
@@ -660,6 +812,26 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           <Pencil className="w-3.5 h-3.5" />
                           <span>Edit Keseluruhan</span>
                         </button>
+                        {onOpenPrint && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenPrint({
+                                selectedPaketId: paket.id,
+                                tahunAnggaran: selectedTahun,
+                                jenisPelaksanaan: selectedJenis,
+                                statusPencairan: selectedPencairan,
+                                status: selectedStatus,
+                                searchQuery,
+                              })
+                            }
+                            aria-label={`Cetak kartu kendali ${paket.subKegiatan}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-blue-700 font-semibold"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Cetak</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(paket.id)}

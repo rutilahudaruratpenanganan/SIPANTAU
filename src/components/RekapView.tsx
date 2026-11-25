@@ -11,12 +11,16 @@ import {
   FileCheck,
   AlertCircle,
   BriefcaseBusiness,
+  Search,
 } from 'lucide-react';
 import {
   DokumenFile,
   JenisPelaksanaan,
+  MekanismePencairan,
   PaketPekerjaan,
   PejabatConfig,
+  SkemaKontrak,
+  StatusPencairan,
   SuratMasuk,
 } from '../types';
 import { TAHAP_TINDAK_LANJUT, normalizeRiwayatCatatan } from '../utils/disposisiLogic';
@@ -31,12 +35,18 @@ import {
 } from '../utils/rekapLogic';
 import {
   JENIS_PELAKSANAAN_LIST,
+  MEKANISME_PENCAIRAN_LIST,
   PaketOverallStatus,
+  SKEMA_KONTRAK_LIST,
+  STATUS_PENCAIRAN_LIST,
   buildPekerjaanCsvContent,
   calculatePekerjaanStats,
   computePaketProgress,
   filterPaketPekerjaan,
   formatRupiah,
+  formatTanggalDdMmYyyy,
+  formatTanggalDisplay,
+  getAvailablePicNames,
   getAvailableTahunAnggaran,
   getPaketTahunAnggaran,
   getTodayLocalIso,
@@ -79,9 +89,19 @@ export const RekapView: React.FC<RekapViewProps> = ({
     () => getAvailableTahunAnggaran(paketList),
     [paketList]
   );
+  const availablePaketPics = useMemo(
+    () => getAvailablePicNames(paketList),
+    [paketList]
+  );
   const [selectedTahunAnggaran, setSelectedTahunAnggaran] = useState<number | 'all'>('all');
   const [selectedJenisPaket, setSelectedJenisPaket] = useState<JenisPelaksanaan | 'all'>('all');
+  const [selectedSkemaPaket, setSelectedSkemaPaket] = useState<SkemaKontrak | 'all'>('all');
+  const [selectedPencairanPaket, setSelectedPencairanPaket] = useState<StatusPencairan | 'all'>('all');
+  const [selectedMekanismePaket, setSelectedMekanismePaket] = useState<MekanismePencairan | 'all'>('all');
   const [selectedStatusPaket, setSelectedStatusPaket] = useState<PaketOverallStatus | 'all'>('all');
+  const [selectedPicPaket, setSelectedPicPaket] = useState<string | 'all'>('all');
+  const [searchPaketQuery, setSearchPaketQuery] = useState<string>('');
+  const [showTahapanDetailRekap, setShowTahapanDetailRekap] = useState<boolean>(false);
 
   const availableSuratYears = useMemo(
     () => getAvailableSuratYears(suratList, dateBasis),
@@ -116,7 +136,12 @@ export const RekapView: React.FC<RekapViewProps> = ({
   const hasActivePaketFilter =
     selectedTahunAnggaran !== 'all' ||
     selectedJenisPaket !== 'all' ||
-    selectedStatusPaket !== 'all';
+    selectedSkemaPaket !== 'all' ||
+    selectedPencairanPaket !== 'all' ||
+    selectedMekanismePaket !== 'all' ||
+    selectedStatusPaket !== 'all' ||
+    selectedPicPaket !== 'all' ||
+    searchPaketQuery.trim() !== '';
 
   const filteredPaketList = useMemo(
     () =>
@@ -125,11 +150,27 @@ export const RekapView: React.FC<RekapViewProps> = ({
         {
           tahunAnggaran: selectedTahunAnggaran,
           jenisPelaksanaan: selectedJenisPaket,
+          skemaKontrak: selectedSkemaPaket,
+          statusPencairan: selectedPencairanPaket,
+          mekanismePencairan: selectedMekanismePaket,
           status: selectedStatusPaket,
+          picNama: selectedPicPaket,
+          searchQuery: searchPaketQuery,
         },
         todayIso
       ),
-    [paketList, selectedTahunAnggaran, selectedJenisPaket, selectedStatusPaket, todayIso]
+    [
+      paketList,
+      selectedTahunAnggaran,
+      selectedJenisPaket,
+      selectedSkemaPaket,
+      selectedPencairanPaket,
+      selectedMekanismePaket,
+      selectedStatusPaket,
+      selectedPicPaket,
+      searchPaketQuery,
+      todayIso,
+    ]
   );
 
   const paketStats = useMemo(
@@ -163,8 +204,86 @@ export const RekapView: React.FC<RekapViewProps> = ({
   const handleResetPaketFilters = () => {
     setSelectedTahunAnggaran('all');
     setSelectedJenisPaket('all');
+    setSelectedSkemaPaket('all');
+    setSelectedPencairanPaket('all');
+    setSelectedMekanismePaket('all');
     setSelectedStatusPaket('all');
+    setSelectedPicPaket('all');
+    setSearchPaketQuery('');
   };
+
+  const applyPaketPreset = (
+    preset:
+      | 'all'
+      | 'sudah_cair'
+      | 'belum_cair'
+      | 'lump_sum'
+      | 'waktu_penugasan'
+      | 'terlambat'
+      | 'selesai'
+  ) => {
+    setSelectedJenisPaket('all');
+    setSelectedMekanismePaket('all');
+    setSelectedPicPaket('all');
+    setSearchPaketQuery('');
+    if (preset === 'all') {
+      setSelectedSkemaPaket('all');
+      setSelectedPencairanPaket('all');
+      setSelectedStatusPaket('all');
+    } else if (preset === 'sudah_cair') {
+      setSelectedSkemaPaket('all');
+      setSelectedPencairanPaket('Sudah');
+      setSelectedStatusPaket('all');
+    } else if (preset === 'belum_cair') {
+      setSelectedSkemaPaket('all');
+      setSelectedPencairanPaket('Belum');
+      setSelectedStatusPaket('all');
+    } else if (preset === 'lump_sum') {
+      setSelectedSkemaPaket('Lump Sum');
+      setSelectedPencairanPaket('all');
+      setSelectedStatusPaket('all');
+    } else if (preset === 'waktu_penugasan') {
+      setSelectedSkemaPaket('Waktu Penugasan');
+      setSelectedPencairanPaket('all');
+      setSelectedStatusPaket('all');
+    } else if (preset === 'terlambat') {
+      setSelectedSkemaPaket('all');
+      setSelectedPencairanPaket('all');
+      setSelectedStatusPaket('terlambat');
+    } else if (preset === 'selesai') {
+      setSelectedSkemaPaket('all');
+      setSelectedPencairanPaket('all');
+      setSelectedStatusPaket('selesai');
+    }
+  };
+
+  const activePaketFilterDescription = useMemo(() => {
+    const parts: string[] = [];
+    if (selectedJenisPaket !== 'all') parts.push(`Pelaksanaan: ${selectedJenisPaket}`);
+    if (selectedSkemaPaket !== 'all') parts.push(`Skema: ${selectedSkemaPaket}`);
+    if (selectedPencairanPaket !== 'all') parts.push(`Pencairan: ${selectedPencairanPaket}`);
+    if (selectedMekanismePaket !== 'all') parts.push(`Mekanisme: ${selectedMekanismePaket}`);
+    if (selectedStatusPaket !== 'all') {
+      const labelMap: Record<PaketOverallStatus, string> = {
+        belum_mulai: 'Belum Mulai',
+        sedang_berjalan: 'Sedang Berjalan',
+        terlambat: 'Terlambat',
+        selesai: 'Selesai',
+      };
+      parts.push(`Status: ${labelMap[selectedStatusPaket]}`);
+    }
+    if (selectedPicPaket !== 'all') parts.push(`PIC: ${selectedPicPaket}`);
+    if (searchPaketQuery.trim()) parts.push(`Kata Kunci: "${searchPaketQuery.trim()}"`);
+    return parts.length > 0 ? parts.join(' · ') : 'Semua Kategori & Filter';
+  }, [
+    selectedJenisPaket,
+    selectedSkemaPaket,
+    selectedPencairanPaket,
+    selectedMekanismePaket,
+    selectedStatusPaket,
+    selectedPicPaket,
+    searchPaketQuery,
+  ]);
 
   const handleExportPaketCsv = () => {
     const csv = buildPekerjaanCsvContent(filteredPaketList, todayIso);
@@ -292,15 +411,77 @@ export const RekapView: React.FC<RekapViewProps> = ({
         {/* Filter Controls */}
         {domainMode === 'pekerjaan' ? (
           <div className="pt-4 border-t border-slate-200 space-y-3 text-xs">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-              {/* Tahun Anggaran Quick & Select */}
-              <div className="lg:col-span-5 space-y-1.5">
+            {/* Quick Preset Bar & Stage Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div
+                role="group"
+                aria-label="Preset filter rekap pekerjaan"
+                className="flex flex-wrap items-center gap-1.5"
+              >
+                <span className="inline-flex items-center gap-1 font-semibold text-slate-700 mr-1">
+                  <Filter className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Preset Rekap:</span>
+                </span>
+                {(
+                  [
+                    { id: 'all', label: 'Semua Paket' },
+                    { id: 'sudah_cair', label: 'Sudah Cair' },
+                    { id: 'belum_cair', label: 'Belum Cair' },
+                    { id: 'lump_sum', label: 'Lump Sum' },
+                    { id: 'waktu_penugasan', label: 'Waktu Penugasan' },
+                    { id: 'terlambat', label: 'Terlambat' },
+                    { id: 'selesai', label: 'Tuntas 100%' },
+                  ] as const
+                ).map((preset) => {
+                  const isActive =
+                    (preset.id === 'all' &&
+                      selectedSkemaPaket === 'all' &&
+                      selectedPencairanPaket === 'all' &&
+                      selectedStatusPaket === 'all') ||
+                    (preset.id === 'sudah_cair' && selectedPencairanPaket === 'Sudah') ||
+                    (preset.id === 'belum_cair' && selectedPencairanPaket === 'Belum') ||
+                    (preset.id === 'lump_sum' && selectedSkemaPaket === 'Lump Sum') ||
+                    (preset.id === 'waktu_penugasan' && selectedSkemaPaket === 'Waktu Penugasan') ||
+                    (preset.id === 'terlambat' && selectedStatusPaket === 'terlambat') ||
+                    (preset.id === 'selesai' && selectedStatusPaket === 'selesai');
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyPaketPreset(preset.id)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                        isActive
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showTahapanDetailRekap}
+                  onChange={(e) => setShowTahapanDetailRekap(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                />
+                <History className="w-3.5 h-3.5 text-slate-500" />
+                <span>Sertakan Rincian Tahapan</span>
+              </label>
+            </div>
+
+            {/* Row 1: Tahun Anggaran + Search */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+              <div className="lg:col-span-7 space-y-1.5">
                 <label
                   htmlFor="rekap-tahun-anggaran"
                   className="font-semibold text-slate-700 flex items-center gap-1.5"
                 >
                   <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Pilih Tahun Anggaran</span>
+                  <span>Tahun Anggaran</span>
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
@@ -364,11 +545,45 @@ export const RekapView: React.FC<RekapViewProps> = ({
                 </div>
               </div>
 
-              {/* Filter Jenis Pelaksanaan */}
-              <div className="lg:col-span-3 space-y-1.5">
+              <div className="lg:col-span-5 space-y-1.5">
+                <label
+                  htmlFor="rekap-search-paket"
+                  className="block font-semibold text-slate-700"
+                >
+                  Cari Kegiatan / Sub Kegiatan / Pekerjaan / RUP / Penyedia
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="rekap-search-paket"
+                      type="text"
+                      value={searchPaketQuery}
+                      onChange={(e) => setSearchPaketQuery(e.target.value)}
+                      placeholder="Ketik kata kunci paket..."
+                      className="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                  </div>
+                  {hasActivePaketFilter && (
+                    <button
+                      type="button"
+                      onClick={handleResetPaketFilters}
+                      className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold inline-flex items-center gap-1.5 border border-slate-300 transition-colors whitespace-nowrap"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Multi-criteria dropdowns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
+              <div>
                 <label
                   htmlFor="rekap-jenis-pelaksanaan"
-                  className="block font-semibold text-slate-700"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
                 >
                   Jenis Pelaksanaan
                 </label>
@@ -378,9 +593,9 @@ export const RekapView: React.FC<RekapViewProps> = ({
                   onChange={(e) =>
                     setSelectedJenisPaket(e.target.value as JenisPelaksanaan | 'all')
                   }
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
-                  <option value="all">Semua Jenis Pelaksanaan</option>
+                  <option value="all">Semua Pelaksanaan</option>
                   {JENIS_PELAKSANAAN_LIST.map((j) => (
                     <option key={j} value={j}>
                       {j}
@@ -389,41 +604,121 @@ export const RekapView: React.FC<RekapViewProps> = ({
                 </select>
               </div>
 
-              {/* Filter Status Paket + Reset */}
-              <div className="lg:col-span-4 flex flex-wrap items-end justify-between gap-2">
-                <div className="space-y-1.5 flex-1 min-w-[160px]">
-                  <label
-                    htmlFor="rekap-status-paket"
-                    className="block font-semibold text-slate-700"
-                  >
-                    Status Progres
-                  </label>
-                  <select
-                    id="rekap-status-paket"
-                    value={selectedStatusPaket}
-                    onChange={(e) =>
-                      setSelectedStatusPaket(e.target.value as PaketOverallStatus | 'all')
-                    }
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  >
-                    <option value="all">Semua Status</option>
-                    <option value="belum_mulai">Belum Mulai</option>
-                    <option value="sedang_berjalan">Sedang Berjalan</option>
-                    <option value="terlambat">Terlambat</option>
-                    <option value="selesai">Selesai</option>
-                  </select>
-                </div>
+              <div>
+                <label
+                  htmlFor="rekap-skema-kontrak"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
+                >
+                  Skema Kontrak
+                </label>
+                <select
+                  id="rekap-skema-kontrak"
+                  value={selectedSkemaPaket}
+                  onChange={(e) =>
+                    setSelectedSkemaPaket(e.target.value as SkemaKontrak | 'all')
+                  }
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="all">Semua Skema</option>
+                  {SKEMA_KONTRAK_LIST.map((sk) => (
+                    <option key={sk} value={sk}>
+                      {sk}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                {hasActivePaketFilter && (
-                  <button
-                    type="button"
-                    onClick={handleResetPaketFilters}
-                    className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold inline-flex items-center gap-1.5 border border-slate-300 transition-colors whitespace-nowrap"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset Filter</span>
-                  </button>
-                )}
+              <div>
+                <label
+                  htmlFor="rekap-status-pencairan"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
+                >
+                  Tahapan Pencairan
+                </label>
+                <select
+                  id="rekap-status-pencairan"
+                  value={selectedPencairanPaket}
+                  onChange={(e) =>
+                    setSelectedPencairanPaket(e.target.value as StatusPencairan | 'all')
+                  }
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="all">Semua Pencairan</option>
+                  {STATUS_PENCAIRAN_LIST.map((st) => (
+                    <option key={st} value={st}>
+                      Pencairan: {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="rekap-mekanisme-pencairan"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
+                >
+                  Mekanisme Pencairan
+                </label>
+                <select
+                  id="rekap-mekanisme-pencairan"
+                  value={selectedMekanismePaket}
+                  onChange={(e) =>
+                    setSelectedMekanismePaket(e.target.value as MekanismePencairan | 'all')
+                  }
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="all">Semua Mekanisme</option>
+                  {MEKANISME_PENCAIRAN_LIST.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="rekap-status-paket"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
+                >
+                  Status Progres
+                </label>
+                <select
+                  id="rekap-status-paket"
+                  value={selectedStatusPaket}
+                  onChange={(e) =>
+                    setSelectedStatusPaket(e.target.value as PaketOverallStatus | 'all')
+                  }
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="belum_mulai">Belum Mulai</option>
+                  <option value="sedang_berjalan">Sedang Berjalan</option>
+                  <option value="terlambat">Terlambat</option>
+                  <option value="selesai">Selesai</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="rekap-pic-paket"
+                  className="block text-[11px] font-semibold text-slate-600 mb-1"
+                >
+                  Penanggung Jawab (PIC)
+                </label>
+                <select
+                  id="rekap-pic-paket"
+                  value={selectedPicPaket}
+                  onChange={(e) => setSelectedPicPaket(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="all">Semua PIC</option>
+                  {availablePaketPics.map((pic) => (
+                    <option key={pic} value={pic}>
+                      {pic}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -626,10 +921,8 @@ export const RekapView: React.FC<RekapViewProps> = ({
                     : `TA ${selectedTahunAnggaran}`}
                 </span>
                 <span aria-hidden="true"> · </span>
-                Jenis:{' '}
-                <span className="font-semibold">
-                  {selectedJenisPaket === 'all' ? 'Semua Jenis' : selectedJenisPaket}
-                </span>
+                Filter:{' '}
+                <span className="font-semibold">{activePaketFilterDescription}</span>
               </div>
               <div className="text-slate-600 tabular-nums">
                 Dicetak Per: {printedDateText} · Menampilkan:{' '}
@@ -646,39 +939,37 @@ export const RekapView: React.FC<RekapViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border border-slate-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-slate-50/60">
             <div className="p-4">
               <div className="text-[11px] font-semibold text-slate-500">
-                Total Paket Terpilih
+                Total Paket &amp; Pencairan
               </div>
               <div className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-1">
                 {paketStats.totalPaket} Paket
               </div>
               <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">
-                {paketStats.belumMulai} belum mulai · {paketStats.sedangBerjalan} berjalan
+                {paketStats.sudahCairCount} sudah cair · {paketStats.belumCairCount} belum cair
               </div>
             </div>
 
             <div className="p-4">
               <div className="text-[11px] font-semibold text-slate-500">
-                Total Pagu Anggaran
+                Total Pagu &amp; HPS
               </div>
               <div className="text-lg font-bold text-slate-900 font-mono tabular-nums mt-1">
                 {formatRupiah(paketStats.totalAnggaran)}
               </div>
               <div className="text-[11px] text-slate-600 mt-0.5 font-mono tabular-nums">
-                {selectedTahunAnggaran === 'all'
-                  ? 'Akumulasi semua TA'
-                  : `Pagu TA ${selectedTahunAnggaran}`}
+                HPS: {formatRupiah(paketStats.totalHps)}
               </div>
             </div>
 
             <div className="p-4">
               <div className="text-[11px] font-semibold text-emerald-700">
-                Realisasi Pekerjaan Selesai
+                Nilai Kontrak &amp; Realisasi Tuntas
               </div>
               <div className="text-lg font-bold text-emerald-800 font-mono tabular-nums mt-1">
-                {formatRupiah(paketStats.anggaranSelesai)}
+                {formatRupiah(paketStats.totalNilaiKontrak)}
               </div>
               <div className="text-[11px] text-slate-600 mt-0.5 font-mono tabular-nums">
-                {realisasiAnggaranPct}% dari pagu ({paketStats.selesai} paket tuntas)
+                Tuntas: {formatRupiah(paketStats.anggaranSelesai)} ({realisasiAnggaranPct}%)
               </div>
             </div>
 
@@ -810,12 +1101,23 @@ export const RekapView: React.FC<RekapViewProps> = ({
                     <th className="border border-slate-800 p-2">
                       Kegiatan, Sub Kegiatan &amp; Pekerjaan
                     </th>
-                    <th className="border border-slate-800 p-2 w-40">Pelaksanaan &amp; PIC</th>
-                    <th className="border border-slate-800 p-2 text-right w-36">
+                    <th className="border border-slate-800 p-2 w-36">
+                      Pelaksanaan, Skema &amp; PIC
+                    </th>
+                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
                       Pagu Anggaran
                     </th>
+                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
+                      HPS
+                    </th>
+                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
+                      Nilai Kontrak
+                    </th>
+                    <th className="border border-slate-800 p-2 whitespace-nowrap">
+                      Pencairan
+                    </th>
                     <th className="border border-slate-800 p-2 w-36">Durasi &amp; Jadwal</th>
-                    <th className="border border-slate-800 p-2 min-w-[200px]">
+                    <th className="border border-slate-800 p-2 min-w-[180px]">
                       Progres &amp; Tahapan
                     </th>
                     <th className="border border-slate-800 p-2 w-24 text-center">Status</th>
@@ -826,89 +1128,147 @@ export const RekapView: React.FC<RekapViewProps> = ({
                     const progress = computePaketProgress(paket, todayIso);
                     const tahun = getPaketTahunAnggaran(paket);
                     return (
-                      <tr key={paket.id} className="align-top print:break-inside-avoid">
-                        <td className="border border-slate-800 p-2 text-center font-mono tabular-nums">
-                          {idx + 1}
-                        </td>
-                        <td className="border border-slate-800 p-2 text-center font-mono font-bold tabular-nums text-slate-900">
-                          {tahun}
-                        </td>
-                        <td className="border border-slate-800 p-2">
-                          <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
-                          <div className="text-slate-700 mt-0.5">{paket.subKegiatan}</div>
-                          {paket.pekerjaan && (
-                            <div className="text-slate-900 font-medium mt-0.5">
-                              Pekerjaan: {paket.pekerjaan}
+                      <React.Fragment key={paket.id}>
+                        <tr className="align-top print:break-inside-avoid">
+                          <td className="border border-slate-800 p-2 text-center font-mono tabular-nums">
+                            {idx + 1}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-center font-mono font-bold tabular-nums text-slate-900">
+                            {tahun}
+                          </td>
+                          <td className="border border-slate-800 p-2">
+                            <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
+                            <div className="text-slate-700 mt-0.5">{paket.subKegiatan}</div>
+                            {paket.pekerjaan && (
+                              <div className="text-slate-900 font-medium mt-0.5">
+                                Pekerjaan: {paket.pekerjaan}
+                              </div>
+                            )}
+                            {paket.kodeRup && (
+                              <div className="text-[10px] font-mono text-slate-600 mt-0.5">
+                                Kode RUP: {paket.kodeRup}
+                              </div>
+                            )}
+                            {paket.nomorKontrak && (
+                              <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                                No. Kontrak/SPK: {paket.nomorKontrak}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2">
+                            <div className="font-semibold text-slate-900">
+                              {paket.jenisPelaksanaan}
                             </div>
-                          )}
-                          {paket.kodeRup && (
-                            <div className="text-[10px] font-mono text-slate-600 mt-0.5">
-                              Kode RUP: {paket.kodeRup}
+                            {paket.skemaKontrak && (
+                              <div className="text-[10px] font-semibold text-indigo-800 mt-0.5">
+                                Skema: {paket.skemaKontrak}
+                              </div>
+                            )}
+                            {paket.penyedia && (
+                              <div className="text-[10px] text-slate-600 mt-0.5">
+                                {paket.penyedia}
+                              </div>
+                            )}
+                            {paket.picNama && (
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                PIC: {paket.picNama}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                            {formatRupiah(paket.nilaiAnggaran)}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-right font-mono text-slate-700 tabular-nums whitespace-nowrap">
+                            {typeof paket.hps === 'number' ? formatRupiah(paket.hps) : '-'}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
+                            {typeof paket.nilaiKontrak === 'number' ? (
+                              <span className="font-semibold text-emerald-800">
+                                {formatRupiah(paket.nilaiKontrak)}
+                              </span>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-[10px] whitespace-nowrap">
+                            <div className="font-semibold text-slate-800">
+                              {paket.statusPencairan || 'Belum'}
                             </div>
-                          )}
-                          {paket.nomorKontrak && (
-                            <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-                              No. Kontrak/SPK: {paket.nomorKontrak}
+                            {paket.mekanismePencairan && (
+                              <div className="text-slate-600 mt-0.5">
+                                {paket.mekanismePencairan}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2 tabular-nums text-[10px] space-y-0.5">
+                            <div>Mulai: {formatTanggalDisplay(paket.tanggalMulai)}</div>
+                            <div className="font-mono">
+                              Durasi: {progress.durasiHariKerja} hari kalender
                             </div>
-                          )}
-                        </td>
-                        <td className="border border-slate-800 p-2">
-                          <div className="font-semibold text-slate-900">
-                            {paket.jenisPelaksanaan}
-                          </div>
-                          {paket.penyedia && (
-                            <div className="text-[10px] text-slate-600 mt-0.5">
-                              {paket.penyedia}
+                            <div className="font-bold text-slate-900">
+                              Selesai: {formatTanggalDisplay(paket.tenggatWaktu)}
                             </div>
-                          )}
-                          {paket.picNama && (
-                            <div className="text-[10px] text-slate-500 mt-0.5">
-                              PIC: {paket.picNama}
+                            {paket.tanggalSelesai && (
+                              <div className="text-emerald-800 font-semibold">
+                                Tuntas: {formatTanggalDisplay(paket.tanggalSelesai)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2 space-y-1">
+                            <div className="font-mono font-bold text-slate-900 tabular-nums">
+                              {progress.persentase}% ({progress.selesaiCount}/{progress.totalTahapan}{' '}
+                              Tahap)
                             </div>
-                          )}
-                        </td>
-                        <td className="border border-slate-800 p-2 text-right font-mono font-bold tabular-nums text-slate-900 whitespace-nowrap">
-                          {formatRupiah(paket.nilaiAnggaran)}
-                        </td>
-                        <td className="border border-slate-800 p-2 font-mono tabular-nums text-[10px] space-y-0.5">
-                          <div>Mulai: {paket.tanggalMulai}</div>
-                          <div>Durasi: {progress.durasiHariKerja} hari kalender</div>
-                          <div className="font-bold text-slate-900">
-                            Selesai: {paket.tenggatWaktu}
-                          </div>
-                          {paket.tanggalSelesai && (
-                            <div className="text-emerald-800 font-semibold">
-                              Tuntas: {paket.tanggalSelesai}
-                            </div>
-                          )}
-                        </td>
-                        <td className="border border-slate-800 p-2 space-y-1">
-                          <div className="font-mono font-bold text-slate-900 tabular-nums">
-                            {progress.persentase}% ({progress.selesaiCount}/{progress.totalTahapan}{' '}
-                            Tahap)
-                          </div>
-                          {progress.activeStage && (
-                            <div className="text-[10px] text-slate-700">
-                              Tahap {progress.activeStage.urutan}: {progress.activeStage.nama}
-                            </div>
-                          )}
-                        </td>
-                        <td className="border border-slate-800 p-2 text-center font-bold">
-                          <span
-                            className={
-                              progress.overallStatus === 'selesai'
-                                ? 'text-emerald-800'
-                                : progress.overallStatus === 'terlambat'
-                                ? 'text-rose-800'
-                                : progress.overallStatus === 'sedang_berjalan'
-                                ? 'text-blue-800'
-                                : 'text-slate-600'
-                            }
-                          >
-                            {progress.overallStatusLabel}
-                          </span>
-                        </td>
-                      </tr>
+                            {progress.activeStage && (
+                              <div className="text-[10px] text-slate-700">
+                                Tahap {progress.activeStage.urutan}: {progress.activeStage.nama}
+                              </div>
+                            )}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-center font-bold">
+                            <span
+                              className={
+                                progress.overallStatus === 'selesai'
+                                  ? 'text-emerald-800'
+                                  : progress.overallStatus === 'terlambat'
+                                  ? 'text-rose-800'
+                                  : progress.overallStatus === 'sedang_berjalan'
+                                  ? 'text-blue-800'
+                                  : 'text-slate-600'
+                              }
+                            >
+                              {progress.overallStatusLabel}
+                            </span>
+                          </td>
+                        </tr>
+                        {showTahapanDetailRekap && paket.tahapan.length > 0 && (
+                          <tr className="bg-slate-50/70 print:break-inside-avoid">
+                            <td colSpan={11} className="border border-slate-800 px-3 py-1.5 text-[10px]">
+                              <span className="font-bold text-slate-800 mr-1.5">
+                                Rincian Tahapan:
+                              </span>
+                              <span className="text-slate-700">
+                                {paket.tahapan
+                                  .map(
+                                    (t) =>
+                                      `${t.urutan}. ${t.nama} [${
+                                        t.status === 'selesai'
+                                          ? 'Selesai'
+                                          : t.status === 'sedang_berjalan'
+                                          ? 'Proses'
+                                          : 'Belum'
+                                      }${
+                                        t.tanggalSelesai
+                                          ? ` · ${formatTanggalDdMmYyyy(t.tanggalSelesai)}`
+                                          : ''
+                                      }]`
+                                  )
+                                  .join(' | ')}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -918,7 +1278,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
                       colSpan={4}
                       className="border border-slate-800 p-2 text-right uppercase"
                     >
-                      Total Pagu Anggaran (
+                      Total Anggaran (
                       {selectedTahunAnggaran === 'all'
                         ? 'Semua Tahun Anggaran'
                         : `TA ${selectedTahunAnggaran}`}
@@ -927,7 +1287,15 @@ export const RekapView: React.FC<RekapViewProps> = ({
                     <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                       {formatRupiah(paketStats.totalAnggaran)}
                     </td>
-                    <td colSpan={3} className="border border-slate-800 p-2 text-[10px] font-mono tabular-nums">
+                    <td className="border border-slate-800 p-2 text-right font-mono font-semibold tabular-nums whitespace-nowrap">
+                      {paketStats.totalHps > 0 ? formatRupiah(paketStats.totalHps) : '-'}
+                    </td>
+                    <td className="border border-slate-800 p-2 text-right font-mono font-semibold text-emerald-800 tabular-nums whitespace-nowrap">
+                      {paketStats.totalNilaiKontrak > 0
+                        ? formatRupiah(paketStats.totalNilaiKontrak)
+                        : '-'}
+                    </td>
+                    <td colSpan={4} className="border border-slate-800 p-2 text-[10px] font-mono tabular-nums">
                       Realisasi Selesai: {formatRupiah(paketStats.anggaranSelesai)} (
                       {realisasiAnggaranPct}%)
                     </td>

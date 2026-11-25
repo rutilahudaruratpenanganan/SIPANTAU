@@ -388,14 +388,29 @@ test('NotifikasiDisposisi enforces recipientId, workspace binding, bounds, allow
 });
 
 const PAKET_ALLOWED_KEYS = new Set([
-  'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'tahunAnggaran',
-  'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
+  'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
+  'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
+  'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
+  'statusPencairan', 'mekanismePencairan',
   'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
   'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
 ]);
 const VALID_JENIS_PELAKSANAAN = new Set([
   'Perorangan',
   'Badan Usaha',
+]);
+const VALID_SKEMA_KONTRAK = new Set([
+  'Lump Sum',
+  'Waktu Penugasan',
+]);
+const VALID_STATUS_PENCAIRAN = new Set([
+  'Belum',
+  'Sudah',
+]);
+const VALID_MEKANISME_PENCAIRAN = new Set([
+  'Langsung (LS)',
+  'Ganti Uang Persediaan (GU)',
+  'Tambahan Uang Persediaan (TU)',
 ]);
 
 function evaluatePaketCreate(
@@ -425,6 +440,12 @@ function evaluatePaketCreate(
     return 'PERMISSION_DENIED';
   }
   if (
+    payload.skemaKontrak !== undefined &&
+    (typeof payload.skemaKontrak !== 'string' || !VALID_SKEMA_KONTRAK.has(payload.skemaKontrak))
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
     payload.tahunAnggaran !== undefined &&
     (typeof payload.tahunAnggaran !== 'number' ||
       !Number.isInteger(payload.tahunAnggaran) ||
@@ -437,11 +458,35 @@ function evaluatePaketCreate(
     return 'PERMISSION_DENIED';
   }
   if (
+    payload.hps !== undefined &&
+    (typeof payload.hps !== 'number' || payload.hps < 0 || payload.hps > 1000000000000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.nilaiKontrak !== undefined &&
+    (typeof payload.nilaiKontrak !== 'number' || payload.nilaiKontrak < 0 || payload.nilaiKontrak > 1000000000000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
     payload.durasiHariKerja !== undefined &&
     (typeof payload.durasiHariKerja !== 'number' ||
       !Number.isInteger(payload.durasiHariKerja) ||
       payload.durasiHariKerja < 1 ||
       payload.durasiHariKerja > 1825)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.statusPencairan !== undefined &&
+    (typeof payload.statusPencairan !== 'string' || !VALID_STATUS_PENCAIRAN.has(payload.statusPencairan))
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.mekanismePencairan !== undefined &&
+    (typeof payload.mekanismePencairan !== 'string' || !VALID_MEKANISME_PENCAIRAN.has(payload.mekanismePencairan))
   ) {
     return 'PERMISSION_DENIED';
   }
@@ -457,18 +502,23 @@ function evaluatePaketCreate(
   return 'ALLOW';
 }
 
-test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tahunAnggaran bounds, budget bounds, durasiHariKerja bounds, tahapan bounds, and immutable fields', () => {
+test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, pencairan), budget/HPS/kontrak bounds, durasi bounds, tahapan bounds, and immutable fields', () => {
   const validPaket: Record<string, unknown> = {
     ownerId: INTERNAL_WORKSPACE_ID,
     namaKegiatan: 'Pengawasan dan Pengendalian Perumahan',
     subKegiatan: 'Kajian Teknis Kelaikan Fungsi Bangunan Perumahan',
     pekerjaan: 'Pengawasan Pembangunan Perumahan Wilayah Barat',
     jenisPelaksanaan: 'Perorangan',
+    skemaKontrak: 'Lump Sum',
     tahunAnggaran: 2026,
     nilaiAnggaran: 75000000,
-    tanggalMulai: '2026-11-01',
-    durasiHariKerja: 15,
-    tenggatWaktu: '2026-11-20',
+    hps: 72000000,
+    nilaiKontrak: 70500000,
+    tanggalMulai: '2026-08-19',
+    durasiHariKerja: 93,
+    tenggatWaktu: '2026-11-19',
+    statusPencairan: 'Sudah',
+    mekanismePencairan: 'Langsung (LS)',
     kodeRup: '51234567',
     tahapan: [
       { id: 't-1', urutan: 1, nama: 'Persiapan & SPK', status: 'selesai' },
@@ -481,12 +531,32 @@ test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tah
   };
 
   assert.equal(evaluatePaketCreate('paket-170000-ab12', validPaket, true), 'ALLOW');
-  assert.equal(evaluatePaketCreate('paket-170000-ab13', { ...validPaket, jenisPelaksanaan: 'Badan Usaha' }, true), 'ALLOW');
+  assert.equal(
+    evaluatePaketCreate(
+      'paket-170000-ab13',
+      {
+        ...validPaket,
+        jenisPelaksanaan: 'Badan Usaha',
+        skemaKontrak: 'Waktu Penugasan',
+        statusPencairan: 'Belum',
+        mekanismePencairan: 'Ganti Uang Persediaan (GU)',
+      },
+      true
+    ),
+    'ALLOW'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-170000-ab14', { ...validPaket, mekanismePencairan: 'Tambahan Uang Persediaan (TU)' }, true),
+    'ALLOW'
+  );
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, ownerId: 'other' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, shadowField: 123 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Lainnya' }, true), 'PERMISSION_DENIED');
-  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Pekerjaan Fisik/Jasa' }, true), 'PERMISSION_DENIED');
-  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Swakelola/Rutin' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, skemaKontrak: 'Turnkey' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, statusPencairan: 'Proses' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, mekanismePencairan: 'UP' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, hps: -1 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, nilaiKontrak: -100 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 1999 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 2101 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, pekerjaan: 'x'.repeat(301) }, true), 'PERMISSION_DENIED');
@@ -505,10 +575,9 @@ test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tah
   );
   assert.equal(evaluatePaketCreate('paket-1', validPaket, false), 'PERMISSION_DENIED');
 
-  const stageProgressUpdateKeys = new Set(['tahapan', 'tanggalSelesai', 'updatedAt']);
+  const stageProgressUpdateKeys = new Set(['tahapan', 'tanggalSelesai', 'statusPencairan', 'mekanismePencairan', 'updatedAt']);
   assert.equal(stageProgressUpdateKeys.has('ownerId'), false);
   assert.equal(stageProgressUpdateKeys.has('dibuatOlehId'), false);
   assert.equal(stageProgressUpdateKeys.has('createdAt'), false);
 });
-
 
