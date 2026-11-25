@@ -169,3 +169,43 @@ export interface NotifikasiDisposisi {
   createdAt: string;
   updatedAt: string;
 }
+
+export type JenisPelaksanaan = 'Perorangan' | 'Badan Usaha';
+
+export type StatusTahapPekerjaan = 'belum_mulai' | 'sedang_berjalan' | 'selesai';
+
+export interface TahapPekerjaan {
+  id: string;
+  urutan: number;
+  nama: string;
+  status: StatusTahapPekerjaan;
+  tanggalTarget?: string; // YYYY-MM-DD
+  tanggalSelesai?: string; // YYYY-MM-DD
+  catatan?: string;
+  diperbaruiOleh?: string;
+  diperbaruiPada?: string;
+}
+
+export interface PaketPekerjaan {
+  id: string;
+  namaKegiatan: string;
+  subKegiatan: string;
+  jenisPelaksanaan: JenisPelaksanaan;
+  tahunAnggaran?: number; // Tahun anggaran kegiatan (mis. 2026)
+  nilaiAnggaran: number;
+  tanggalMulai: string; // YYYY-MM-DD
+  durasiHariKerja?: number; // Jumlah hari kalender (Senin-Minggu)
+  tenggatWaktu: string; // YYYY-MM-DD (Tanggal selesai rencana otomatis)
+  tanggalSelesai?: string; // YYYY-MM-DD (Tanggal tuntas aktual)
+  kodeRup?: string;
+  nomorKontrak?: string;
+  penyedia?: string;
+  picNama?: string;
+  catatan?: string;
+  tahapan: TahapPekerjaan[];
+  dibuatOlehId: string;
+  dibuatOlehNama: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

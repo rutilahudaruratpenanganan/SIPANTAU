@@ -20,7 +20,7 @@
   display: flex;
   width: max-content;
   will-change: transform;
-  animation: wasdal-agenda-ticker var(--ticker-duration, 26s) linear infinite;
+  animation: wasdal-agenda-ticker var(--ticker-duration, 48s) linear infinite;
 }
 
 .wasdal-ticker-viewport:hover .wasdal-ticker-track,

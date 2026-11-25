@@ -1,4 +1,8 @@
-import { Personel, PejabatConfig, SuratMasuk } from '../types';
+import {
+  Personel,
+  PejabatConfig,
+  SuratMasuk,
+} from '../types';
 
 export const INITIAL_PEJABAT: PejabatConfig = {
   kepalaDinas: {
@@ -49,3 +53,4 @@ export const INITIAL_PERSONEL: Personel[] = [
 ];
 
 export const INITIAL_SURAT_MASUK: SuratMasuk[] = [];
+

@@ -55,7 +55,7 @@ export const DashboardAgendaTicker: React.FC<DashboardAgendaTickerProps> = ({
   );
   const activeCount = runningItems.length - cancelledCount;
 
-  const durationSeconds = Math.max(18, runningItems.length * 9);
+  const durationSeconds = Math.max(48, runningItems.length * 24);
 
   const renderAgendaSegment = (item: TodayRunningAgendaItem, isDuplicate: boolean) => {
     const { event, status } = item;

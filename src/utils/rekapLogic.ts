@@ -9,6 +9,7 @@ export interface RekapFilterOptions {
   dateFrom?: string;
   dateTo?: string;
   dateBasis?: RekapDateBasis;
+  tahun?: number | 'all';
 }
 
 function extractIsoDate(value?: string): string {
@@ -20,11 +21,28 @@ function extractIsoDate(value?: string): string {
   return '';
 }
 
+export function getAvailableSuratYears(
+  list: SuratMasuk[],
+  dateBasis: RekapDateBasis = 'tanggalSurat'
+): number[] {
+  const years = new Set<number>();
+  for (const item of list) {
+    const iso = extractIsoDate(item[dateBasis]);
+    if (iso) {
+      const y = Number(iso.slice(0, 4));
+      if (Number.isInteger(y) && y >= 2000 && y <= 2100) {
+        years.add(y);
+      }
+    }
+  }
+  return Array.from(years).sort((a, b) => b - a);
+}
+
 export function filterRekapSurat(
   list: SuratMasuk[],
   options: RekapFilterOptions
 ): SuratMasuk[] {
-  const { status, dateFrom, dateTo, dateBasis = 'tanggalSurat' } = options;
+  const { status, dateFrom, dateTo, dateBasis = 'tanggalSurat', tahun = 'all' } = options;
   const normalizedFrom = extractIsoDate(dateFrom);
   const normalizedTo = extractIsoDate(dateTo);
 
@@ -34,6 +52,13 @@ export function filterRekapSurat(
     }
     if (status === 'aktif' && item.statusSelesai) {
       return false;
+    }
+
+    if (tahun !== 'all') {
+      const targetDate = extractIsoDate(item[dateBasis]);
+      if (!targetDate || Number(targetDate.slice(0, 4)) !== tahun) {
+        return false;
+      }
     }
 
     if (normalizedFrom || normalizedTo) {

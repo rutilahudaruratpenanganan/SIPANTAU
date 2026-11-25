@@ -520,6 +520,117 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "PaketPekerjaan": {
+      "title": "PaketPekerjaan",
+      "description": "Paket kegiatan dan pekerjaan beserta alur tahapan pelaksanaan yang dapat dikustomisasi",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "namaKegiatan": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "subKegiatan": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "jenisPelaksanaan": {
+          "type": "string",
+          "enum": ["Perorangan", "Badan Usaha"]
+        },
+        "tahunAnggaran": {
+          "type": "integer",
+          "description": "Tahun anggaran pelaksanaan kegiatan (2000-2100)"
+        },
+        "nilaiAnggaran": {
+          "type": "number",
+          "description": "Nilai anggaran atau kontrak dalam Rupiah (Rp)"
+        },
+        "tanggalMulai": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40
+        },
+        "durasiHariKerja": {
+          "type": "integer",
+          "description": "Durasi pelaksanaan pekerjaan dalam hari kalender (Senin-Minggu, 1-1825)"
+        },
+        "tenggatWaktu": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 40,
+          "description": "Tanggal selesai otomatis hasil Tanggal Mulai + durasi hari kalender"
+        },
+        "tanggalSelesai": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "kodeRup": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Kode Rencana Umum Pengadaan (SIRUP)"
+        },
+        "nomorKontrak": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "penyedia": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "picNama": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "catatan": {
+          "type": "string",
+          "maxLength": 1500
+        },
+        "tahapan": {
+          "type": "array",
+          "description": "Daftar 1-30 tahapan alur kerja paket pekerjaan"
+        },
+        "dibuatOlehId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "dibuatOlehNama": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "namaKegiatan",
+        "subKegiatan",
+        "jenisPelaksanaan",
+        "nilaiAnggaran",
+        "tanggalMulai",
+        "tenggatWaktu",
+        "tahapan",
+        "dibuatOlehId",
+        "dibuatOlehNama",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -550,6 +661,10 @@
     "/notifikasi/{notifId}": {
       "schema": { "$ref": "#/entities/NotifikasiDisposisi" },
       "description": "Notifikasi disposisi surat yang ditujukan khusus bagi akun penerima disposisi"
+    },
+    "/paketPekerjaan/{paketId}": {
+      "schema": { "$ref": "#/entities/PaketPekerjaan" },
+      "description": "Paket kegiatan dan pekerjaan beserta alur tahapan pelaksanaan"
     }
   }
 }

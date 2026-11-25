@@ -21,13 +21,17 @@ import {
   AgendaStatus,
   AkunKredensial,
   DokumenFile,
+  JenisPelaksanaan,
   NotifikasiDisposisi,
   NotifikasiJenis,
+  PaketPekerjaan,
   PejabatConfig,
   Personel,
   RiwayatTindakLanjut,
   Role,
+  StatusTahapPekerjaan,
   SuratMasuk,
+  TahapPekerjaan,
   TahapTindakLanjutId,
 } from '../types';
 import {
@@ -67,6 +71,10 @@ const LIMITS = {
   TIME_STR: 10,
   CATATAN_AGENDA: 1500,
   ALASAN_STATUS: 500,
+  KEGIATAN_NAMA: 300,
+  KODE_RUP: 100,
+  PENYEDIA: 200,
+  MAX_TAHAPAN_PEKERJAAN: 30,
 };
 
 const pdfMemoryCache = new Map<string, string>();
@@ -1446,3 +1454,271 @@ export async function markAllNotifikasiReadDb(notifIds: string[]): Promise<void>
     handleFirestoreError(error, OperationType.UPDATE, 'notifikasi');
   }
 }
+
+function sanitizeTahapanPekerjaan(tahapan: TahapPekerjaan[]): Record<string, unknown>[] {
+  return tahapan.slice(0, LIMITS.MAX_TAHAPAN_PEKERJAAN).map((t, idx) => {
+    const cleanStatus: StatusTahapPekerjaan =
+      t.status === 'selesai' || t.status === 'sedang_berjalan' ? t.status : 'belum_mulai';
+    const entry: Record<string, unknown> = {
+      id: clampStr(t.id, LIMITS.ID) || `tahap-${idx + 1}`,
+      urutan: idx + 1,
+      nama: clampStr(t.nama, 200) || `Tahap ${idx + 1}`,
+      status: cleanStatus,
+    };
+    if (t.tanggalTarget?.trim()) entry.tanggalTarget = clampStr(t.tanggalTarget, LIMITS.DATE_STR);
+    if (t.tanggalSelesai?.trim()) entry.tanggalSelesai = clampStr(t.tanggalSelesai, LIMITS.DATE_STR);
+    if (t.catatan?.trim()) entry.catatan = clampStr(t.catatan, 500);
+    if (t.diperbaruiOleh?.trim()) entry.diperbaruiOleh = clampStr(t.diperbaruiOleh, LIMITS.NAMA);
+    if (t.diperbaruiPada?.trim()) entry.diperbaruiPada = clampStr(t.diperbaruiPada, LIMITS.DATE_STR);
+    return entry;
+  });
+}
+
+function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPekerjaan {
+  const rawJenis = data.jenisPelaksanaan as JenisPelaksanaan | undefined;
+  const jenisPelaksanaan: JenisPelaksanaan =
+    rawJenis === 'Badan Usaha' ? 'Badan Usaha' : 'Perorangan';
+
+  const rawTahapan = Array.isArray(data.tahapan)
+    ? (data.tahapan as Record<string, unknown>[])
+    : [];
+
+  const tahapan: TahapPekerjaan[] = rawTahapan.map((t, idx) => {
+    const st = t.status as StatusTahapPekerjaan | undefined;
+    const status: StatusTahapPekerjaan =
+      st === 'selesai' || st === 'sedang_berjalan' ? st : 'belum_mulai';
+    return {
+      id: String(t.id || `tahap-${idx + 1}`),
+      urutan: typeof t.urutan === 'number' ? t.urutan : idx + 1,
+      nama: String(t.nama || `Tahap ${idx + 1}`),
+      status,
+      tanggalTarget: (t.tanggalTarget as string | undefined) || undefined,
+      tanggalSelesai: (t.tanggalSelesai as string | undefined) || undefined,
+      catatan: (t.catatan as string | undefined) || undefined,
+      diperbaruiOleh: (t.diperbaruiOleh as string | undefined) || undefined,
+      diperbaruiPada: (t.diperbaruiPada as string | undefined) || undefined,
+    };
+  });
+
+  return {
+    id,
+    namaKegiatan: (data.namaKegiatan as string) || '',
+    subKegiatan: (data.subKegiatan as string) || '',
+    jenisPelaksanaan,
+    tahunAnggaran:
+      typeof data.tahunAnggaran === 'number' ? data.tahunAnggaran : undefined,
+    nilaiAnggaran: typeof data.nilaiAnggaran === 'number' ? data.nilaiAnggaran : 0,
+    tanggalMulai: (data.tanggalMulai as string) || '',
+    durasiHariKerja:
+      typeof data.durasiHariKerja === 'number' ? data.durasiHariKerja : undefined,
+    tenggatWaktu: (data.tenggatWaktu as string) || '',
+    tanggalSelesai: (data.tanggalSelesai as string | undefined) || undefined,
+    kodeRup: (data.kodeRup as string | undefined) || undefined,
+    nomorKontrak: (data.nomorKontrak as string | undefined) || undefined,
+    penyedia: (data.penyedia as string | undefined) || undefined,
+    picNama: (data.picNama as string | undefined) || undefined,
+    catatan: (data.catatan as string | undefined) || undefined,
+    tahapan,
+    dibuatOlehId: (data.dibuatOlehId as string) || '',
+    dibuatOlehNama: (data.dibuatOlehNama as string) || '',
+    createdAt: formatTimestamp(data.createdAt),
+    updatedAt: formatTimestamp(data.updatedAt),
+  };
+}
+
+export function subscribePaketPekerjaan(
+  onData: (list: PaketPekerjaan[]) => void,
+  onError: (err: Error) => void
+) {
+  const path = 'paketPekerjaan';
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) =>
+        docToPaketPekerjaan(docSnap.id, docSnap.data() as Record<string, unknown>)
+      );
+      list.sort((a, b) => {
+        const cmpTenggat = (a.tenggatWaktu || '').localeCompare(b.tenggatWaktu || '');
+        if (cmpTenggat !== 0) return cmpTenggat;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export interface PaketPekerjaanMutationPayload {
+  namaKegiatan: string;
+  subKegiatan: string;
+  jenisPelaksanaan: JenisPelaksanaan;
+  tahunAnggaran?: number;
+  nilaiAnggaran: number;
+  tanggalMulai: string;
+  durasiHariKerja?: number;
+  tenggatWaktu: string;
+  tanggalSelesai?: string;
+  kodeRup?: string;
+  nomorKontrak?: string;
+  penyedia?: string;
+  picNama?: string;
+  catatan?: string;
+  tahapan: TahapPekerjaan[];
+}
+
+export async function createPaketPekerjaanDb(
+  input: PaketPekerjaanMutationPayload,
+  creator: { id: string; nama: string }
+): Promise<string> {
+  const id = `paket-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const path = `paketPekerjaan/${id}`;
+  const cleanBudget = Number.isFinite(input.nilaiAnggaran)
+    ? Math.max(0, Math.min(1_000_000_000_000, Math.round(input.nilaiAnggaran)))
+    : 0;
+  const cleanDurasi =
+    typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
+      ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
+      : undefined;
+  const cleanTahun =
+    typeof input.tahunAnggaran === 'number' && Number.isFinite(input.tahunAnggaran)
+      ? Math.max(2000, Math.min(2100, Math.round(input.tahunAnggaran)))
+      : undefined;
+
+  const payload: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    namaKegiatan: clampStr(input.namaKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
+    subKegiatan: clampStr(input.subKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
+    jenisPelaksanaan: input.jenisPelaksanaan,
+    nilaiAnggaran: cleanBudget,
+    tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
+    tenggatWaktu: clampStr(input.tenggatWaktu, LIMITS.DATE_STR),
+    tahapan: sanitizeTahapanPekerjaan(input.tahapan),
+    dibuatOlehId: clampStr(creator.id, LIMITS.ID) || 'system',
+    dibuatOlehNama: clampStr(creator.nama, LIMITS.NAMA) || 'Tim Wasdal',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (cleanTahun !== undefined) {
+    payload.tahunAnggaran = cleanTahun;
+  }
+  if (cleanDurasi !== undefined) {
+    payload.durasiHariKerja = cleanDurasi;
+  }
+  if (input.tanggalSelesai?.trim()) {
+    payload.tanggalSelesai = clampStr(input.tanggalSelesai, LIMITS.DATE_STR);
+  }
+  if (input.kodeRup?.trim()) {
+    payload.kodeRup = clampStr(input.kodeRup, LIMITS.KODE_RUP);
+  }
+  if (input.nomorKontrak?.trim()) {
+    payload.nomorKontrak = clampStr(input.nomorKontrak, LIMITS.NOMOR_SURAT);
+  }
+  if (input.penyedia?.trim()) {
+    payload.penyedia = clampStr(input.penyedia, LIMITS.PENYEDIA);
+  }
+  if (input.picNama?.trim()) {
+    payload.picNama = clampStr(input.picNama, LIMITS.NAMA);
+  }
+  if (input.catatan?.trim()) {
+    payload.catatan = clampStr(input.catatan, LIMITS.CATATAN_AGENDA);
+  }
+
+  try {
+    await setDoc(doc(db, 'paketPekerjaan', id), payload);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function updatePaketPekerjaanDb(
+  paketId: string,
+  input: PaketPekerjaanMutationPayload
+): Promise<void> {
+  const path = `paketPekerjaan/${paketId}`;
+  const cleanBudget = Number.isFinite(input.nilaiAnggaran)
+    ? Math.max(0, Math.min(1_000_000_000_000, Math.round(input.nilaiAnggaran)))
+    : 0;
+  const cleanDurasi =
+    typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
+      ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
+      : undefined;
+  const cleanTahun =
+    typeof input.tahunAnggaran === 'number' && Number.isFinite(input.tahunAnggaran)
+      ? Math.max(2000, Math.min(2100, Math.round(input.tahunAnggaran)))
+      : undefined;
+
+  const updatePayload: Record<string, unknown> = {
+    namaKegiatan: clampStr(input.namaKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
+    subKegiatan: clampStr(input.subKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
+    jenisPelaksanaan: input.jenisPelaksanaan,
+    tahunAnggaran: cleanTahun !== undefined ? cleanTahun : deleteField(),
+    nilaiAnggaran: cleanBudget,
+    tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
+    durasiHariKerja: cleanDurasi !== undefined ? cleanDurasi : deleteField(),
+    tenggatWaktu: clampStr(input.tenggatWaktu, LIMITS.DATE_STR),
+    tanggalSelesai: input.tanggalSelesai?.trim()
+      ? clampStr(input.tanggalSelesai, LIMITS.DATE_STR)
+      : deleteField(),
+    kodeRup: input.kodeRup?.trim()
+      ? clampStr(input.kodeRup, LIMITS.KODE_RUP)
+      : deleteField(),
+    nomorKontrak: input.nomorKontrak?.trim()
+      ? clampStr(input.nomorKontrak, LIMITS.NOMOR_SURAT)
+      : deleteField(),
+    penyedia: input.penyedia?.trim()
+      ? clampStr(input.penyedia, LIMITS.PENYEDIA)
+      : deleteField(),
+    picNama: input.picNama?.trim()
+      ? clampStr(input.picNama, LIMITS.NAMA)
+      : deleteField(),
+    catatan: input.catatan?.trim()
+      ? clampStr(input.catatan, LIMITS.CATATAN_AGENDA)
+      : deleteField(),
+    tahapan: sanitizeTahapanPekerjaan(input.tahapan),
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    await updateDoc(doc(db, 'paketPekerjaan', paketId), updatePayload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function updatePaketPekerjaanTahapanDb(
+  paketId: string,
+  tahapan: TahapPekerjaan[],
+  tanggalSelesai?: string
+): Promise<void> {
+  const path = `paketPekerjaan/${paketId}`;
+  try {
+    await updateDoc(doc(db, 'paketPekerjaan', paketId), {
+      tahapan: sanitizeTahapanPekerjaan(tahapan),
+      tanggalSelesai: tanggalSelesai?.trim()
+        ? clampStr(tanggalSelesai, LIMITS.DATE_STR)
+        : deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deletePaketPekerjaanDb(paketId: string): Promise<void> {
+  const path = `paketPekerjaan/${paketId}`;
+  try {
+    await deleteDoc(doc(db, 'paketPekerjaan', paketId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+

@@ -7,7 +7,6 @@ import {
   LogIn,
   AlertCircle,
   ShieldCheck,
-  MailCheck,
   ChevronDown,
 } from 'lucide-react';
 import loginBackdropUrl from '../assets/images/persuratan_login_backdrop_1795136209602.jpg';
@@ -135,12 +134,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </p>
             </div>
           </div>
-        </div>
-
-        {/* Correspondence Domain Strip */}
-        <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2 text-[11px] font-medium text-slate-600">
-          <MailCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-          <span>Portal Administrasi Persuratan, Disposisi &amp; Tindak Lanjut</span>
         </div>
 
         {/* Login Form */}

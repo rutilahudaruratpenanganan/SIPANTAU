@@ -4,6 +4,7 @@ import {
   buildRekapCsvContent,
   filterRekapSurat,
   formatRekapPeriodeLabel,
+  getAvailableSuratYears,
   getRekapStatusLabel,
 } from './rekapLogic.ts';
 import type { SuratMasuk } from '../types/index.ts';
@@ -137,6 +138,10 @@ test('filterRekapSurat filters by dateFrom and dateTo inclusively across date ba
     disposisiFiltered.map((s) => s.id),
     ['s1', 's2']
   );
+
+  assert.deepEqual(getAvailableSuratYears(sampleSurat, 'tanggalSurat'), [2026]);
+  assert.equal(filterRekapSurat(sampleSurat, { status: 'all', tahun: 2026 }).length, 3);
+  assert.equal(filterRekapSurat(sampleSurat, { status: 'all', tahun: 2025 }).length, 0);
 });
 
 test('formatRekapPeriodeLabel and getRekapStatusLabel return human-readable Indonesian labels', () => {

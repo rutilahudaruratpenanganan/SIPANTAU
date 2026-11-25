@@ -470,5 +470,73 @@ service cloud.firestore {
         && isAllowedNotifikasiUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if isValidId(notifId) && isInternalWorkspaceDoc(resource.data);
     }
+
+    function isValidPaketPekerjaan(data) {
+      return data.keys().hasAll([
+          'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan',
+          'nilaiAnggaran', 'tanggalMulai', 'tenggatWaktu', 'tahapan',
+          'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+          'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
+          'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
+          'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && data.namaKegiatan is string && data.namaKegiatan.size() >= 1 && data.namaKegiatan.size() <= 300
+        && data.subKegiatan is string && data.subKegiatan.size() >= 1 && data.subKegiatan.size() <= 300
+        && (data.jenisPelaksanaan in ['Perorangan', 'Badan Usaha'])
+        && (!('tahunAnggaran' in data) || (data.tahunAnggaran is int && data.tahunAnggaran >= 2000 && data.tahunAnggaran <= 2100))
+        && (data.nilaiAnggaran is int || data.nilaiAnggaran is float)
+        && data.nilaiAnggaran >= 0 && data.nilaiAnggaran <= 1000000000000
+        && data.tanggalMulai is string && data.tanggalMulai.size() >= 4 && data.tanggalMulai.size() <= 40
+        && (!('durasiHariKerja' in data) || (data.durasiHariKerja is int && data.durasiHariKerja >= 1 && data.durasiHariKerja <= 1825))
+        && data.tenggatWaktu is string && data.tenggatWaktu.size() >= 4 && data.tenggatWaktu.size() <= 40
+        && (!('tanggalSelesai' in data) || (data.tanggalSelesai is string && data.tanggalSelesai.size() <= 40))
+        && (!('kodeRup' in data) || (data.kodeRup is string && data.kodeRup.size() <= 100))
+        && (!('nomorKontrak' in data) || (data.nomorKontrak is string && data.nomorKontrak.size() <= 150))
+        && (!('penyedia' in data) || (data.penyedia is string && data.penyedia.size() <= 200))
+        && (!('picNama' in data) || (data.picNama is string && data.picNama.size() <= 150))
+        && (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 1500))
+        && data.tahapan is list
+        && data.tahapan.size() >= 1
+        && data.tahapan.size() <= 30
+        && data.tahapan[0] is map
+        && data.dibuatOlehId is string && data.dibuatOlehId.size() >= 1 && data.dibuatOlehId.size() <= 128
+        && data.dibuatOlehNama is string && data.dibuatOlehNama.size() >= 1 && data.dibuatOlehNama.size() <= 150
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isAllowedPaketPekerjaanUpdateAction(affected) {
+      return affected.hasOnly([
+          'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+          'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
+          'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'
+        ])
+        || affected.hasOnly(['tahapan', 'tanggalSelesai', 'updatedAt']);
+    }
+
+    // 8. Pemantauan Kegiatan & Pekerjaan
+    match /paketPekerjaan/{paketId} {
+      allow get: if isValidId(paketId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
+      allow create: if isValidId(paketId)
+        && isValidPaketPekerjaan(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isValidId(paketId)
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidPaketPekerjaan(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.dibuatOlehId == resource.data.dibuatOlehId
+        && request.resource.data.dibuatOlehNama == resource.data.dibuatOlehNama
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && isAllowedPaketPekerjaanUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isValidId(paketId) && isInternalWorkspaceDoc(resource.data);
+    }
   }
 }

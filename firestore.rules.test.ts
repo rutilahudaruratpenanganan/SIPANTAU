@@ -387,3 +387,120 @@ test('NotifikasiDisposisi enforces recipientId, workspace binding, bounds, allow
   assert.equal(markReadKeys.has('createdAt'), false);
 });
 
+const PAKET_ALLOWED_KEYS = new Set([
+  'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan', 'tahunAnggaran',
+  'nilaiAnggaran', 'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
+  'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
+  'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
+]);
+const VALID_JENIS_PELAKSANAAN = new Set([
+  'Perorangan',
+  'Badan Usaha',
+]);
+
+function evaluatePaketCreate(
+  docId: string,
+  payload: Record<string, unknown>,
+  usesServerTime: boolean
+): 'ALLOW' | 'PERMISSION_DENIED' {
+  if (!docId || docId.length > 128 || !VALID_ID_REGEX.test(docId)) return 'PERMISSION_DENIED';
+  if (!usesServerTime) return 'PERMISSION_DENIED';
+  for (const key of Object.keys(payload)) {
+    if (!PAKET_ALLOWED_KEYS.has(key)) return 'PERMISSION_DENIED';
+  }
+  if (payload.ownerId !== INTERNAL_WORKSPACE_ID) return 'PERMISSION_DENIED';
+  if (typeof payload.namaKegiatan !== 'string' || payload.namaKegiatan.length < 1 || payload.namaKegiatan.length > 300) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.subKegiatan !== 'string' || payload.subKegiatan.length < 1 || payload.subKegiatan.length > 300) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.jenisPelaksanaan !== 'string' || !VALID_JENIS_PELAKSANAAN.has(payload.jenisPelaksanaan)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.tahunAnggaran !== undefined &&
+    (typeof payload.tahunAnggaran !== 'number' ||
+      !Number.isInteger(payload.tahunAnggaran) ||
+      payload.tahunAnggaran < 2000 ||
+      payload.tahunAnggaran > 2100)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.nilaiAnggaran !== 'number' || payload.nilaiAnggaran < 0 || payload.nilaiAnggaran > 1000000000000) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.durasiHariKerja !== undefined &&
+    (typeof payload.durasiHariKerja !== 'number' ||
+      !Number.isInteger(payload.durasiHariKerja) ||
+      payload.durasiHariKerja < 1 ||
+      payload.durasiHariKerja > 1825)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.kodeRup !== undefined &&
+    (typeof payload.kodeRup !== 'string' || payload.kodeRup.length > 100)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (!Array.isArray(payload.tahapan) || payload.tahapan.length < 1 || payload.tahapan.length > 30) {
+    return 'PERMISSION_DENIED';
+  }
+  return 'ALLOW';
+}
+
+test('PaketPekerjaan enforces workspace binding, jenisPelaksanaan allowlist, tahunAnggaran bounds, budget bounds, durasiHariKerja bounds, tahapan bounds, and immutable fields', () => {
+  const validPaket: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    namaKegiatan: 'Pengawasan dan Pengendalian Perumahan',
+    subKegiatan: 'Kajian Teknis Kelaikan Fungsi Bangunan Perumahan',
+    jenisPelaksanaan: 'Perorangan',
+    tahunAnggaran: 2026,
+    nilaiAnggaran: 75000000,
+    tanggalMulai: '2026-11-01',
+    durasiHariKerja: 15,
+    tenggatWaktu: '2026-11-20',
+    kodeRup: '51234567',
+    tahapan: [
+      { id: 't-1', urutan: 1, nama: 'Persiapan & SPK', status: 'selesai' },
+      { id: 't-2', urutan: 2, nama: 'Laporan Pendahuluan', status: 'sedang_berjalan' },
+    ],
+    dibuatOlehId: 'internal_wasdal_p-ketua',
+    dibuatOlehNama: 'Yuliani, ST',
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+
+  assert.equal(evaluatePaketCreate('paket-170000-ab12', validPaket, true), 'ALLOW');
+  assert.equal(evaluatePaketCreate('paket-170000-ab13', { ...validPaket, jenisPelaksanaan: 'Badan Usaha' }, true), 'ALLOW');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, ownerId: 'other' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, shadowField: 123 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Lainnya' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Pekerjaan Fisik/Jasa' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Swakelola/Rutin' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 1999 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 2101 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, kodeRup: 'x'.repeat(101) }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, nilaiAnggaran: -1000 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, durasiHariKerja: 0 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, durasiHariKerja: 1826 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahapan: [] }, true), 'PERMISSION_DENIED');
+  assert.equal(
+    evaluatePaketCreate(
+      'paket-1',
+      { ...validPaket, tahapan: Array.from({ length: 31 }, (_, i) => ({ id: `t-${i}` })) },
+      true
+    ),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(evaluatePaketCreate('paket-1', validPaket, false), 'PERMISSION_DENIED');
+
+  const stageProgressUpdateKeys = new Set(['tahapan', 'tanggalSelesai', 'updatedAt']);
+  assert.equal(stageProgressUpdateKeys.has('ownerId'), false);
+  assert.equal(stageProgressUpdateKeys.has('dibuatOlehId'), false);
+  assert.equal(stageProgressUpdateKeys.has('createdAt'), false);
+});
+
+

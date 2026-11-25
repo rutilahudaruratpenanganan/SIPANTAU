@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, FileCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Upload, FileCheck, CheckCircle2, AlertCircle, Copy, Sparkles } from 'lucide-react';
 import { SuratMasuk, DokumenFile } from '../types';
+
+export interface SuratKeluarPrefill {
+  nomorSuratKeluar?: string;
+  perihalSuratKeluar?: string;
+  draftText?: string;
+}
 
 interface ModalUploadSuratKeluarProps {
   isOpen: boolean;
   onClose: () => void;
   surat: SuratMasuk | null;
+  prefill?: SuratKeluarPrefill | null;
   onSaveSuratKeluar: (
     suratId: string,
     fileData: DokumenFile,
@@ -21,19 +28,25 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
   isOpen,
   onClose,
   surat,
+  prefill,
   onSaveSuratKeluar,
   currentPengunggah,
 }) => {
   const [nomorSuratKeluar, setNomorSuratKeluar] = useState(
-    surat?.nomorSuratKeluar || `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
+    prefill?.nomorSuratKeluar ||
+      surat?.nomorSuratKeluar ||
+      `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
   );
   const [tanggalSuratKeluar, setTanggalSuratKeluar] = useState(
     surat?.tanggalSuratKeluar || new Date().toISOString().split('T')[0]
   );
   const [perihalSuratKeluar, setPerihalSuratKeluar] = useState(
-    surat?.perihalSuratKeluar || (surat ? `Jawaban / Tanggapan atas ${surat.perihal}` : '')
+    prefill?.perihalSuratKeluar ||
+      surat?.perihalSuratKeluar ||
+      (surat ? `Jawaban / Tanggapan atas ${surat.perihal}` : '')
   );
   const [tandaiSelesai, setTandaiSelesai] = useState(true);
+  const [copiedDraft, setCopiedDraft] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewData, setFilePreviewData] = useState<DokumenFile | null>(
@@ -46,22 +59,38 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
   useEffect(() => {
     if (!isOpen || !surat) return;
     setNomorSuratKeluar(
-      surat.nomorSuratKeluar || `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
+      prefill?.nomorSuratKeluar ||
+        surat.nomorSuratKeluar ||
+        `503/WASDAL/${Date.now().toString().slice(-4)}/DPKP`
     );
     setTanggalSuratKeluar(
       surat.tanggalSuratKeluar || new Date().toISOString().split('T')[0]
     );
     setPerihalSuratKeluar(
-      surat.perihalSuratKeluar || `Jawaban / Tanggapan atas ${surat.perihal}`
+      prefill?.perihalSuratKeluar ||
+        surat.perihalSuratKeluar ||
+        `Jawaban / Tanggapan atas ${surat.perihal}`
     );
     setFilePreviewData(surat.fileSuratKeluar || null);
     setTandaiSelesai(true);
+    setCopiedDraft(false);
     setSelectedFile(null);
     setIsReadingFile(false);
     setErrorMessage('');
-  }, [isOpen, surat?.id]);
+  }, [isOpen, surat?.id, prefill?.nomorSuratKeluar, prefill?.perihalSuratKeluar, prefill?.draftText]);
 
   if (!isOpen || !surat) return null;
+
+  const handleCopyDraft = async () => {
+    if (!prefill?.draftText) return;
+    try {
+      await navigator.clipboard.writeText(prefill.draftText);
+      setCopiedDraft(true);
+      window.setTimeout(() => setCopiedDraft(false), 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -157,7 +186,28 @@ export const ModalUploadSuratKeluar: React.FC<ModalUploadSuratKeluarProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+          {prefill?.draftText && (
+            <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  Draf Konsep Surat (Diteruskan dari Pemantauan Pekerjaan)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyDraft}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-800 font-semibold"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{copiedDraft ? 'Tersalin' : 'Salin Draf'}</span>
+                </button>
+              </div>
+              <pre className="whitespace-pre-wrap font-sans text-[11px] text-slate-800 bg-white p-2.5 rounded-lg border border-indigo-100 max-h-40 overflow-y-auto">
+                {prefill.draftText}
+              </pre>
+            </div>
+          )}
 
           {errorMessage && (
             <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 flex items-center gap-2 font-semibold">

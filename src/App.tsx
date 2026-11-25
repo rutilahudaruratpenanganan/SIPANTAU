@@ -22,15 +22,20 @@ import { LoginPage } from './components/LoginPage';
 import { AkunView } from './components/AkunView';
 import { AgendaView } from './components/AgendaView';
 import { ModalAgenda } from './components/ModalAgenda';
+import { PekerjaanView } from './components/PekerjaanView';
+import { ModalPaketPekerjaan } from './components/ModalPaketPekerjaan';
+import { ModalWorkflowTahapan } from './components/ModalWorkflowTahapan';
 import { 
   AgendaEvent,
   AkunKredensial,
   LoginAccount,
   NotifikasiDisposisi,
+  PaketPekerjaan,
   SuratMasuk, 
   Personel, 
   PejabatConfig, 
   Role, 
+  TahapPekerjaan,
   TahapTindakLanjutId, 
   DokumenFile 
 } from './types';
@@ -67,11 +72,14 @@ import { CheckCircle2, Clock } from 'lucide-react';
 import {
   AgendaMutationPayload,
   AgendaReschedulePayload,
+  PaketPekerjaanMutationPayload,
   cancelAgendaEventDb,
   createAgendaEventDb,
+  createPaketPekerjaanDb,
   createPersonelDb,
   createSuratMasukDb,
   deleteAgendaEventDb,
+  deletePaketPekerjaanDb,
   deletePersonelDb,
   deleteSuratDb,
   ensureWorkspaceInitialized,
@@ -85,12 +93,15 @@ import {
   subscribeAgendaEvents,
   subscribeAkunKredensial,
   subscribeNotifikasiDisposisi,
+  subscribePaketPekerjaan,
   subscribePersonel,
   subscribeSuratMasuk,
   subscribeWorkspace,
   syncDisposisiNotificationsDb,
   updateAgendaEventDb,
   updateDisposisiDb,
+  updatePaketPekerjaanDb,
+  updatePaketPekerjaanTahapanDb,
   updatePersonelDb,
   updateStageOrCatatanDb,
   updateStatusSelesaiDb,
@@ -101,8 +112,7 @@ import {
 
 const AUTH_ACCOUNT_STORAGE_KEY = 'sipantau_auth_account_id';
 const AUTH_LAST_ACTIVITY_STORAGE_KEY = 'sipantau_last_activity_at';
-const IDLE_EXPIRED_NOTICE =
-  'Sesi Anda berakhir otomatis karena tidak ada aktivitas selama 30 menit. Silakan masuk kembali.';
+const IDLE_EXPIRED_NOTICE = 'Sesi Anda berakhir. Silakan masuk kembali.';
 
 export default function App() {
   // Firestore Workspace Loading State
@@ -116,6 +126,7 @@ export default function App() {
   // Real-time Firestore-backed state
   const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
   const [agendaList, setAgendaList] = useState<AgendaEvent[]>([]);
+  const [paketPekerjaanList, setPaketPekerjaanList] = useState<PaketPekerjaan[]>([]);
   const [notifikasiList, setNotifikasiList] = useState<NotifikasiDisposisi[]>([]);
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
@@ -245,6 +256,11 @@ export default function App() {
     jamSelesai?: string;
   }>({});
 
+  const [isModalPaketOpen, setIsModalPaketOpen] = useState(false);
+  const [selectedPaketForEditId, setSelectedPaketForEditId] = useState<string | null>(null);
+  const [isModalWorkflowOpen, setIsModalWorkflowOpen] = useState(false);
+  const [selectedPaketForWorkflowId, setSelectedPaketForWorkflowId] = useState<string | null>(null);
+
   const selectedSuratForEdit = suratList.find((s) => s.id === selectedSuratForEditId) || null;
   const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
   const selectedSuratForTindakLanjut = suratList.find((s) => s.id === selectedSuratForTindakLanjutId) || null;
@@ -252,6 +268,8 @@ export default function App() {
   const selectedSuratForLembar = suratList.find((s) => s.id === selectedSuratForLembarId) || null;
   const selectedSuratForDelete = suratList.find((s) => s.id === selectedSuratForDeleteId) || null;
   const selectedAgendaForEdit = agendaList.find((a) => a.id === selectedAgendaForEditId) || null;
+  const selectedPaketForEdit = paketPekerjaanList.find((p) => p.id === selectedPaketForEditId) || null;
+  const selectedPaketForWorkflow = paketPekerjaanList.find((p) => p.id === selectedPaketForWorkflowId) || null;
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -289,6 +307,7 @@ export default function App() {
     let unsubAkun: (() => void) | undefined;
     let unsubSurat: (() => void) | undefined;
     let unsubAgenda: (() => void) | undefined;
+    let unsubPekerjaan: (() => void) | undefined;
     let unsubNotifikasi: (() => void) | undefined;
 
     const readyFlags = {
@@ -296,6 +315,7 @@ export default function App() {
       personel: false,
       akun: false,
       agenda: false,
+      pekerjaan: false,
       surat: false,
       notifikasi: false,
     };
@@ -307,6 +327,7 @@ export default function App() {
         readyFlags.personel &&
         readyFlags.akun &&
         readyFlags.agenda &&
+        readyFlags.pekerjaan &&
         readyFlags.surat &&
         readyFlags.notifikasi
       ) {
@@ -347,6 +368,13 @@ export default function App() {
           },
           (err) => setAsyncError(err)
         );
+        unsubPekerjaan = subscribePaketPekerjaan(
+          (list) => {
+            setPaketPekerjaanList(list);
+            markReady('pekerjaan');
+          },
+          (err) => setAsyncError(err)
+        );
         unsubSurat = subscribeSuratMasuk(
           (list) => {
             setSuratList(list);
@@ -374,6 +402,7 @@ export default function App() {
       unsubPersonel?.();
       unsubAkun?.();
       unsubAgenda?.();
+      unsubPekerjaan?.();
       unsubSurat?.();
       unsubNotifikasi?.();
     };
@@ -953,9 +982,13 @@ export default function App() {
     setSelectedSuratForDeleteId(null);
     setIsModalAgendaOpen(false);
     setSelectedAgendaForEditId(null);
+    setIsModalPaketOpen(false);
+    setSelectedPaketForEditId(null);
+    setIsModalWorkflowOpen(false);
+    setSelectedPaketForWorkflowId(null);
     if (reason === 'idle') {
       setSessionNotice(IDLE_EXPIRED_NOTICE);
-      showToast('Sesi berakhir otomatis karena tidak ada aktivitas selama 30 menit.');
+      showToast('Sesi Anda berakhir. Silakan masuk kembali.');
     } else {
       setSessionNotice(null);
       showToast('Anda telah keluar dari akun.');
@@ -1118,6 +1151,45 @@ export default function App() {
     showToast(
       `Agenda ${target ? `"${target.judul}"` : ''} diaktifkan kembali menjadi Terjadwal.`
     );
+  };
+
+  const handleSavePaketPekerjaan = async (
+    payload: PaketPekerjaanMutationPayload,
+    editingId?: string
+  ) => {
+    if (editingId) {
+      await updatePaketPekerjaanDb(editingId, payload);
+      showToast(`Paket pekerjaan "${payload.subKegiatan}" berhasil diperbarui.`);
+    } else {
+      await createPaketPekerjaanDb(payload, {
+        id: currentUser.id,
+        nama: currentUser.nama,
+      });
+      showToast(`Paket pekerjaan "${payload.subKegiatan}" berhasil disimpan.`);
+    }
+  };
+
+  const handleSavePaketTahapan = async (
+    paketId: string,
+    tahapan: TahapPekerjaan[],
+    tanggalSelesai?: string
+  ) => {
+    const target = paketPekerjaanList.find((p) => p.id === paketId);
+    await updatePaketPekerjaanTahapanDb(paketId, tahapan, tanggalSelesai);
+    showToast(
+      `Progres tahapan ${target ? `"${target.subKegiatan}"` : 'paket pekerjaan'} berhasil diperbarui.`
+    );
+  };
+
+  const handleDeletePaketPekerjaan = async (paketId: string) => {
+    const target = paketPekerjaanList.find((p) => p.id === paketId);
+    if (!target) return;
+    if (!isFullAccessRole(currentRole) && target.dibuatOlehId !== currentUser.id) {
+      showToast('Anda hanya dapat menghapus paket yang Anda buat atau melalui Ketua Tim/Administrator.');
+      return;
+    }
+    await deletePaketPekerjaanDb(paketId);
+    showToast(`Paket pekerjaan "${target.subKegiatan}" berhasil dihapus.`);
   };
 
   const handleSaveNewPassword = async (accountId: string, newHash: string) => {
@@ -1557,12 +1629,14 @@ export default function App() {
         {activeTab === 'rekap' && (
           <RekapView
             suratList={suratList}
+            paketList={paketPekerjaanList}
             pejabatConfig={pejabatConfig}
             onExportCsv={handleExportCsv}
             onOpenPdfViewer={(f) => {
               setSelectedFileForViewer(f);
               setIsModalPdfViewerOpen(true);
             }}
+            onNotify={showToast}
           />
         )}
 
@@ -1609,6 +1683,30 @@ export default function App() {
               setAgendaInitialOpts({});
               setIsModalAgendaOpen(true);
             }}
+            onNotify={showToast}
+          />
+        )}
+
+        {/* VIEW 8: PEMANTAUAN KEGIATAN & PEKERJAAN */}
+        {activeTab === 'pekerjaan' && (
+          <PekerjaanView
+            paketList={paketPekerjaanList}
+            personelList={personelList}
+            currentUser={currentUser}
+            currentRole={currentRole}
+            onOpenCreate={() => {
+              setSelectedPaketForEditId(null);
+              setIsModalPaketOpen(true);
+            }}
+            onOpenEdit={(paket) => {
+              setSelectedPaketForEditId(paket.id);
+              setIsModalPaketOpen(true);
+            }}
+            onOpenWorkflow={(paket) => {
+              setSelectedPaketForWorkflowId(paket.id);
+              setIsModalWorkflowOpen(true);
+            }}
+            onDeletePaket={handleDeletePaketPekerjaan}
             onNotify={showToast}
           />
         )}
@@ -1772,6 +1870,38 @@ export default function App() {
           onRescheduleAgenda={handleRescheduleAgenda}
           onReactivateAgenda={handleReactivateAgenda}
           onDelete={handleDeleteAgenda}
+        />
+      )}
+
+      {/* 10. Modal Tambah / Edit Paket Pekerjaan & Template Tahapan */}
+      {isModalPaketOpen && (
+        <ModalPaketPekerjaan
+          isOpen={isModalPaketOpen}
+          onClose={() => {
+            setIsModalPaketOpen(false);
+            setSelectedPaketForEditId(null);
+          }}
+          initialPaket={selectedPaketForEdit}
+          personelList={personelList}
+          onSave={handleSavePaketPekerjaan}
+        />
+      )}
+
+      {/* 11. Modal Pemantauan & Update Progres Tahapan Pekerjaan */}
+      {isModalWorkflowOpen && selectedPaketForWorkflow && (
+        <ModalWorkflowTahapan
+          isOpen={isModalWorkflowOpen}
+          onClose={() => {
+            setIsModalWorkflowOpen(false);
+            setSelectedPaketForWorkflowId(null);
+          }}
+          paket={selectedPaketForWorkflow}
+          currentUser={currentUser}
+          onSaveProgress={handleSavePaketTahapan}
+          onOpenEditPaket={(paket) => {
+            setSelectedPaketForEditId(paket.id);
+            setIsModalPaketOpen(true);
+          }}
         />
       )}
 

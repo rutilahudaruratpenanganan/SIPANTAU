@@ -729,7 +729,7 @@ export const ModalAgenda: React.FC<ModalAgendaProps> = ({
             <span className="block font-semibold text-slate-700 mb-1.5">
               Kategori Kegiatan
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {AGENDA_KATEGORI_LIST.map((kat) => {
                 const st = getKategoriStyle(kat);
                 const active = kategori === kat;
