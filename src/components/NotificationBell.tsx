@@ -81,7 +81,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         title={ariaLabel}
-        className={`relative flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+        className={`relative z-50 flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
           isOpen
             ? 'bg-slate-700 border-slate-500 text-white'
             : unreadCount > 0

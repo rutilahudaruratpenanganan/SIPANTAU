@@ -197,14 +197,14 @@ export const SuratTable: React.FC<SuratTableProps> = ({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-100/75 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-              <th className="py-3 px-2.5 w-10 text-center">No.</th>
-              <th className="py-3 px-3 w-28 xl:w-32">Tanggal Surat</th>
-              <th className="py-3 px-3 w-44 xl:w-56 2xl:w-64">Asal Surat</th>
-              <th className="py-3 px-3 min-w-[220px]">Perihal & Arahan</th>
-              <th className="py-3 px-3 w-40 xl:w-52 2xl:w-60">Disposisi Personel</th>
-              <th className="py-3 px-3 w-40 xl:w-52 2xl:w-60">Status Tindak Lanjut</th>
-              <th className="py-3 px-2.5 w-28 xl:w-36 text-center">Berkas PDF</th>
-              <th className="py-3 px-3 text-right whitespace-nowrap">Aksi</th>
+              <th className="py-3 px-2 w-9 text-center">No.</th>
+              <th className="py-3 px-2.5 w-28">Tanggal</th>
+              <th className="py-3 px-2.5 w-40 xl:w-44">Asal Surat</th>
+              <th className="py-3 px-2.5 min-w-[180px]">Perihal & Arahan</th>
+              <th className="py-3 px-2.5 w-36 xl:w-44">Disposisi Personel</th>
+              <th className="py-3 px-2.5 w-36 xl:w-40">Status Tindak Lanjut</th>
+              <th className="py-3 px-2 w-28 text-center">Berkas PDF</th>
+              <th className="py-3 px-2.5 text-right whitespace-nowrap">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-xs">
@@ -230,7 +230,7 @@ export const SuratTable: React.FC<SuratTableProps> = ({
                   <tr 
                     key={item.id}
                     data-surat-id={item.id}
-                    className={`transition-colors group ${
+                    className={`transition-colors group align-top ${
                       isHighlighted
                         ? 'bg-blue-50/90 ring-2 ring-inset ring-blue-500'
                         : 'hover:bg-blue-50/40'
