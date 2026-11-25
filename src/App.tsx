@@ -1349,30 +1349,32 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {canAccessBackup(currentRole) && (
+          {activeTab !== 'pekerjaan' && (
+            <div className="flex flex-wrap items-center gap-3">
+              {canAccessBackup(currentRole) && (
+                <button
+                  onClick={() => setActiveTab('backup')}
+                  className="text-emerald-700 hover:text-emerald-900 font-semibold underline text-xs"
+                >
+                  Backup Surat Selesai (.zip)
+                </button>
+              )}
+              {canManagePersonel(currentRole) && (
+                <button
+                  onClick={() => setIsModalPersonelOpen(true)}
+                  className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
+                >
+                  Kelola Data Personel
+                </button>
+              )}
               <button
-                onClick={() => setActiveTab('backup')}
-                className="text-emerald-700 hover:text-emerald-900 font-semibold underline text-xs"
+                onClick={() => setActiveTab('akun')}
+                className="text-slate-700 hover:text-slate-950 font-semibold underline text-xs"
               >
-                Backup Surat Selesai (.zip)
+                Akun &amp; Ubah Password
               </button>
-            )}
-            {canManagePersonel(currentRole) && (
-              <button
-                onClick={() => setIsModalPersonelOpen(true)}
-                className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs"
-              >
-                Kelola Data Personel
-              </button>
-            )}
-            <button
-              onClick={() => setActiveTab('akun')}
-              className="text-slate-700 hover:text-slate-950 font-semibold underline text-xs"
-            >
-              Akun &amp; Ubah Password
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* VIEW 1: DASHBOARD */}
