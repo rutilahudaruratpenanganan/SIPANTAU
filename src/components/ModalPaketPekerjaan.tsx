@@ -32,6 +32,7 @@ import {
   getTodayLocalIso,
   normalizeTahapanOrder,
   parseRupiahInput,
+  resolvePaketTanggalSelesai,
   validatePaketPekerjaanInput,
 } from '../utils/pekerjaanLogic';
 
@@ -41,6 +42,7 @@ interface ModalPaketPekerjaanProps {
   initialPaket: PaketPekerjaan | null;
   personelList: Personel[];
   onSave: (payload: PaketPekerjaanMutationPayload, editingId?: string) => Promise<void>;
+  onDeletePaket?: (paketId: string) => Promise<void>;
 }
 
 export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
@@ -49,6 +51,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   initialPaket,
   personelList,
   onSave,
+  onDeletePaket,
 }) => {
   const isEditing = Boolean(initialPaket);
 
@@ -75,6 +78,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
 
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -91,7 +96,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           ? initialPaket.nilaiAnggaran.toLocaleString('id-ID')
           : '0'
       );
-      setTanggalMulai(initialPaket.tanggalMulai);
+      setTanggalMulai(initialPaket.tanggalMulai || getTodayLocalIso());
       setDurasiHariText(String(getPaketDurasiHariKerja(initialPaket)));
       setKodeRup(initialPaket.kodeRup || '');
       setNomorKontrak(initialPaket.nomorKontrak || '');
@@ -125,6 +130,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     }
     setErrorMessage('');
     setIsSaving(false);
+    setConfirmDelete(false);
+    setIsDeleting(false);
   }, [isOpen, initialPaket]);
 
   if (!isOpen) return null;
@@ -230,9 +237,30 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   const currentYear = new Date().getFullYear();
   const presetYears = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
 
+  const handleDeleteCurrent = async () => {
+    if (!initialPaket || !onDeletePaket) return;
+    setErrorMessage('');
+    setIsDeleting(true);
+    try {
+      await onDeletePaket(initialPaket.id);
+      onClose();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal menghapus paket pekerjaan.'
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanedTahapan = normalizeTahapanOrder(tahapan);
+    const resolvedTanggalSelesai = resolvePaketTanggalSelesai(
+      cleanedTahapan,
+      initialPaket?.tanggalSelesai,
+      getTodayLocalIso()
+    );
     const validationErr = validatePaketPekerjaanInput({
       namaKegiatan,
       subKegiatan,
@@ -242,7 +270,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       tanggalMulai,
       durasiHariKerja,
       tenggatWaktu: computedTanggalSelesai,
-      tanggalSelesai: initialPaket?.tanggalSelesai,
+      tanggalSelesai: resolvedTanggalSelesai,
       tahapan: cleanedTahapan,
     });
 
@@ -265,7 +293,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           tanggalMulai: tanggalMulai.trim(),
           durasiHariKerja,
           tenggatWaktu: computedTanggalSelesai,
-          tanggalSelesai: initialPaket?.tanggalSelesai || undefined,
+          tanggalSelesai: resolvedTanggalSelesai,
           kodeRup: kodeRup.trim() || undefined,
           nomorKontrak: nomorKontrak.trim() || undefined,
           penyedia: penyedia.trim() || undefined,
@@ -301,7 +329,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
             </div>
             <div className="min-w-0">
               <h2 id="modal-paket-title" className="text-sm sm:text-base font-bold truncate">
-                {isEditing ? 'Edit Paket Pekerjaan & Alur Tahapan' : 'Tambah Paket Pekerjaan Baru'}
+                {isEditing ? 'Edit Keseluruhan Paket Pekerjaan' : 'Tambah Paket Pekerjaan Baru'}
               </h2>
               <p className="text-[11px] text-slate-300 truncate">
                 Atur identitas kegiatan, anggaran, jadwal pelaksanaan, dan tahapan kerja
@@ -760,28 +788,66 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition-colors"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold shadow-sm transition-colors"
-            >
-              <Check className="w-4 h-4" />
-              <span>
-                {isSaving
-                  ? 'Menyimpan...'
-                  : isEditing
-                  ? 'Simpan Perubahan Paket'
-                  : 'Simpan Paket Pekerjaan'}
-              </span>
-            </button>
+          <div className="pt-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              {isEditing && initialPaket && onDeletePaket && (
+                confirmDelete ? (
+                  <div className="inline-flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrent}
+                      disabled={isDeleting || isSaving}
+                      className="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-semibold transition-colors"
+                    >
+                      {isDeleting ? 'Menghapus...' : 'Ya, Hapus Paket'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={isDeleting}
+                      className="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition-colors"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 font-semibold transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Hapus Paket</span>
+                  </button>
+                )
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving || isDeleting}
+                className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving || isDeleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold shadow-sm transition-colors"
+              >
+                <Check className="w-4 h-4" />
+                <span>
+                  {isSaving
+                    ? 'Menyimpan...'
+                    : isEditing
+                    ? 'Simpan Perubahan Paket'
+                    : 'Simpan Paket Pekerjaan'}
+                </span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -1184,10 +1184,6 @@ export default function App() {
   const handleDeletePaketPekerjaan = async (paketId: string) => {
     const target = paketPekerjaanList.find((p) => p.id === paketId);
     if (!target) return;
-    if (!isFullAccessRole(currentRole) && target.dibuatOlehId !== currentUser.id) {
-      showToast('Anda hanya dapat menghapus paket yang Anda buat atau melalui Ketua Tim/Administrator.');
-      return;
-    }
     await deletePaketPekerjaanDb(paketId);
     showToast(`Paket pekerjaan "${target.subKegiatan}" berhasil dihapus.`);
   };
@@ -1859,6 +1855,7 @@ export default function App() {
           initialPaket={selectedPaketForEdit}
           personelList={personelList}
           onSave={handleSavePaketPekerjaan}
+          onDeletePaket={handleDeletePaketPekerjaan}
         />
       )}
 

@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Check,
   CheckCircle2,
   Circle,
   Clock,
   Layers,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -22,6 +26,7 @@ import {
   getPaketTahunAnggaran,
   getTodayLocalIso,
   normalizeTahapanOrder,
+  resolvePaketTanggalSelesai,
 } from '../utils/pekerjaanLogic';
 
 interface ModalWorkflowTahapanProps {
@@ -48,6 +53,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
   const [tahapan, setTahapan] = useState<TahapPekerjaan[]>([]);
   const [tanggalSelesaiPaket, setTanggalSelesaiPaket] = useState('');
   const [newStageName, setNewStageName] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -55,6 +61,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     setTahapan(paket.tahapan.map((t, idx) => ({ ...t, urutan: idx + 1 })));
     setTanggalSelesaiPaket(paket.tanggalSelesai || '');
     setNewStageName('');
+    setErrorMessage('');
     setIsSaving(false);
   }, [isOpen, paket]);
 
@@ -129,15 +136,29 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
         },
       ])
     );
+    setTanggalSelesaiPaket('');
     setNewStageName('');
+  };
+
+  const handleMoveStage = (index: number, direction: -1 | 1) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= tahapan.length) return;
+    setTahapan((prev) => {
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[targetIdx];
+      next[targetIdx] = temp;
+      return normalizeTahapanOrder(next);
+    });
   };
 
   const handleRemoveStage = (id: string) => {
     if (tahapan.length <= 1) return;
     setTahapan((prev) => {
       const next = normalizeTahapanOrder(prev.filter((t) => t.id !== id));
-      const allDone = next.length > 0 && next.every((item) => item.status === 'selesai');
-      setTanggalSelesaiPaket(allDone ? tanggalSelesaiPaket || todayIso : '');
+      setTanggalSelesaiPaket(
+        resolvePaketTanggalSelesai(next, tanggalSelesaiPaket, todayIso) || ''
+      );
       return next;
     });
   };
@@ -149,10 +170,20 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
         nama: t.nama.trim() || `Tahap ${t.urutan}`,
       }))
     );
+    const resolvedTanggalSelesai = resolvePaketTanggalSelesai(
+      cleaned,
+      tanggalSelesaiPaket,
+      todayIso
+    );
+    setErrorMessage('');
     setIsSaving(true);
     try {
-      await onSaveProgress(paket.id, cleaned, tanggalSelesaiPaket.trim() || undefined);
+      await onSaveProgress(paket.id, cleaned, resolvedTanggalSelesai);
       onClose();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Gagal menyimpan perubahan tahapan ke database.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -174,7 +205,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
             </div>
             <div className="min-w-0">
               <h2 id="modal-workflow-title" className="text-sm sm:text-base font-bold truncate">
-                Pemantauan Alur Tahapan Pekerjaan
+                Edit Per Tahap Pekerjaan
               </h2>
               <p className="text-[11px] text-slate-300 truncate">
                 {paket.namaKegiatan} · {paket.subKegiatan}
@@ -189,9 +220,10 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                 onClose();
                 onOpenEditPaket(paket);
               }}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition-colors whitespace-nowrap"
             >
-              Edit Info Paket
+              <Pencil className="w-3 h-3" />
+              <span>Edit Keseluruhan</span>
             </button>
             <button
               type="button"
@@ -278,6 +310,15 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 
         {/* Stages List */}
         <div className="flex-1 overflow-y-auto p-5 space-y-3 text-xs">
+          {errorMessage && (
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span className="font-medium">{errorMessage}</span>
+            </div>
+          )}
           {tahapan.map((stage, idx) => {
             const isDone = stage.status === 'selesai';
             const isRunning = stage.status === 'sedang_berjalan';
@@ -360,17 +401,39 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                       <CheckCircle2 className="w-3 h-3" />
                       <span>Selesai</span>
                     </button>
-                    {tahapan.length > 1 && (
+                    <div className="flex items-center gap-0.5 pl-1 border-l border-slate-200">
                       <button
                         type="button"
-                        onClick={() => handleRemoveStage(stage.id)}
-                        aria-label={`Hapus tahap ${stage.nama}`}
-                        title="Hapus tahapan ini"
-                        className="p-1 rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                        onClick={() => handleMoveStage(idx, -1)}
+                        disabled={idx === 0}
+                        aria-label={`Naikkan urutan tahap ${idx + 1}`}
+                        title="Naikkan urutan"
+                        className="p-1 rounded-md text-slate-600 hover:bg-white disabled:opacity-35"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <ArrowUp className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleMoveStage(idx, 1)}
+                        disabled={idx === tahapan.length - 1}
+                        aria-label={`Turunkan urutan tahap ${idx + 1}`}
+                        title="Turunkan urutan"
+                        className="p-1 rounded-md text-slate-600 hover:bg-white disabled:opacity-35"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      {tahapan.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStage(stage.id)}
+                          aria-label={`Hapus tahap ${stage.nama}`}
+                          title="Hapus tahapan ini"
+                          className="p-1 rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 

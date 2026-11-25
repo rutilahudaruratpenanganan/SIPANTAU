@@ -13,7 +13,6 @@ import {
   Wallet,
 } from 'lucide-react';
 import { JenisPelaksanaan, PaketPekerjaan, Personel, Role } from '../types';
-import { isFullAccessRole } from '../utils/disposisiLogic';
 import {
   JENIS_PELAKSANAAN_LIST,
   PaketOverallStatus,
@@ -41,8 +40,6 @@ interface PekerjaanViewProps {
 
 export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
   paketList,
-  currentUser,
-  currentRole,
   onOpenCreate,
   onOpenEdit,
   onOpenWorkflow,
@@ -82,9 +79,6 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
     [paketList, searchQuery, selectedTahun, selectedJenis, selectedStatus, todayIso]
   );
 
-  const canDeleteItem = (item: PaketPekerjaan) =>
-    isFullAccessRole(currentRole) || item.dibuatOlehId === currentUser.id;
-
   const handleExportCsv = () => {
     const csv = buildPekerjaanCsvContent(filteredList, todayIso);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -107,6 +101,10 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
     try {
       await onDeletePaket(paket.id);
       setConfirmDeleteId(null);
+    } catch (err) {
+      onNotify(
+        err instanceof Error ? err.message : 'Gagal menghapus paket pekerjaan.'
+      );
     } finally {
       setIsDeletingId(null);
     }
@@ -508,31 +506,33 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onOpenWorkflow(paket)}
+                                aria-label={`Edit per tahap ${paket.subKegiatan}`}
+                                title="Edit per tahap pekerjaan"
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold transition-colors"
                               >
                                 <Layers className="w-3.5 h-3.5" />
-                                <span>Kelola Tahapan</span>
+                                <span>Edit Tahap</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => onOpenEdit(paket)}
-                                aria-label={`Edit paket ${paket.subKegiatan}`}
-                                title="Edit Paket & Template Tahapan"
-                                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors"
+                                aria-label={`Edit keseluruhan ${paket.subKegiatan}`}
+                                title="Edit keseluruhan paket & tahapan"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition-colors"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
+                                <span>Edit</span>
                               </button>
-                              {canDeleteItem(paket) && (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteId(paket.id)}
-                                  aria-label={`Hapus paket ${paket.subKegiatan}`}
-                                  title="Hapus Paket"
-                                  className="p-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(paket.id)}
+                                aria-label={`Hapus paket ${paket.subKegiatan}`}
+                                title="Hapus Paket"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 text-[11px] font-semibold transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Hapus</span>
+                              </button>
                             </div>
                           )}
                         </td>
@@ -645,28 +645,30 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onOpenWorkflow(paket)}
+                          aria-label={`Edit per tahap ${paket.subKegiatan}`}
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 text-white font-semibold"
                         >
                           <Layers className="w-3.5 h-3.5" />
-                          <span>Kelola Tahapan</span>
+                          <span>Edit Tahap</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => onOpenEdit(paket)}
-                          className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-semibold"
+                          aria-label={`Edit keseluruhan ${paket.subKegiatan}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-semibold"
                         >
-                          Edit
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit Keseluruhan</span>
                         </button>
-                        {canDeleteItem(paket) && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(paket.id)}
-                            aria-label={`Hapus paket ${paket.subKegiatan}`}
-                            className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-600 font-semibold"
-                          >
-                            Hapus
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(paket.id)}
+                          aria-label={`Hapus paket ${paket.subKegiatan}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-600 font-semibold"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
                       </>
                     )}
                   </div>

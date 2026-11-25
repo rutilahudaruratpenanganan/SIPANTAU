@@ -49,6 +49,26 @@ export function normalizeTahapanOrder(tahapan: TahapPekerjaan[]): TahapPekerjaan
   }));
 }
 
+export function resolvePaketTanggalSelesai(
+  tahapan: TahapPekerjaan[],
+  currentTanggalSelesai?: string,
+  todayIso: string = getTodayLocalIso()
+): string | undefined {
+  const allDone = tahapan.length > 0 && tahapan.every((t) => t.status === 'selesai');
+  if (!allDone) {
+    return undefined;
+  }
+  const existing = (currentTanggalSelesai || '').trim();
+  if (existing) {
+    return existing;
+  }
+  const stageDates = tahapan
+    .map((t) => (t.tanggalSelesai || '').trim())
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort();
+  return stageDates[stageDates.length - 1] || todayIso;
+}
+
 export function formatRupiah(amount: number): string {
   const safe = Number.isFinite(amount) && amount >= 0 ? Math.round(amount) : 0;
   return new Intl.NumberFormat('id-ID', {

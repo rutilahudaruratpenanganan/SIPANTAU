@@ -16,6 +16,7 @@ import {
   getPaketTahunAnggaran,
   normalizeTahapanOrder,
   parseRupiahInput,
+  resolvePaketTanggalSelesai,
   summarizePaketByTahunAnggaran,
   validatePaketPekerjaanInput,
 } from './pekerjaanLogic.ts';
@@ -68,6 +69,21 @@ test('Manual stage customization & re-indexing preserves clean urutan', () => {
       [3, 'Laporan Akhir & BAST'],
     ]
   );
+});
+
+test('resolvePaketTanggalSelesai syncs completion date when all stages finish or reopen', () => {
+  const doneStages = [
+    { id: '1', urutan: 1, nama: 'Tahap 1', status: 'selesai' as const, tanggalSelesai: '2026-11-10' },
+    { id: '2', urutan: 2, nama: 'Tahap 2', status: 'selesai' as const, tanggalSelesai: '2026-11-15' },
+  ];
+  assert.equal(resolvePaketTanggalSelesai(doneStages, undefined, '2026-11-24'), '2026-11-15');
+  assert.equal(resolvePaketTanggalSelesai(doneStages, '2026-11-20', '2026-11-24'), '2026-11-20');
+
+  const reopenedStages = [
+    doneStages[0],
+    { id: '2', urutan: 2, nama: 'Tahap 2', status: 'sedang_berjalan' as const },
+  ];
+  assert.equal(resolvePaketTanggalSelesai(reopenedStages, '2026-11-20', '2026-11-24'), undefined);
 });
 
 test('Rupiah formatting and parsing handle Indonesian currency safely', () => {

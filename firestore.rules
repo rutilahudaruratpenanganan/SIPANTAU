@@ -511,6 +511,14 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidPaketTahapanUpdate(data) {
+      return (!('tanggalSelesai' in data) || (data.tanggalSelesai is string && data.tanggalSelesai.size() <= 40))
+        && data.tahapan is list
+        && data.tahapan.size() >= 1
+        && data.tahapan.size() <= 30
+        && data.tahapan[0] is map;
+    }
+
     function isAllowedPaketPekerjaanUpdateAction(affected) {
       return affected.hasOnly([
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'tahunAnggaran',
@@ -530,13 +538,19 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow update: if isValidId(paketId)
         && isInternalWorkspaceDoc(resource.data)
-        && isValidPaketPekerjaan(request.resource.data)
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.dibuatOlehId == resource.data.dibuatOlehId
         && request.resource.data.dibuatOlehNama == resource.data.dibuatOlehNama
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
-        && isAllowedPaketPekerjaanUpdateAction(request.resource.data.diff(resource.data).affectedKeys());
+        && isAllowedPaketPekerjaanUpdateAction(request.resource.data.diff(resource.data).affectedKeys())
+        && (
+          isValidPaketPekerjaan(request.resource.data)
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tahapan', 'tanggalSelesai', 'updatedAt'])
+            && isValidPaketTahapanUpdate(request.resource.data)
+          )
+        );
       allow delete: if isValidId(paketId) && isInternalWorkspaceDoc(resource.data);
     }
   }
