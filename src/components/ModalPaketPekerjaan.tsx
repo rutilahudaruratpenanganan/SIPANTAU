@@ -16,22 +16,28 @@ import {
   PaketPekerjaan,
   Personel,
   SkemaKontrak,
+  SkemaPembayaran,
   StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
+  TerminPekerjaan,
 } from '../types';
 import { PaketPekerjaanMutationPayload } from '../services/firestoreService';
 import {
   JENIS_PELAKSANAAN_LIST,
   MAX_DURASI_HARI_KERJA,
   MAX_TAHUN_ANGGARAN,
+  MAX_TERMIN_PEKERJAAN,
   MEKANISME_PENCAIRAN_LIST,
   MIN_TAHUN_ANGGARAN,
   SKEMA_KONTRAK_LIST,
+  SKEMA_PEMBAYARAN_LIST,
   STATUS_PENCAIRAN_LIST,
   addCalendarDaysIso,
+  buildDefaultTerminPencairan,
   buildTemplateTahapan,
   createTahapId,
+  createTerminId,
   formatRupiah,
   formatTanggalDdMmYyyy,
   formatTanggalDisplay,
@@ -39,8 +45,11 @@ import {
   getPaketTahunAnggaran,
   getTodayLocalIso,
   normalizeTahapanOrder,
+  normalizeTerminOrder,
   parseRupiahInput,
   resolvePaketTanggalSelesai,
+  resolveStatusPencairanFromTermin,
+  summarizeTerminPencairan,
   validatePaketPekerjaanInput,
 } from '../utils/pekerjaanLogic';
 
@@ -73,12 +82,12 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   );
   const [nilaiAnggaran, setNilaiAnggaran] = useState<number>(0);
   const [nilaiAnggaranText, setNilaiAnggaranText] = useState<string>('');
-  const [hps, setHps] = useState<number | undefined>(undefined);
-  const [hpsText, setHpsText] = useState<string>('');
   const [nilaiKontrak, setNilaiKontrak] = useState<number | undefined>(undefined);
   const [nilaiKontrakText, setNilaiKontrakText] = useState<string>('');
   const [tanggalMulai, setTanggalMulai] = useState(getTodayLocalIso());
   const [durasiHariText, setDurasiHariText] = useState('30');
+  const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran>('Sekaligus');
+  const [terminPencairan, setTerminPencairan] = useState<TerminPekerjaan[]>([]);
   const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
   const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [kodeRup, setKodeRup] = useState('');
@@ -100,6 +109,11 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     if (!isOpen) return;
 
     if (initialPaket) {
+      const initSkemaBayar: SkemaPembayaran =
+        initialPaket.skemaPembayaran === 'Termin' ||
+        (Array.isArray(initialPaket.terminPencairan) && initialPaket.terminPencairan.length > 0)
+          ? 'Termin'
+          : 'Sekaligus';
       setNamaKegiatan(initialPaket.namaKegiatan);
       setSubKegiatan(initialPaket.subKegiatan);
       setPekerjaan(initialPaket.pekerjaan || '');
@@ -112,10 +126,6 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           ? initialPaket.nilaiAnggaran.toLocaleString('id-ID')
           : '0'
       );
-      setHps(initialPaket.hps);
-      setHpsText(
-        typeof initialPaket.hps === 'number' ? initialPaket.hps.toLocaleString('id-ID') : ''
-      );
       setNilaiKontrak(initialPaket.nilaiKontrak);
       setNilaiKontrakText(
         typeof initialPaket.nilaiKontrak === 'number'
@@ -124,6 +134,16 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       );
       setTanggalMulai(initialPaket.tanggalMulai || getTodayLocalIso());
       setDurasiHariText(String(getPaketDurasiHariKerja(initialPaket)));
+      setSkemaPembayaran(initSkemaBayar);
+      setTerminPencairan(
+        initSkemaBayar === 'Termin'
+          ? normalizeTerminOrder(
+              initialPaket.terminPencairan && initialPaket.terminPencairan.length > 0
+                ? initialPaket.terminPencairan
+                : buildDefaultTerminPencairan()
+            )
+          : []
+      );
       setStatusPencairan(initialPaket.statusPencairan || 'Belum');
       setMekanismePencairan(initialPaket.mekanismePencairan || '');
       setKodeRup(initialPaket.kodeRup || '');
@@ -147,12 +167,12 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setTahunAnggaranText(today.slice(0, 4));
       setNilaiAnggaran(0);
       setNilaiAnggaranText('');
-      setHps(undefined);
-      setHpsText('');
       setNilaiKontrak(undefined);
       setNilaiKontrakText('');
       setTanggalMulai(today);
       setDurasiHariText('30');
+      setSkemaPembayaran('Sekaligus');
+      setTerminPencairan([]);
       setStatusPencairan('Belum');
       setMekanismePencairan('');
       setKodeRup('');
@@ -192,17 +212,6 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     setNilaiAnggaranText(raw.trim() === '' ? '' : parsed.toLocaleString('id-ID'));
   };
 
-  const handleHpsInputChange = (raw: string) => {
-    if (raw.trim() === '') {
-      setHps(undefined);
-      setHpsText('');
-      return;
-    }
-    const parsed = parseRupiahInput(raw);
-    setHps(parsed);
-    setHpsText(parsed.toLocaleString('id-ID'));
-  };
-
   const handleNilaiKontrakInputChange = (raw: string) => {
     if (raw.trim() === '') {
       setNilaiKontrak(undefined);
@@ -212,6 +221,52 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     const parsed = parseRupiahInput(raw);
     setNilaiKontrak(parsed);
     setNilaiKontrakText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleChangeSkemaPembayaran = (next: SkemaPembayaran) => {
+    setSkemaPembayaran(next);
+    if (next === 'Termin' && terminPencairan.length === 0) {
+      setTerminPencairan(buildDefaultTerminPencairan());
+    }
+  };
+
+  const handleTerminFieldChange = (
+    id: string,
+    patch: Partial<TerminPekerjaan>
+  ) => {
+    const today = getTodayLocalIso();
+    setTerminPencairan((prev) =>
+      prev.map((tr) => {
+        if (tr.id !== id) return tr;
+        const updated: TerminPekerjaan = { ...tr, ...patch };
+        if (patch.status === 'Sudah' && !updated.tanggalCair) {
+          updated.tanggalCair = today;
+        } else if (patch.status === 'Belum') {
+          updated.tanggalCair = undefined;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleAddTermin = () => {
+    if (terminPencairan.length >= MAX_TERMIN_PEKERJAAN) return;
+    setTerminPencairan((prev) =>
+      normalizeTerminOrder([
+        ...prev,
+        {
+          id: createTerminId(prev.length + 1),
+          urutan: prev.length + 1,
+          nama: `Termin ${prev.length + 1}`,
+          status: 'Belum',
+        },
+      ])
+    );
+  };
+
+  const handleDeleteTermin = (id: string) => {
+    if (terminPencairan.length <= 1) return;
+    setTerminPencairan((prev) => normalizeTerminOrder(prev.filter((tr) => tr.id !== id)));
   };
 
   const handleStageNameChange = (id: string, nextName: string) => {
@@ -310,9 +365,22 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     }
   };
 
+  const terminSummary = summarizeTerminPencairan({
+    skemaPembayaran,
+    statusPencairan,
+    terminPencairan,
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanedTahapan = normalizeTahapanOrder(tahapan);
+    const cleanedTermins =
+      skemaPembayaran === 'Termin' ? normalizeTerminOrder(terminPencairan) : undefined;
+    const resolvedStatusPencairan = resolveStatusPencairanFromTermin(
+      skemaPembayaran,
+      statusPencairan,
+      cleanedTermins
+    );
     const resolvedTanggalSelesai = resolvePaketTanggalSelesai(
       cleanedTahapan,
       initialPaket?.tanggalSelesai,
@@ -325,13 +393,14 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       skemaKontrak: skemaKontrak || undefined,
       tahunAnggaran,
       nilaiAnggaran,
-      hps,
       nilaiKontrak,
       tanggalMulai,
       durasiHariKerja,
       tenggatWaktu: computedTanggalSelesai,
       tanggalSelesai: resolvedTanggalSelesai,
-      statusPencairan,
+      skemaPembayaran,
+      terminPencairan: cleanedTermins,
+      statusPencairan: resolvedStatusPencairan,
       mekanismePencairan: mekanismePencairan || undefined,
       tahapan: cleanedTahapan,
     });
@@ -353,13 +422,14 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           skemaKontrak: skemaKontrak || undefined,
           tahunAnggaran,
           nilaiAnggaran,
-          hps,
           nilaiKontrak,
           tanggalMulai: tanggalMulai.trim(),
           durasiHariKerja,
           tenggatWaktu: computedTanggalSelesai,
           tanggalSelesai: resolvedTanggalSelesai,
-          statusPencairan,
+          skemaPembayaran,
+          terminPencairan: cleanedTermins,
+          statusPencairan: resolvedStatusPencairan,
           mekanismePencairan: mekanismePencairan || undefined,
           kodeRup: kodeRup.trim() || undefined,
           nomorKontrak: nomorKontrak.trim() || undefined,
@@ -535,7 +605,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   ))}
                 </select>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Lump Sum atau Waktu Penugasan.
+                  Lump Sum, Waktu Penugasan, Pengadaan Langsung, atau Katalog.
                 </p>
               </div>
 
@@ -602,7 +672,62 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Pilihan di awal input: Pembayaran Sekaligus vs Termin */}
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="font-semibold text-slate-800">
+                  Skema Pembayaran Pencairan <span className="text-rose-600">*</span>
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Tentukan apakah pekerjaan dibayar sekaligus atau dalam beberapa termin
+                </span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Skema Pembayaran Pencairan"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+              >
+                {SKEMA_PEMBAYARAN_LIST.map((mode) => {
+                  const selected = skemaPembayaran === mode;
+                  const title =
+                    mode === 'Sekaligus'
+                      ? 'Pembayaran Sekaligus (Tanpa Termin)'
+                      : 'Pembayaran Bertahap (Beberapa Termin)';
+                  const desc =
+                    mode === 'Sekaligus'
+                      ? 'Satu status pencairan penuh (Belum / Sudah Cair).'
+                      : 'Atur beberapa termin pembayaran beserta progres cair per termin.';
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => handleChangeSkemaPembayaran(mode)}
+                      className={`text-left p-3 rounded-xl border transition-all flex items-start gap-2.5 ${
+                        selected
+                          ? 'bg-blue-50/70 border-blue-600 ring-1 ring-blue-600 text-slate-900'
+                          : 'bg-white border-slate-300 hover:border-slate-400 text-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                          selected ? 'border-blue-600 bg-blue-600' : 'border-slate-400 bg-white'
+                        }`}
+                      >
+                        {selected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-slate-900">{title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label
                   htmlFor="paket-nilai-anggaran"
@@ -627,32 +752,6 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
                   Terbaca: {formatRupiah(nilaiAnggaran)}
-                </p>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="paket-hps"
-                  className="block font-semibold text-slate-700 mb-1"
-                >
-                  Harga Perkiraan Sendiri (HPS) (Rp)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
-                    Rp
-                  </span>
-                  <input
-                    id="paket-hps"
-                    type="text"
-                    inputMode="numeric"
-                    value={hpsText}
-                    onChange={(e) => handleHpsInputChange(e.target.value)}
-                    placeholder="0"
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
-                  {hps !== undefined ? `Terbaca: ${formatRupiah(hps)}` : 'Opsional (Rp)'}
                 </p>
               </div>
 
@@ -874,33 +973,176 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
             </div>
 
             {/* Tahapan Pencairan dalam Alur Tahapan Pekerjaan */}
-            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <label
-                  htmlFor="paket-status-pencairan"
-                  className="block font-semibold text-slate-800"
-                >
-                  Tahapan Pencairan
-                </label>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Status pencairan anggaran sebagai bagian dari alur tahapan pekerjaan.
-                </p>
+            {skemaPembayaran === 'Sekaligus' ? (
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label
+                    htmlFor="paket-status-pencairan"
+                    className="block font-semibold text-slate-800"
+                  >
+                    Tahapan Pencairan (Pembayaran Sekaligus)
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Status pencairan anggaran penuh sebagai bagian dari alur tahapan pekerjaan.
+                  </p>
+                </div>
+                <div className="w-full sm:w-48 shrink-0">
+                  <select
+                    id="paket-status-pencairan"
+                    value={statusPencairan}
+                    onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 font-medium"
+                  >
+                    {STATUS_PENCAIRAN_LIST.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="w-full sm:w-48 shrink-0">
-                <select
-                  id="paket-status-pencairan"
-                  value={statusPencairan}
-                  onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 font-medium"
-                >
-                  {STATUS_PENCAIRAN_LIST.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
+            ) : (
+              <div
+                className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-3"
+                data-testid="termin-pencairan-editor"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      Daftar Termin Pencairan ({terminPencairan.length} Termin)
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5 tabular-nums">
+                      Status gabungan:{' '}
+                      <span className="font-semibold text-indigo-800">
+                        {terminSummary.summaryLabel}
+                      </span>{' '}
+                      · Akumulasi cair {terminSummary.totalPersenCair}%
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddTermin}
+                    disabled={terminPencairan.length >= MAX_TERMIN_PEKERJAAN}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white text-[11px] font-semibold transition-colors whitespace-nowrap self-start sm:self-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Termin</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {terminPencairan.map((tr, idx) => (
+                    <div
+                      key={tr.id}
+                      data-testid={`termin-row-${idx}`}
+                      className="p-2.5 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                    >
+                      <div className="sm:col-span-4 flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-md bg-indigo-700 text-white font-mono font-bold text-[11px] flex items-center justify-center shrink-0 tabular-nums">
+                          {idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          aria-label={`Nama Termin ${idx + 1}`}
+                          value={tr.nama}
+                          onChange={(e) =>
+                            handleTerminFieldChange(tr.id, { nama: e.target.value })
+                          }
+                          placeholder={`Termin ${idx + 1}`}
+                          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            aria-label={`Persentase Termin ${idx + 1}`}
+                            value={tr.persentase ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value.trim();
+                              handleTerminFieldChange(tr.id, {
+                                persentase: val === '' ? undefined : Number(val),
+                              });
+                            }}
+                            placeholder="%"
+                            className="w-full pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
+                            %
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 pointer-events-none">
+                            Rp
+                          </span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            aria-label={`Nilai Rupiah Termin ${idx + 1}`}
+                            value={
+                              typeof tr.nilaiRupiah === 'number'
+                                ? tr.nilaiRupiah.toLocaleString('id-ID')
+                                : ''
+                            }
+                            onChange={(e) => {
+                              const raw = e.target.value.trim();
+                              handleTerminFieldChange(tr.id, {
+                                nilaiRupiah: raw === '' ? undefined : parseRupiahInput(raw),
+                              });
+                            }}
+                            placeholder="Nilai Rp (opsional)"
+                            className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <select
+                          aria-label={`Status Termin ${idx + 1}`}
+                          value={tr.status}
+                          onChange={(e) =>
+                            handleTerminFieldChange(tr.id, {
+                              status: e.target.value as StatusPencairan,
+                            })
+                          }
+                          className={`w-full px-2 py-1.5 rounded-lg border text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 ${
+                            tr.status === 'Sudah'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-300 bg-white text-slate-800'
+                          }`}
+                        >
+                          {STATUS_PENCAIRAN_LIST.map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="sm:col-span-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTermin(tr.id)}
+                          disabled={terminPencairan.length <= 1}
+                          aria-label={`Hapus termin ${idx + 1}`}
+                          title="Hapus termin"
+                          className="p-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 disabled:opacity-40 text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </select>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-2" data-testid="workflow-stages-editor">
               {tahapan.map((stage, idx) => (

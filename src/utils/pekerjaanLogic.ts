@@ -3,9 +3,11 @@ import type {
   MekanismePencairan,
   PaketPekerjaan,
   SkemaKontrak,
+  SkemaPembayaran,
   StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
+  TerminPekerjaan,
 } from '../types/index.ts';
 
 export const JENIS_PELAKSANAAN_LIST: JenisPelaksanaan[] = [
@@ -16,7 +18,16 @@ export const JENIS_PELAKSANAAN_LIST: JenisPelaksanaan[] = [
 export const SKEMA_KONTRAK_LIST: SkemaKontrak[] = [
   'Lump Sum',
   'Waktu Penugasan',
+  'Pengadaan Langsung',
+  'Katalog',
 ];
+
+export const SKEMA_PEMBAYARAN_LIST: SkemaPembayaran[] = [
+  'Sekaligus',
+  'Termin',
+];
+
+export const MAX_TERMIN_PEKERJAAN = 20;
 
 export const STATUS_PENCAIRAN_LIST: StatusPencairan[] = [
   'Belum',
@@ -58,6 +69,127 @@ export function buildTemplateTahapan(jenis: JenisPelaksanaan): TahapPekerjaan[] 
     nama,
     status: 'belum_mulai' as StatusTahapPekerjaan,
   }));
+}
+
+export function createTerminId(index: number): string {
+  return `termin-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+export function buildDefaultTerminPencairan(): TerminPekerjaan[] {
+  return [
+    {
+      id: createTerminId(1),
+      urutan: 1,
+      nama: 'Termin 1',
+      persentase: 50,
+      status: 'Belum',
+    },
+    {
+      id: createTerminId(2),
+      urutan: 2,
+      nama: 'Termin 2 (Pelunasan)',
+      persentase: 50,
+      status: 'Belum',
+    },
+  ];
+}
+
+export function normalizeTerminOrder(termins: TerminPekerjaan[]): TerminPekerjaan[] {
+  return termins.slice(0, MAX_TERMIN_PEKERJAAN).map((t, idx) => ({
+    ...t,
+    id: (t.id || '').trim() || createTerminId(idx + 1),
+    urutan: idx + 1,
+    nama: (t.nama || '').trim() || `Termin ${idx + 1}`,
+    status: t.status === 'Sudah' ? 'Sudah' : 'Belum',
+  }));
+}
+
+export function resolveStatusPencairanFromTermin(
+  skemaPembayaran?: SkemaPembayaran,
+  currentStatus?: StatusPencairan,
+  termins?: TerminPekerjaan[]
+): StatusPencairan {
+  if (skemaPembayaran === 'Termin' && Array.isArray(termins) && termins.length > 0) {
+    return termins.every((t) => t.status === 'Sudah') ? 'Sudah' : 'Belum';
+  }
+  return currentStatus === 'Sudah' ? 'Sudah' : 'Belum';
+}
+
+export interface TerminPencairanSummary {
+  skemaPembayaran: SkemaPembayaran;
+  totalTermin: number;
+  sudahCount: number;
+  belumCount: number;
+  isAllSudah: boolean;
+  isPartial: boolean;
+  totalPersenCair: number;
+  totalNilaiCair: number;
+  summaryLabel: string;
+  compactLabel: string;
+}
+
+export function summarizeTerminPencairan(
+  paket: Pick<PaketPekerjaan, 'skemaPembayaran' | 'statusPencairan' | 'terminPencairan'>
+): TerminPencairanSummary {
+  const termins = Array.isArray(paket.terminPencairan) ? paket.terminPencairan : [];
+  const skema: SkemaPembayaran =
+    paket.skemaPembayaran === 'Termin' || (paket.skemaPembayaran === undefined && termins.length > 0)
+      ? 'Termin'
+      : 'Sekaligus';
+
+  if (skema === 'Sekaligus' || termins.length === 0) {
+    const isSudah = paket.statusPencairan === 'Sudah';
+    return {
+      skemaPembayaran: 'Sekaligus',
+      totalTermin: 0,
+      sudahCount: isSudah ? 1 : 0,
+      belumCount: isSudah ? 0 : 1,
+      isAllSudah: isSudah,
+      isPartial: false,
+      totalPersenCair: isSudah ? 100 : 0,
+      totalNilaiCair: 0,
+      summaryLabel: isSudah ? 'Sudah (Sekaligus)' : 'Belum (Sekaligus)',
+      compactLabel: isSudah ? 'Sudah' : 'Belum',
+    };
+  }
+
+  let sudahCount = 0;
+  let totalPersenCair = 0;
+  let totalNilaiCair = 0;
+  for (const t of termins) {
+    if (t.status === 'Sudah') {
+      sudahCount += 1;
+      if (typeof t.persentase === 'number' && Number.isFinite(t.persentase)) {
+        totalPersenCair += t.persentase;
+      }
+      if (typeof t.nilaiRupiah === 'number' && Number.isFinite(t.nilaiRupiah)) {
+        totalNilaiCair += t.nilaiRupiah;
+      }
+    }
+  }
+  const totalTermin = termins.length;
+  const belumCount = totalTermin - sudahCount;
+  const isAllSudah = sudahCount === totalTermin;
+  const isPartial = sudahCount > 0 && sudahCount < totalTermin;
+
+  const summaryLabel = isAllSudah
+    ? `Sudah (${sudahCount}/${totalTermin} Termin)`
+    : isPartial
+    ? `Sebagian (${sudahCount}/${totalTermin} Termin)`
+    : `Belum (0/${totalTermin} Termin)`;
+
+  return {
+    skemaPembayaran: 'Termin',
+    totalTermin,
+    sudahCount,
+    belumCount,
+    isAllSudah,
+    isPartial,
+    totalPersenCair: Math.min(100, Math.round(totalPersenCair)),
+    totalNilaiCair,
+    summaryLabel,
+    compactLabel: `${sudahCount}/${totalTermin} Termin Cair`,
+  };
 }
 
 export function normalizeTahapanOrder(tahapan: TahapPekerjaan[]): TahapPekerjaan[] {
@@ -369,12 +501,13 @@ export interface PaketValidationInput {
   skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number;
   nilaiAnggaran: number;
-  hps?: number;
   nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
   tanggalSelesai?: string;
+  skemaPembayaran?: SkemaPembayaran;
+  terminPencairan?: TerminPekerjaan[];
   statusPencairan?: StatusPencairan;
   mekanismePencairan?: MekanismePencairan;
   tahapan: TahapPekerjaan[];
@@ -405,9 +538,6 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
   }
   if (!Number.isFinite(input.nilaiAnggaran) || input.nilaiAnggaran < 0) {
     return 'Pagu Anggaran harus berupa angka bernilai 0 atau lebih.';
-  }
-  if (input.hps !== undefined && (!Number.isFinite(input.hps) || input.hps < 0)) {
-    return 'Harga Perkiraan Sendiri (HPS) harus berupa angka bernilai 0 atau lebih.';
   }
   if (
     input.nilaiKontrak !== undefined &&
@@ -445,6 +575,40 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
     }
   }
   if (
+    input.skemaPembayaran !== undefined &&
+    !SKEMA_PEMBAYARAN_LIST.includes(input.skemaPembayaran)
+  ) {
+    return 'Skema Pembayaran Pencairan tidak valid.';
+  }
+  if (input.skemaPembayaran === 'Termin') {
+    if (!Array.isArray(input.terminPencairan) || input.terminPencairan.length === 0) {
+      return 'Minimal harus terdapat 1 termin pencairan untuk skema pembayaran Termin.';
+    }
+    if (input.terminPencairan.length > MAX_TERMIN_PEKERJAAN) {
+      return `Maksimal jumlah termin pencairan adalah ${MAX_TERMIN_PEKERJAAN} termin.`;
+    }
+    for (const t of input.terminPencairan) {
+      if (!t.nama || !t.nama.trim()) {
+        return 'Setiap termin wajib memiliki nama termin (mis. Termin 1).';
+      }
+      if (!STATUS_PENCAIRAN_LIST.includes(t.status)) {
+        return 'Status pencairan pada salah satu termin tidak valid.';
+      }
+      if (
+        t.persentase !== undefined &&
+        (!Number.isFinite(t.persentase) || t.persentase < 0 || t.persentase > 100)
+      ) {
+        return 'Persentase termin harus bernilai antara 0% sampai 100%.';
+      }
+      if (
+        t.nilaiRupiah !== undefined &&
+        (!Number.isFinite(t.nilaiRupiah) || t.nilaiRupiah < 0)
+      ) {
+        return 'Nilai Rupiah termin harus bernilai 0 atau lebih.';
+      }
+    }
+  }
+  if (
     input.statusPencairan !== undefined &&
     !STATUS_PENCAIRAN_LIST.includes(input.statusPencairan)
   ) {
@@ -472,6 +636,7 @@ export interface PekerjaanFilterOptions {
   searchQuery?: string;
   jenisPelaksanaan?: JenisPelaksanaan | 'all';
   skemaKontrak?: SkemaKontrak | 'all';
+  skemaPembayaran?: SkemaPembayaran | 'all';
   status?: PaketOverallStatus | 'all';
   tahunAnggaran?: number | 'all';
   statusPencairan?: StatusPencairan | 'all';
@@ -509,12 +674,22 @@ export function filterPaketPekerjaan(
       return false;
     }
 
-    if (
-      filters.statusPencairan &&
-      filters.statusPencairan !== 'all' &&
-      (item.statusPencairan || 'Belum') !== filters.statusPencairan
-    ) {
-      return false;
+    if (filters.skemaPembayaran && filters.skemaPembayaran !== 'all') {
+      const effectiveSkema = summarizeTerminPencairan(item).skemaPembayaran;
+      if (effectiveSkema !== filters.skemaPembayaran) {
+        return false;
+      }
+    }
+
+    if (filters.statusPencairan && filters.statusPencairan !== 'all') {
+      const resolvedStatus = resolveStatusPencairanFromTermin(
+        item.skemaPembayaran,
+        item.statusPencairan,
+        item.terminPencairan
+      );
+      if (resolvedStatus !== filters.statusPencairan) {
+        return false;
+      }
     }
 
     if (
@@ -546,6 +721,7 @@ export function filterPaketPekerjaan(
       const matchSub = item.subKegiatan.toLowerCase().includes(q);
       const matchPekerjaan = (item.pekerjaan || '').toLowerCase().includes(q);
       const matchSkema = (item.skemaKontrak || '').toLowerCase().includes(q);
+      const matchSkemaBayar = (item.skemaPembayaran || '').toLowerCase().includes(q);
       const matchMekanisme = (item.mekanismePencairan || '').toLowerCase().includes(q);
       const matchPenyedia = (item.penyedia || '').toLowerCase().includes(q);
       const matchKodeRup = (item.kodeRup || '').toLowerCase().includes(q);
@@ -553,18 +729,23 @@ export function filterPaketPekerjaan(
       const matchPic = (item.picNama || '').toLowerCase().includes(q);
       const matchTahun = String(getPaketTahunAnggaran(item)).includes(q);
       const matchTahap = item.tahapan.some((t) => t.nama.toLowerCase().includes(q));
+      const matchTermin = (item.terminPencairan || []).some((tr) =>
+        tr.nama.toLowerCase().includes(q)
+      );
       if (
         !matchKegiatan &&
         !matchSub &&
         !matchPekerjaan &&
         !matchSkema &&
+        !matchSkemaBayar &&
         !matchMekanisme &&
         !matchPenyedia &&
         !matchKodeRup &&
         !matchKontrak &&
         !matchPic &&
         !matchTahun &&
-        !matchTahap
+        !matchTahap &&
+        !matchTermin
       ) {
         return false;
       }
@@ -577,9 +758,7 @@ export function filterPaketPekerjaan(
 export interface PekerjaanDashboardStats {
   totalPaket: number;
   totalAnggaran: number;
-  totalHps: number;
   totalNilaiKontrak: number;
-  efisiensiKontrakVsHps: number;
   anggaranSelesai: number;
   sudahCairCount: number;
   belumCairCount: number;
@@ -598,9 +777,7 @@ export function calculatePekerjaanStats(
   const stats: PekerjaanDashboardStats = {
     totalPaket: list.length,
     totalAnggaran: 0,
-    totalHps: 0,
     totalNilaiKontrak: 0,
-    efisiensiKontrakVsHps: 0,
     anggaranSelesai: 0,
     sudahCairCount: 0,
     belumCairCount: 0,
@@ -617,24 +794,19 @@ export function calculatePekerjaanStats(
   let totalPct = 0;
   for (const item of list) {
     const val = Number.isFinite(item.nilaiAnggaran) ? item.nilaiAnggaran : 0;
-    const hpsVal = typeof item.hps === 'number' && Number.isFinite(item.hps) ? item.hps : 0;
     const kontrakVal =
       typeof item.nilaiKontrak === 'number' && Number.isFinite(item.nilaiKontrak)
         ? item.nilaiKontrak
         : 0;
     stats.totalAnggaran += val;
-    stats.totalHps += hpsVal;
     stats.totalNilaiKontrak += kontrakVal;
-    if (
-      typeof item.hps === 'number' &&
-      Number.isFinite(item.hps) &&
-      typeof item.nilaiKontrak === 'number' &&
-      Number.isFinite(item.nilaiKontrak)
-    ) {
-      stats.efisiensiKontrakVsHps += item.hps - item.nilaiKontrak;
-    }
 
-    if ((item.statusPencairan || 'Belum') === 'Sudah') {
+    const resolvedStatus = resolveStatusPencairanFromTermin(
+      item.skemaPembayaran,
+      item.statusPencairan,
+      item.terminPencairan
+    );
+    if (resolvedStatus === 'Sudah') {
       stats.sudahCairCount += 1;
     } else {
       stats.belumCairCount += 1;
@@ -740,10 +912,11 @@ export function buildPekerjaanCsvContent(
     'Penyedia / Pelaksana',
     'PIC / Penanggung Jawab',
     'Pagu Anggaran (Rp)',
-    'Harga Perkiraan Sendiri / HPS (Rp)',
     'Nilai Kontrak / Realisasi (Rp)',
+    'Skema Pembayaran',
     'Tahapan Pencairan',
     'Mekanisme Pencairan',
+    'Rincian Termin Pencairan',
     'Tanggal Mulai',
     'Durasi (Hari Kalender)',
     'Tanggal Selesai',
@@ -757,6 +930,22 @@ export function buildPekerjaanCsvContent(
   const rows = list.map((item, idx) => {
     const progress = computePaketProgress(item, todayIso);
     const tahunAnggaran = getPaketTahunAnggaran(item);
+    const terminInfo = summarizeTerminPencairan(item);
+    const terminDetail =
+      terminInfo.skemaPembayaran === 'Termin' &&
+      Array.isArray(item.terminPencairan) &&
+      item.terminPencairan.length > 0
+        ? item.terminPencairan
+            .map((tr) => {
+              const parts: string[] = [];
+              if (typeof tr.persentase === 'number') parts.push(`${tr.persentase}%`);
+              if (typeof tr.nilaiRupiah === 'number') parts.push(formatRupiah(tr.nilaiRupiah));
+              if (tr.tanggalCair) parts.push(`Cair ${formatTanggalDdMmYyyy(tr.tanggalCair)}`);
+              const meta = parts.length > 0 ? ` (${parts.join(' · ')})` : '';
+              return `${tr.urutan}. ${tr.nama}: ${tr.status}${meta}`;
+            })
+            .join(' | ')
+        : 'Sekaligus';
     const tahapanDetail = item.tahapan
       .map(
         (t) =>
@@ -783,10 +972,11 @@ export function buildPekerjaanCsvContent(
       escapeCsv(item.penyedia || ''),
       escapeCsv(item.picNama || ''),
       String(item.nilaiAnggaran || 0),
-      String(item.hps ?? 0),
       String(item.nilaiKontrak ?? 0),
-      escapeCsv(item.statusPencairan || 'Belum'),
+      escapeCsv(terminInfo.skemaPembayaran),
+      escapeCsv(terminInfo.summaryLabel),
       escapeCsv(item.mekanismePencairan || '-'),
+      escapeCsv(terminDetail),
       escapeCsv(item.tanggalMulai ? formatTanggalDisplay(item.tanggalMulai) : ''),
       String(progress.durasiHariKerja),
       escapeCsv(item.tenggatWaktu ? formatTanggalDisplay(item.tenggatWaktu) : ''),

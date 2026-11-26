@@ -481,7 +481,7 @@ service cloud.firestore {
           'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-          'statusPencairan', 'mekanismePencairan',
+          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
           'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
         ])
@@ -491,7 +491,7 @@ service cloud.firestore {
         && data.subKegiatan is string && data.subKegiatan.size() >= 1 && data.subKegiatan.size() <= 300
         && (!('pekerjaan' in data) || (data.pekerjaan is string && data.pekerjaan.size() <= 300))
         && (data.jenisPelaksanaan in ['Perorangan', 'Badan Usaha'])
-        && (!('skemaKontrak' in data) || (data.skemaKontrak in ['Lump Sum', 'Waktu Penugasan']))
+        && (!('skemaKontrak' in data) || (data.skemaKontrak in ['Lump Sum', 'Waktu Penugasan', 'Pengadaan Langsung', 'Katalog']))
         && (!('tahunAnggaran' in data) || (data.tahunAnggaran is int && data.tahunAnggaran >= 2000 && data.tahunAnggaran <= 2100))
         && (data.nilaiAnggaran is int || data.nilaiAnggaran is float)
         && data.nilaiAnggaran >= 0 && data.nilaiAnggaran <= 1000000000000
@@ -501,6 +501,12 @@ service cloud.firestore {
         && (!('durasiHariKerja' in data) || (data.durasiHariKerja is int && data.durasiHariKerja >= 1 && data.durasiHariKerja <= 1825))
         && data.tenggatWaktu is string && data.tenggatWaktu.size() >= 4 && data.tenggatWaktu.size() <= 40
         && (!('tanggalSelesai' in data) || (data.tanggalSelesai is string && data.tanggalSelesai.size() <= 40))
+        && (!('skemaPembayaran' in data) || (data.skemaPembayaran in ['Sekaligus', 'Termin']))
+        && (!('terminPencairan' in data) || (
+          data.terminPencairan is list
+          && data.terminPencairan.size() <= 20
+          && (data.terminPencairan.size() == 0 || data.terminPencairan[0] is map)
+        ))
         && (!('statusPencairan' in data) || (data.statusPencairan in ['Belum', 'Sudah']))
         && (!('mekanismePencairan' in data) || (data.mekanismePencairan in ['Langsung (LS)', 'Ganti Uang Persediaan (GU)', 'Tambahan Uang Persediaan (TU)']))
         && (!('kodeRup' in data) || (data.kodeRup is string && data.kodeRup.size() <= 100))
@@ -520,6 +526,12 @@ service cloud.firestore {
 
     function isValidPaketTahapanUpdate(data) {
       return (!('tanggalSelesai' in data) || (data.tanggalSelesai is string && data.tanggalSelesai.size() <= 40))
+        && (!('skemaPembayaran' in data) || (data.skemaPembayaran in ['Sekaligus', 'Termin']))
+        && (!('terminPencairan' in data) || (
+          data.terminPencairan is list
+          && data.terminPencairan.size() <= 20
+          && (data.terminPencairan.size() == 0 || data.terminPencairan[0] is map)
+        ))
         && (!('statusPencairan' in data) || (data.statusPencairan in ['Belum', 'Sudah']))
         && (!('mekanismePencairan' in data) || (data.mekanismePencairan in ['Langsung (LS)', 'Ganti Uang Persediaan (GU)', 'Tambahan Uang Persediaan (TU)']))
         && data.tahapan is list
@@ -533,10 +545,13 @@ service cloud.firestore {
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-          'statusPencairan', 'mekanismePencairan',
+          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'
         ])
-        || affected.hasOnly(['tahapan', 'tanggalSelesai', 'statusPencairan', 'mekanismePencairan', 'updatedAt']);
+        || affected.hasOnly([
+          'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',
+          'statusPencairan', 'mekanismePencairan', 'updatedAt'
+        ]);
     }
 
     // 8. Pemantauan Kegiatan & Pekerjaan
@@ -558,7 +573,10 @@ service cloud.firestore {
         && (
           isValidPaketPekerjaan(request.resource.data)
           || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tahapan', 'tanggalSelesai', 'statusPencairan', 'mekanismePencairan', 'updatedAt'])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',
+              'statusPencairan', 'mekanismePencairan', 'updatedAt'
+            ])
             && isValidPaketTahapanUpdate(request.resource.data)
           )
         );

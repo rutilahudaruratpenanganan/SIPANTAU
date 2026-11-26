@@ -391,7 +391,7 @@ const PAKET_ALLOWED_KEYS = new Set([
   'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
   'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
   'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-  'statusPencairan', 'mekanismePencairan',
+  'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
   'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
   'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
 ]);
@@ -402,6 +402,12 @@ const VALID_JENIS_PELAKSANAAN = new Set([
 const VALID_SKEMA_KONTRAK = new Set([
   'Lump Sum',
   'Waktu Penugasan',
+  'Pengadaan Langsung',
+  'Katalog',
+]);
+const VALID_SKEMA_PEMBAYARAN = new Set([
+  'Sekaligus',
+  'Termin',
 ]);
 const VALID_STATUS_PENCAIRAN = new Set([
   'Belum',
@@ -479,6 +485,23 @@ function evaluatePaketCreate(
     return 'PERMISSION_DENIED';
   }
   if (
+    payload.skemaPembayaran !== undefined &&
+    (typeof payload.skemaPembayaran !== 'string' || !VALID_SKEMA_PEMBAYARAN.has(payload.skemaPembayaran))
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (payload.terminPencairan !== undefined) {
+    if (!Array.isArray(payload.terminPencairan) || payload.terminPencairan.length > 20) {
+      return 'PERMISSION_DENIED';
+    }
+    if (
+      payload.terminPencairan.length > 0 &&
+      (typeof payload.terminPencairan[0] !== 'object' || payload.terminPencairan[0] === null)
+    ) {
+      return 'PERMISSION_DENIED';
+    }
+  }
+  if (
     payload.statusPencairan !== undefined &&
     (typeof payload.statusPencairan !== 'string' || !VALID_STATUS_PENCAIRAN.has(payload.statusPencairan))
   ) {
@@ -502,7 +525,7 @@ function evaluatePaketCreate(
   return 'ALLOW';
 }
 
-test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, pencairan), budget/HPS/kontrak bounds, durasi bounds, tahapan bounds, and immutable fields', () => {
+test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, pembayaran, pencairan), budget/kontrak bounds, termin bounds, durasi bounds, tahapan bounds, and immutable fields', () => {
   const validPaket: Record<string, unknown> = {
     ownerId: INTERNAL_WORKSPACE_ID,
     namaKegiatan: 'Pengawasan dan Pengendalian Perumahan',
@@ -512,11 +535,11 @@ test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, penca
     skemaKontrak: 'Lump Sum',
     tahunAnggaran: 2026,
     nilaiAnggaran: 75000000,
-    hps: 72000000,
     nilaiKontrak: 70500000,
     tanggalMulai: '2026-08-19',
     durasiHariKerja: 93,
     tenggatWaktu: '2026-11-19',
+    skemaPembayaran: 'Sekaligus',
     statusPencairan: 'Sudah',
     mekanismePencairan: 'Langsung (LS)',
     kodeRup: '51234567',
@@ -546,16 +569,42 @@ test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, penca
     'ALLOW'
   );
   assert.equal(
-    evaluatePaketCreate('paket-170000-ab14', { ...validPaket, mekanismePencairan: 'Tambahan Uang Persediaan (TU)' }, true),
+    evaluatePaketCreate(
+      'paket-170000-ab14',
+      {
+        ...validPaket,
+        skemaKontrak: 'Pengadaan Langsung',
+        mekanismePencairan: 'Tambahan Uang Persediaan (TU)',
+        skemaPembayaran: 'Termin',
+        terminPencairan: [
+          { id: 'tr-1', urutan: 1, nama: 'Termin 1', persentase: 50, status: 'Sudah' },
+          { id: 'tr-2', urutan: 2, nama: 'Termin 2', persentase: 50, status: 'Belum' },
+        ],
+        statusPencairan: 'Belum',
+      },
+      true
+    ),
+    'ALLOW'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-170000-ab15', { ...validPaket, skemaKontrak: 'Katalog' }, true),
     'ALLOW'
   );
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, ownerId: 'other' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, shadowField: 123 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, jenisPelaksanaan: 'Lainnya' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, skemaKontrak: 'Turnkey' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, skemaPembayaran: 'Cicilan' }, true), 'PERMISSION_DENIED');
+  assert.equal(
+    evaluatePaketCreate(
+      'paket-1',
+      { ...validPaket, terminPencairan: Array.from({ length: 21 }, (_, i) => ({ id: `tr-${i}` })) },
+      true
+    ),
+    'PERMISSION_DENIED'
+  );
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, statusPencairan: 'Proses' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, mekanismePencairan: 'UP' }, true), 'PERMISSION_DENIED');
-  assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, hps: -1 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, nilaiKontrak: -100 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 1999 }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, tahunAnggaran: 2101 }, true), 'PERMISSION_DENIED');
@@ -575,7 +624,15 @@ test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, penca
   );
   assert.equal(evaluatePaketCreate('paket-1', validPaket, false), 'PERMISSION_DENIED');
 
-  const stageProgressUpdateKeys = new Set(['tahapan', 'tanggalSelesai', 'statusPencairan', 'mekanismePencairan', 'updatedAt']);
+  const stageProgressUpdateKeys = new Set([
+    'tahapan',
+    'tanggalSelesai',
+    'skemaPembayaran',
+    'terminPencairan',
+    'statusPencairan',
+    'mekanismePencairan',
+    'updatedAt',
+  ]);
   assert.equal(stageProgressUpdateKeys.has('ownerId'), false);
   assert.equal(stageProgressUpdateKeys.has('dibuatOlehId'), false);
   assert.equal(stageProgressUpdateKeys.has('createdAt'), false);

@@ -29,10 +29,14 @@ import {
   Personel,
   RiwayatTindakLanjut,
   Role,
+  SkemaKontrak,
+  SkemaPembayaran,
+  StatusPencairan,
   StatusTahapPekerjaan,
   SuratMasuk,
   TahapPekerjaan,
   TahapTindakLanjutId,
+  TerminPekerjaan,
 } from '../types';
 import {
   INITIAL_PEJABAT,
@@ -75,6 +79,7 @@ const LIMITS = {
   KODE_RUP: 100,
   PENYEDIA: 200,
   MAX_TAHAPAN_PEKERJAAN: 30,
+  MAX_TERMIN_PEKERJAAN: 20,
 };
 
 const pdfMemoryCache = new Map<string, string>();
@@ -1474,14 +1479,68 @@ function sanitizeTahapanPekerjaan(tahapan: TahapPekerjaan[]): Record<string, unk
   });
 }
 
+function sanitizeTerminPekerjaan(termins: TerminPekerjaan[]): Record<string, unknown>[] {
+  return termins.slice(0, LIMITS.MAX_TERMIN_PEKERJAAN).map((t, idx) => {
+    const cleanStatus: StatusPencairan = t.status === 'Sudah' ? 'Sudah' : 'Belum';
+    const entry: Record<string, unknown> = {
+      id: clampStr(t.id, LIMITS.ID) || `termin-${idx + 1}`,
+      urutan: idx + 1,
+      nama: clampStr(t.nama, 150) || `Termin ${idx + 1}`,
+      status: cleanStatus,
+    };
+    if (typeof t.persentase === 'number' && Number.isFinite(t.persentase)) {
+      entry.persentase = Math.max(0, Math.min(100, Math.round(t.persentase * 100) / 100));
+    }
+    if (typeof t.nilaiRupiah === 'number' && Number.isFinite(t.nilaiRupiah)) {
+      entry.nilaiRupiah = Math.max(0, Math.min(1_000_000_000_000, Math.round(t.nilaiRupiah)));
+    }
+    if (t.tanggalTarget?.trim()) entry.tanggalTarget = clampStr(t.tanggalTarget, LIMITS.DATE_STR);
+    if (t.tanggalCair?.trim()) entry.tanggalCair = clampStr(t.tanggalCair, LIMITS.DATE_STR);
+    if (t.catatan?.trim()) entry.catatan = clampStr(t.catatan, 500);
+    return entry;
+  });
+}
+
 function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPekerjaan {
   const rawJenis = data.jenisPelaksanaan as JenisPelaksanaan | undefined;
   const jenisPelaksanaan: JenisPelaksanaan =
     rawJenis === 'Badan Usaha' ? 'Badan Usaha' : 'Perorangan';
 
-  const rawSkema = data.skemaKontrak as PaketPekerjaan['skemaKontrak'];
-  const skemaKontrak =
-    rawSkema === 'Lump Sum' || rawSkema === 'Waktu Penugasan' ? rawSkema : undefined;
+  const rawSkema = data.skemaKontrak as SkemaKontrak | undefined;
+  const skemaKontrak: SkemaKontrak | undefined =
+    rawSkema === 'Lump Sum' ||
+    rawSkema === 'Waktu Penugasan' ||
+    rawSkema === 'Pengadaan Langsung' ||
+    rawSkema === 'Katalog'
+      ? rawSkema
+      : undefined;
+
+  const rawSkemaPembayaran = data.skemaPembayaran as SkemaPembayaran | undefined;
+  const rawTermin = Array.isArray(data.terminPencairan)
+    ? (data.terminPencairan as Record<string, unknown>[])
+    : [];
+
+  const terminPencairan: TerminPekerjaan[] | undefined =
+    rawTermin.length > 0
+      ? rawTermin.map((tr, idx) => ({
+          id: String(tr.id || `termin-${idx + 1}`),
+          urutan: typeof tr.urutan === 'number' ? tr.urutan : idx + 1,
+          nama: String(tr.nama || `Termin ${idx + 1}`),
+          persentase: typeof tr.persentase === 'number' ? tr.persentase : undefined,
+          nilaiRupiah: typeof tr.nilaiRupiah === 'number' ? tr.nilaiRupiah : undefined,
+          status: tr.status === 'Sudah' ? 'Sudah' : 'Belum',
+          tanggalTarget: (tr.tanggalTarget as string | undefined) || undefined,
+          tanggalCair: (tr.tanggalCair as string | undefined) || undefined,
+          catatan: (tr.catatan as string | undefined) || undefined,
+        }))
+      : undefined;
+
+  const skemaPembayaran: SkemaPembayaran | undefined =
+    rawSkemaPembayaran === 'Termin' || rawSkemaPembayaran === 'Sekaligus'
+      ? rawSkemaPembayaran
+      : terminPencairan && terminPencairan.length > 0
+      ? 'Termin'
+      : undefined;
 
   const rawStatusPencairan = data.statusPencairan as PaketPekerjaan['statusPencairan'];
   const statusPencairan =
@@ -1535,6 +1594,8 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
       typeof data.durasiHariKerja === 'number' ? data.durasiHariKerja : undefined,
     tenggatWaktu: (data.tenggatWaktu as string) || '',
     tanggalSelesai: (data.tanggalSelesai as string | undefined) || undefined,
+    skemaPembayaran,
+    terminPencairan,
     statusPencairan,
     mekanismePencairan,
     kodeRup: (data.kodeRup as string | undefined) || undefined,
@@ -1587,12 +1648,13 @@ export interface PaketPekerjaanMutationPayload {
   skemaKontrak?: PaketPekerjaan['skemaKontrak'];
   tahunAnggaran?: number;
   nilaiAnggaran: number;
-  hps?: number;
   nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
   tanggalSelesai?: string;
+  skemaPembayaran?: SkemaPembayaran;
+  terminPencairan?: TerminPekerjaan[];
   statusPencairan?: PaketPekerjaan['statusPencairan'];
   mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
   kodeRup?: string;
@@ -1615,7 +1677,6 @@ export async function createPaketPekerjaanDb(
   const id = `paket-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const path = `paketPekerjaan/${id}`;
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
-  const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
@@ -1650,9 +1711,6 @@ export async function createPaketPekerjaanDb(
   if (cleanTahun !== undefined) {
     payload.tahunAnggaran = cleanTahun;
   }
-  if (cleanHps !== undefined) {
-    payload.hps = cleanHps;
-  }
   if (cleanNilaiKontrak !== undefined) {
     payload.nilaiKontrak = cleanNilaiKontrak;
   }
@@ -1661,6 +1719,16 @@ export async function createPaketPekerjaanDb(
   }
   if (input.tanggalSelesai?.trim()) {
     payload.tanggalSelesai = clampStr(input.tanggalSelesai, LIMITS.DATE_STR);
+  }
+  if (input.skemaPembayaran) {
+    payload.skemaPembayaran = input.skemaPembayaran;
+  }
+  if (
+    input.skemaPembayaran === 'Termin' &&
+    Array.isArray(input.terminPencairan) &&
+    input.terminPencairan.length > 0
+  ) {
+    payload.terminPencairan = sanitizeTerminPekerjaan(input.terminPencairan);
   }
   if (input.statusPencairan) {
     payload.statusPencairan = input.statusPencairan;
@@ -1698,7 +1766,6 @@ export async function updatePaketPekerjaanDb(
 ): Promise<void> {
   const path = `paketPekerjaan/${paketId}`;
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
-  const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
@@ -1708,6 +1775,11 @@ export async function updatePaketPekerjaanDb(
     typeof input.tahunAnggaran === 'number' && Number.isFinite(input.tahunAnggaran)
       ? Math.max(2000, Math.min(2100, Math.round(input.tahunAnggaran)))
       : undefined;
+
+  const isTermin =
+    input.skemaPembayaran === 'Termin' &&
+    Array.isArray(input.terminPencairan) &&
+    input.terminPencairan.length > 0;
 
   const updatePayload: Record<string, unknown> = {
     namaKegiatan: clampStr(input.namaKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
@@ -1719,13 +1791,17 @@ export async function updatePaketPekerjaanDb(
     skemaKontrak: input.skemaKontrak ? input.skemaKontrak : deleteField(),
     tahunAnggaran: cleanTahun !== undefined ? cleanTahun : deleteField(),
     nilaiAnggaran: cleanBudget,
-    hps: cleanHps !== undefined ? cleanHps : deleteField(),
+    hps: deleteField(),
     nilaiKontrak: cleanNilaiKontrak !== undefined ? cleanNilaiKontrak : deleteField(),
     tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
     durasiHariKerja: cleanDurasi !== undefined ? cleanDurasi : deleteField(),
     tenggatWaktu: clampStr(input.tenggatWaktu, LIMITS.DATE_STR),
     tanggalSelesai: input.tanggalSelesai?.trim()
       ? clampStr(input.tanggalSelesai, LIMITS.DATE_STR)
+      : deleteField(),
+    skemaPembayaran: input.skemaPembayaran ? input.skemaPembayaran : deleteField(),
+    terminPencairan: isTermin
+      ? sanitizeTerminPekerjaan(input.terminPencairan!)
       : deleteField(),
     statusPencairan: input.statusPencairan ? input.statusPencairan : deleteField(),
     mekanismePencairan: input.mekanismePencairan ? input.mekanismePencairan : deleteField(),
@@ -1760,6 +1836,8 @@ export async function updatePaketPekerjaanTahapanDb(
   tahapan: TahapPekerjaan[],
   tanggalSelesai?: string,
   pencairan?: {
+    skemaPembayaran?: SkemaPembayaran;
+    terminPencairan?: TerminPekerjaan[];
     statusPencairan?: PaketPekerjaan['statusPencairan'];
     mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
   }
@@ -1773,6 +1851,23 @@ export async function updatePaketPekerjaanTahapanDb(
     updatedAt: serverTimestamp(),
   };
   if (pencairan) {
+    if (pencairan.skemaPembayaran !== undefined) {
+      updatePayload.skemaPembayaran = pencairan.skemaPembayaran;
+      if (
+        pencairan.skemaPembayaran === 'Termin' &&
+        Array.isArray(pencairan.terminPencairan) &&
+        pencairan.terminPencairan.length > 0
+      ) {
+        updatePayload.terminPencairan = sanitizeTerminPekerjaan(pencairan.terminPencairan);
+      } else if (pencairan.skemaPembayaran === 'Sekaligus') {
+        updatePayload.terminPencairan = deleteField();
+      }
+    } else if (Array.isArray(pencairan.terminPencairan)) {
+      updatePayload.terminPencairan =
+        pencairan.terminPencairan.length > 0
+          ? sanitizeTerminPekerjaan(pencairan.terminPencairan)
+          : deleteField();
+    }
     if (pencairan.statusPencairan !== undefined) {
       updatePayload.statusPencairan = pencairan.statusPencairan;
     }

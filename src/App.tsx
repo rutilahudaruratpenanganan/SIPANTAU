@@ -39,8 +39,10 @@ import {
   Personel, 
   PejabatConfig, 
   Role, 
+  SkemaPembayaran,
   TahapPekerjaan,
   TahapTindakLanjutId, 
+  TerminPekerjaan,
   DokumenFile 
 } from './types';
 import { 
@@ -1182,6 +1184,8 @@ export default function App() {
     tahapan: TahapPekerjaan[],
     tanggalSelesai?: string,
     pencairan?: {
+      skemaPembayaran?: SkemaPembayaran;
+      terminPencairan?: TerminPekerjaan[];
       statusPencairan?: 'Belum' | 'Sudah';
       mekanismePencairan?:
         | 'Langsung (LS)'
@@ -1619,14 +1623,12 @@ export default function App() {
         {activeTab === 'rekap' && (
           <RekapView
             suratList={suratList}
-            paketList={paketPekerjaanList}
             pejabatConfig={pejabatConfig}
             onExportCsv={handleExportCsv}
             onOpenPdfViewer={(f) => {
               setSelectedFileForViewer(f);
               setIsModalPdfViewerOpen(true);
             }}
-            onNotify={showToast}
           />
         )}
 
@@ -1702,6 +1704,7 @@ export default function App() {
                 selectedPaketId: opts.selectedPaketId || 'all',
                 tahunAnggaran: opts.tahunAnggaran,
                 jenisPelaksanaan: opts.jenisPelaksanaan,
+                skemaPembayaran: opts.skemaPembayaran,
                 statusPencairan: opts.statusPencairan,
                 status: opts.status,
                 searchQuery: opts.searchQuery,

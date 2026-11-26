@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   Printer,
   Download,
-  FileSpreadsheet,
   Filter,
   RotateCcw,
   Calendar,
@@ -10,17 +9,10 @@ import {
   FileText,
   FileCheck,
   AlertCircle,
-  BriefcaseBusiness,
-  Search,
 } from 'lucide-react';
 import {
   DokumenFile,
-  JenisPelaksanaan,
-  MekanismePencairan,
-  PaketPekerjaan,
   PejabatConfig,
-  SkemaKontrak,
-  StatusPencairan,
   SuratMasuk,
 } from '../types';
 import { TAHAP_TINDAK_LANJUT, normalizeRiwayatCatatan } from '../utils/disposisiLogic';
@@ -33,49 +25,20 @@ import {
   getRekapDateBasisLabel,
   getRekapStatusLabel,
 } from '../utils/rekapLogic';
-import {
-  JENIS_PELAKSANAAN_LIST,
-  MEKANISME_PENCAIRAN_LIST,
-  PaketOverallStatus,
-  SKEMA_KONTRAK_LIST,
-  STATUS_PENCAIRAN_LIST,
-  buildPekerjaanCsvContent,
-  calculatePekerjaanStats,
-  computePaketProgress,
-  filterPaketPekerjaan,
-  formatRupiah,
-  formatTanggalDdMmYyyy,
-  formatTanggalDisplay,
-  getAvailablePicNames,
-  getAvailableTahunAnggaran,
-  getPaketTahunAnggaran,
-  getTodayLocalIso,
-  summarizePaketByJenis,
-  summarizePaketByTahunAnggaran,
-} from '../utils/pekerjaanLogic';
-
-type RekapDomainMode = 'pekerjaan' | 'persuratan';
 
 interface RekapViewProps {
   suratList: SuratMasuk[];
-  paketList?: PaketPekerjaan[];
   pejabatConfig: PejabatConfig;
   onExportCsv: (filteredList?: SuratMasuk[], options?: { includeHistory?: boolean }) => void;
   onOpenPdfViewer: (file: DokumenFile) => void;
-  onNotify?: (msg: string) => void;
 }
 
 export const RekapView: React.FC<RekapViewProps> = ({
   suratList,
-  paketList = [],
   pejabatConfig,
   onExportCsv,
   onOpenPdfViewer,
-  onNotify,
 }) => {
-  const todayIso = useMemo(() => getTodayLocalIso(), []);
-  const [domainMode, setDomainMode] = useState<RekapDomainMode>('pekerjaan');
-
   // --- State: Rekap Persuratan ---
   const [statusFilter, setStatusFilter] = useState<RekapStatusFilter>('all');
   const [dateBasis, setDateBasis] = useState<RekapDateBasis>('tanggalSurat');
@@ -83,25 +46,6 @@ export const RekapView: React.FC<RekapViewProps> = ({
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [includeHistory, setIncludeHistory] = useState<boolean>(true);
-
-  // --- State: Rekap Kegiatan & Pekerjaan ---
-  const availablePaketYears = useMemo(
-    () => getAvailableTahunAnggaran(paketList),
-    [paketList]
-  );
-  const availablePaketPics = useMemo(
-    () => getAvailablePicNames(paketList),
-    [paketList]
-  );
-  const [selectedTahunAnggaran, setSelectedTahunAnggaran] = useState<number | 'all'>('all');
-  const [selectedJenisPaket, setSelectedJenisPaket] = useState<JenisPelaksanaan | 'all'>('all');
-  const [selectedSkemaPaket, setSelectedSkemaPaket] = useState<SkemaKontrak | 'all'>('all');
-  const [selectedPencairanPaket, setSelectedPencairanPaket] = useState<StatusPencairan | 'all'>('all');
-  const [selectedMekanismePaket, setSelectedMekanismePaket] = useState<MekanismePencairan | 'all'>('all');
-  const [selectedStatusPaket, setSelectedStatusPaket] = useState<PaketOverallStatus | 'all'>('all');
-  const [selectedPicPaket, setSelectedPicPaket] = useState<string | 'all'>('all');
-  const [searchPaketQuery, setSearchPaketQuery] = useState<string>('');
-  const [showTahapanDetailRekap, setShowTahapanDetailRekap] = useState<boolean>(false);
 
   const availableSuratYears = useMemo(
     () => getAvailableSuratYears(suratList, dateBasis),
@@ -132,178 +76,12 @@ export const RekapView: React.FC<RekapViewProps> = ({
   const filteredAktifSuratCount = filteredSuratList.filter((s) => !s.statusSelesai).length;
   const filteredSelesaiSuratCount = filteredSuratList.filter((s) => s.statusSelesai).length;
 
-  // --- Computed: Rekap Kegiatan & Pekerjaan ---
-  const hasActivePaketFilter =
-    selectedTahunAnggaran !== 'all' ||
-    selectedJenisPaket !== 'all' ||
-    selectedSkemaPaket !== 'all' ||
-    selectedPencairanPaket !== 'all' ||
-    selectedMekanismePaket !== 'all' ||
-    selectedStatusPaket !== 'all' ||
-    selectedPicPaket !== 'all' ||
-    searchPaketQuery.trim() !== '';
-
-  const filteredPaketList = useMemo(
-    () =>
-      filterPaketPekerjaan(
-        paketList,
-        {
-          tahunAnggaran: selectedTahunAnggaran,
-          jenisPelaksanaan: selectedJenisPaket,
-          skemaKontrak: selectedSkemaPaket,
-          statusPencairan: selectedPencairanPaket,
-          mekanismePencairan: selectedMekanismePaket,
-          status: selectedStatusPaket,
-          picNama: selectedPicPaket,
-          searchQuery: searchPaketQuery,
-        },
-        todayIso
-      ),
-    [
-      paketList,
-      selectedTahunAnggaran,
-      selectedJenisPaket,
-      selectedSkemaPaket,
-      selectedPencairanPaket,
-      selectedMekanismePaket,
-      selectedStatusPaket,
-      selectedPicPaket,
-      searchPaketQuery,
-      todayIso,
-    ]
-  );
-
-  const paketStats = useMemo(
-    () => calculatePekerjaanStats(filteredPaketList, todayIso),
-    [filteredPaketList, todayIso]
-  );
-
-  const realisasiAnggaranPct =
-    paketStats.totalAnggaran > 0
-      ? Math.round((paketStats.anggaranSelesai / paketStats.totalAnggaran) * 100)
-      : 0;
-
-  const tahunSummaries = useMemo(
-    () => summarizePaketByTahunAnggaran(paketList, todayIso),
-    [paketList, todayIso]
-  );
-
-  const jenisSummaries = useMemo(
-    () => summarizePaketByJenis(filteredPaketList, todayIso),
-    [filteredPaketList, todayIso]
-  );
-
   const handleResetSuratFilters = () => {
     setStatusFilter('all');
     setDateBasis('tanggalSurat');
     setSuratTahunFilter('all');
     setDateFrom('');
     setDateTo('');
-  };
-
-  const handleResetPaketFilters = () => {
-    setSelectedTahunAnggaran('all');
-    setSelectedJenisPaket('all');
-    setSelectedSkemaPaket('all');
-    setSelectedPencairanPaket('all');
-    setSelectedMekanismePaket('all');
-    setSelectedStatusPaket('all');
-    setSelectedPicPaket('all');
-    setSearchPaketQuery('');
-  };
-
-  const applyPaketPreset = (
-    preset:
-      | 'all'
-      | 'sudah_cair'
-      | 'belum_cair'
-      | 'lump_sum'
-      | 'waktu_penugasan'
-      | 'terlambat'
-      | 'selesai'
-  ) => {
-    setSelectedJenisPaket('all');
-    setSelectedMekanismePaket('all');
-    setSelectedPicPaket('all');
-    setSearchPaketQuery('');
-    if (preset === 'all') {
-      setSelectedSkemaPaket('all');
-      setSelectedPencairanPaket('all');
-      setSelectedStatusPaket('all');
-    } else if (preset === 'sudah_cair') {
-      setSelectedSkemaPaket('all');
-      setSelectedPencairanPaket('Sudah');
-      setSelectedStatusPaket('all');
-    } else if (preset === 'belum_cair') {
-      setSelectedSkemaPaket('all');
-      setSelectedPencairanPaket('Belum');
-      setSelectedStatusPaket('all');
-    } else if (preset === 'lump_sum') {
-      setSelectedSkemaPaket('Lump Sum');
-      setSelectedPencairanPaket('all');
-      setSelectedStatusPaket('all');
-    } else if (preset === 'waktu_penugasan') {
-      setSelectedSkemaPaket('Waktu Penugasan');
-      setSelectedPencairanPaket('all');
-      setSelectedStatusPaket('all');
-    } else if (preset === 'terlambat') {
-      setSelectedSkemaPaket('all');
-      setSelectedPencairanPaket('all');
-      setSelectedStatusPaket('terlambat');
-    } else if (preset === 'selesai') {
-      setSelectedSkemaPaket('all');
-      setSelectedPencairanPaket('all');
-      setSelectedStatusPaket('selesai');
-    }
-  };
-
-  const activePaketFilterDescription = useMemo(() => {
-    const parts: string[] = [];
-    if (selectedJenisPaket !== 'all') parts.push(`Pelaksanaan: ${selectedJenisPaket}`);
-    if (selectedSkemaPaket !== 'all') parts.push(`Skema: ${selectedSkemaPaket}`);
-    if (selectedPencairanPaket !== 'all') parts.push(`Pencairan: ${selectedPencairanPaket}`);
-    if (selectedMekanismePaket !== 'all') parts.push(`Mekanisme: ${selectedMekanismePaket}`);
-    if (selectedStatusPaket !== 'all') {
-      const labelMap: Record<PaketOverallStatus, string> = {
-        belum_mulai: 'Belum Mulai',
-        sedang_berjalan: 'Sedang Berjalan',
-        terlambat: 'Terlambat',
-        selesai: 'Selesai',
-      };
-      parts.push(`Status: ${labelMap[selectedStatusPaket]}`);
-    }
-    if (selectedPicPaket !== 'all') parts.push(`PIC: ${selectedPicPaket}`);
-    if (searchPaketQuery.trim()) parts.push(`Kata Kunci: "${searchPaketQuery.trim()}"`);
-    return parts.length > 0 ? parts.join(' · ') : 'Semua Kategori & Filter';
-  }, [
-    selectedJenisPaket,
-    selectedSkemaPaket,
-    selectedPencairanPaket,
-    selectedMekanismePaket,
-    selectedStatusPaket,
-    selectedPicPaket,
-    searchPaketQuery,
-  ]);
-
-  const handleExportPaketCsv = () => {
-    const csv = buildPekerjaanCsvContent(filteredPaketList, todayIso);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const tahunTag =
-      selectedTahunAnggaran === 'all' ? 'Semua_TA' : `TA_${selectedTahunAnggaran}`;
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `Rekap_Kegiatan_Pekerjaan_${tahunTag}_${todayIso}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    onNotify?.(
-      `Rekap CSV Kegiatan & Pekerjaan (${filteredPaketList.length} paket) berhasil diunduh.`
-    );
   };
 
   const handlePrint = () => {
@@ -318,414 +96,43 @@ export const RekapView: React.FC<RekapViewProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Top Banner & Mode Switcher (Hidden on print) */}
+      {/* Top Banner & Action Bar (Hidden on print) */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 print:hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setDomainMode('pekerjaan')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
-                  domainMode === 'pekerjaan'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <BriefcaseBusiness className="w-3.5 h-3.5 text-blue-600" />
-                <span>Rekap Kegiatan &amp; Pekerjaan</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDomainMode('persuratan')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
-                  domainMode === 'persuratan'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-purple-600" />
-                <span>Rekap Persuratan &amp; Disposisi</span>
-              </button>
-            </div>
-
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                {domainMode === 'pekerjaan'
-                  ? 'Rekapitulasi Kegiatan & Pekerjaan Per Tahun Anggaran'
-                  : 'Rekapitulasi Persuratan & Disposisi Tim Wasdal'}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {domainMode === 'pekerjaan'
-                  ? 'Pilih Tahun Anggaran, jenis pelaksanaan, atau status untuk melihat ringkasan pagu, realisasi, serta cetak laporan resmi'
-                  : 'Pilih filter status, tahun, dan rentang tanggal untuk mencetak laporan lengkap beserta riwayat proses tiap surat'}
-              </p>
-            </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Rekapitulasi Persuratan &amp; Disposisi Tim Wasdal
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Pilih filter status, tahun, dan rentang tanggal untuk mencetak laporan lengkap beserta
+              riwayat proses tiap surat
+            </p>
           </div>
 
-          {domainMode === 'pekerjaan' ? (
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleExportPaketCsv}
-                disabled={filteredPaketList.length === 0}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors border border-slate-300 whitespace-nowrap"
-              >
-                <Download className="w-4 h-4" />
-                <span>Ekspor CSV ({filteredPaketList.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={handlePrint}
-                disabled={filteredPaketList.length === 0}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Cetak Rekapitulasi ({filteredPaketList.length})</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => onExportCsv(filteredSuratList, { includeHistory })}
-                disabled={filteredSuratList.length === 0}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors border border-slate-300 whitespace-nowrap"
-              >
-                <Download className="w-4 h-4" />
-                <span>Ekspor CSV ({filteredSuratList.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={handlePrint}
-                disabled={filteredSuratList.length === 0}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Cetak Rekapitulasi ({filteredSuratList.length})</span>
-              </button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => onExportCsv(filteredSuratList, { includeHistory })}
+              disabled={filteredSuratList.length === 0}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors border border-slate-300 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span>Ekspor CSV ({filteredSuratList.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={filteredSuratList.length === 0}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm whitespace-nowrap"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Cetak Rekapitulasi ({filteredSuratList.length})</span>
+            </button>
+          </div>
         </div>
 
-        {/* Filter Controls */}
-        {domainMode === 'pekerjaan' ? (
-          <div className="pt-4 border-t border-slate-200 space-y-3 text-xs">
-            {/* Quick Preset Bar & Stage Toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div
-                role="group"
-                aria-label="Preset filter rekap pekerjaan"
-                className="flex flex-wrap items-center gap-1.5"
-              >
-                <span className="inline-flex items-center gap-1 font-semibold text-slate-700 mr-1">
-                  <Filter className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Preset Rekap:</span>
-                </span>
-                {(
-                  [
-                    { id: 'all', label: 'Semua Paket' },
-                    { id: 'sudah_cair', label: 'Sudah Cair' },
-                    { id: 'belum_cair', label: 'Belum Cair' },
-                    { id: 'lump_sum', label: 'Lump Sum' },
-                    { id: 'waktu_penugasan', label: 'Waktu Penugasan' },
-                    { id: 'terlambat', label: 'Terlambat' },
-                    { id: 'selesai', label: 'Tuntas 100%' },
-                  ] as const
-                ).map((preset) => {
-                  const isActive =
-                    (preset.id === 'all' &&
-                      selectedSkemaPaket === 'all' &&
-                      selectedPencairanPaket === 'all' &&
-                      selectedStatusPaket === 'all') ||
-                    (preset.id === 'sudah_cair' && selectedPencairanPaket === 'Sudah') ||
-                    (preset.id === 'belum_cair' && selectedPencairanPaket === 'Belum') ||
-                    (preset.id === 'lump_sum' && selectedSkemaPaket === 'Lump Sum') ||
-                    (preset.id === 'waktu_penugasan' && selectedSkemaPaket === 'Waktu Penugasan') ||
-                    (preset.id === 'terlambat' && selectedStatusPaket === 'terlambat') ||
-                    (preset.id === 'selesai' && selectedStatusPaket === 'selesai');
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyPaketPreset(preset.id)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
-                        isActive
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showTahapanDetailRekap}
-                  onChange={(e) => setShowTahapanDetailRekap(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
-                />
-                <History className="w-3.5 h-3.5 text-slate-500" />
-                <span>Sertakan Rincian Tahapan</span>
-              </label>
-            </div>
-
-            {/* Row 1: Tahun Anggaran + Search */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-              <div className="lg:col-span-7 space-y-1.5">
-                <label
-                  htmlFor="rekap-tahun-anggaran"
-                  className="font-semibold text-slate-700 flex items-center gap-1.5"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Tahun Anggaran</span>
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    id="rekap-tahun-anggaran"
-                    value={
-                      selectedTahunAnggaran === 'all' ? 'all' : String(selectedTahunAnggaran)
-                    }
-                    onChange={(e) =>
-                      setSelectedTahunAnggaran(
-                        e.target.value === 'all' ? 'all' : Number(e.target.value)
-                      )
-                    }
-                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  >
-                    <option value="all">Semua Tahun Anggaran ({paketList.length})</option>
-                    {availablePaketYears.map((yr) => {
-                      const count = paketList.filter(
-                        (p) => getPaketTahunAnggaran(p) === yr
-                      ).length;
-                      return (
-                        <option key={yr} value={String(yr)}>
-                          Tahun Anggaran {yr} ({count} paket)
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  {availablePaketYears.length > 0 && (
-                    <div
-                      role="group"
-                      aria-label="Pilih cepat tahun anggaran"
-                      className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTahunAnggaran('all')}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors whitespace-nowrap ${
-                          selectedTahunAnggaran === 'all'
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Semua TA
-                      </button>
-                      {availablePaketYears.map((yr) => (
-                        <button
-                          key={yr}
-                          type="button"
-                          onClick={() => setSelectedTahunAnggaran(yr)}
-                          className={`px-2.5 py-1 rounded-md font-mono font-semibold tabular-nums transition-colors whitespace-nowrap ${
-                            selectedTahunAnggaran === yr
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          TA {yr}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="lg:col-span-5 space-y-1.5">
-                <label
-                  htmlFor="rekap-search-paket"
-                  className="block font-semibold text-slate-700"
-                >
-                  Cari Kegiatan / Sub Kegiatan / Pekerjaan / RUP / Penyedia
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="rekap-search-paket"
-                      type="text"
-                      value={searchPaketQuery}
-                      onChange={(e) => setSearchPaketQuery(e.target.value)}
-                      placeholder="Ketik kata kunci paket..."
-                      className="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
-                  {hasActivePaketFilter && (
-                    <button
-                      type="button"
-                      onClick={handleResetPaketFilters}
-                      className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold inline-flex items-center gap-1.5 border border-slate-300 transition-colors whitespace-nowrap"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reset</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Multi-criteria dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
-              <div>
-                <label
-                  htmlFor="rekap-jenis-pelaksanaan"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Jenis Pelaksanaan
-                </label>
-                <select
-                  id="rekap-jenis-pelaksanaan"
-                  value={selectedJenisPaket}
-                  onChange={(e) =>
-                    setSelectedJenisPaket(e.target.value as JenisPelaksanaan | 'all')
-                  }
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua Pelaksanaan</option>
-                  {JENIS_PELAKSANAAN_LIST.map((j) => (
-                    <option key={j} value={j}>
-                      {j}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="rekap-skema-kontrak"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Skema Kontrak
-                </label>
-                <select
-                  id="rekap-skema-kontrak"
-                  value={selectedSkemaPaket}
-                  onChange={(e) =>
-                    setSelectedSkemaPaket(e.target.value as SkemaKontrak | 'all')
-                  }
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua Skema</option>
-                  {SKEMA_KONTRAK_LIST.map((sk) => (
-                    <option key={sk} value={sk}>
-                      {sk}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="rekap-status-pencairan"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Tahapan Pencairan
-                </label>
-                <select
-                  id="rekap-status-pencairan"
-                  value={selectedPencairanPaket}
-                  onChange={(e) =>
-                    setSelectedPencairanPaket(e.target.value as StatusPencairan | 'all')
-                  }
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua Pencairan</option>
-                  {STATUS_PENCAIRAN_LIST.map((st) => (
-                    <option key={st} value={st}>
-                      Pencairan: {st}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="rekap-mekanisme-pencairan"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Mekanisme Pencairan
-                </label>
-                <select
-                  id="rekap-mekanisme-pencairan"
-                  value={selectedMekanismePaket}
-                  onChange={(e) =>
-                    setSelectedMekanismePaket(e.target.value as MekanismePencairan | 'all')
-                  }
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua Mekanisme</option>
-                  {MEKANISME_PENCAIRAN_LIST.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="rekap-status-paket"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Status Progres
-                </label>
-                <select
-                  id="rekap-status-paket"
-                  value={selectedStatusPaket}
-                  onChange={(e) =>
-                    setSelectedStatusPaket(e.target.value as PaketOverallStatus | 'all')
-                  }
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua Status</option>
-                  <option value="belum_mulai">Belum Mulai</option>
-                  <option value="sedang_berjalan">Sedang Berjalan</option>
-                  <option value="terlambat">Terlambat</option>
-                  <option value="selesai">Selesai</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="rekap-pic-paket"
-                  className="block text-[11px] font-semibold text-slate-600 mb-1"
-                >
-                  Penanggung Jawab (PIC)
-                </label>
-                <select
-                  id="rekap-pic-paket"
-                  value={selectedPicPaket}
-                  onChange={(e) => setSelectedPicPaket(e.target.value)}
-                  className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="all">Semua PIC</option>
-                  {availablePaketPics.map((pic) => (
-                    <option key={pic} value={pic}>
-                      {pic}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Filter Bar: Persuratan */}
-            <div className="pt-4 border-t border-slate-200 grid grid-cols-1 xl:grid-cols-12 gap-4 items-end text-xs">
+        {/* Filter Bar: Persuratan */}
+        <div className="pt-4 border-t border-slate-200 grid grid-cols-1 xl:grid-cols-12 gap-4 items-end text-xs">
               {/* Filter Status */}
               <div className="xl:col-span-4 space-y-1.5">
                 <span className="font-semibold text-slate-700 flex items-center gap-1.5">
@@ -888,451 +295,10 @@ export const RekapView: React.FC<RekapViewProps> = ({
                 </span>
               </div>
             )}
-          </>
-        )}
       </div>
 
-      {/* Printable Sheet View */}
-      {domainMode === 'pekerjaan' ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-8 space-y-6 print:border-none print:p-0">
-          {/* Kop Resmi Laporan Kegiatan & Pekerjaan */}
-          <div className="text-center border-b-2 border-slate-900 pb-4">
-            <h3 className="text-xs uppercase font-bold tracking-widest text-slate-600 font-sans">
-              Pemerintah Kota Bandung
-            </h3>
-            <h1 className="text-base font-extrabold uppercase tracking-wide text-slate-900 mt-0.5">
-              {pejabatConfig.kepalaDinas.instansi}
-            </h1>
-            <h2 className="text-xs font-bold uppercase text-slate-800">
-              Bidang Perumahan · Tim Pengawasan dan Pengendalian Perumahan
-            </h2>
-            <div className="text-xs font-bold underline uppercase tracking-wide mt-3">
-              REKAPITULASI PEMANTAUAN KEGIATAN &amp; PEKERJAAN
-              {selectedTahunAnggaran !== 'all'
-                ? ` — TAHUN ANGGARAN ${selectedTahunAnggaran}`
-                : ' — LINTAS TAHUN ANGGARAN'}
-            </div>
-            <div className="text-[11px] text-slate-700 mt-1.5 space-y-0.5">
-              <div>
-                Tahun Anggaran:{' '}
-                <span className="font-semibold font-mono tabular-nums">
-                  {selectedTahunAnggaran === 'all'
-                    ? 'Semua Tahun Anggaran'
-                    : `TA ${selectedTahunAnggaran}`}
-                </span>
-                <span aria-hidden="true"> · </span>
-                Filter:{' '}
-                <span className="font-semibold">{activePaketFilterDescription}</span>
-              </div>
-              <div className="text-slate-600 tabular-nums">
-                Dicetak Per: {printedDateText} · Menampilkan:{' '}
-                <span className="font-bold text-slate-900">
-                  {filteredPaketList.length} Paket
-                </span>{' '}
-                ({paketStats.selesai} Selesai, {paketStats.sedangBerjalan} Berjalan,{' '}
-                {paketStats.terlambat} Terlambat)
-              </div>
-            </div>
-          </div>
-
-          {/* 4-Column Summary Strip (Single Elevation, Border Divided) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border border-slate-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-slate-50/60">
-            <div className="p-4">
-              <div className="text-[11px] font-semibold text-slate-500">
-                Total Paket &amp; Pencairan
-              </div>
-              <div className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-1">
-                {paketStats.totalPaket} Paket
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">
-                {paketStats.sudahCairCount} sudah cair · {paketStats.belumCairCount} belum cair
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="text-[11px] font-semibold text-slate-500">
-                Total Pagu &amp; HPS
-              </div>
-              <div className="text-lg font-bold text-slate-900 font-mono tabular-nums mt-1">
-                {formatRupiah(paketStats.totalAnggaran)}
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5 font-mono tabular-nums">
-                HPS: {formatRupiah(paketStats.totalHps)}
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="text-[11px] font-semibold text-emerald-700">
-                Nilai Kontrak &amp; Realisasi Tuntas
-              </div>
-              <div className="text-lg font-bold text-emerald-800 font-mono tabular-nums mt-1">
-                {formatRupiah(paketStats.totalNilaiKontrak)}
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5 font-mono tabular-nums">
-                Tuntas: {formatRupiah(paketStats.anggaranSelesai)} ({realisasiAnggaranPct}%)
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="text-[11px] font-semibold text-slate-500">
-                Rata-Rata Progres Tahapan
-              </div>
-              <div className="text-xl font-bold text-blue-700 font-mono tabular-nums mt-1">
-                {paketStats.rataRataProgres}%
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">
-                {paketStats.terlambat} terlambat · {paketStats.mendekatiTenggat} mendekati selesai
-              </div>
-            </div>
-          </div>
-
-          {/* Comparative Cross-Year Table (when viewing Semua Tahun Anggaran and multiple years or >=1 package exist) */}
-          {selectedTahunAnggaran === 'all' && tahunSummaries.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Ringkasan Per Tahun Anggaran
-                </h4>
-                <span className="text-[11px] text-slate-500 print:hidden">
-                  Klik baris tahun untuk memfokuskan rekap ke Tahun Anggaran tersebut
-                </span>
-              </div>
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold">
-                      <th className="py-2.5 px-3">Tahun Anggaran</th>
-                      <th className="py-2.5 px-3 text-right">Jumlah Paket</th>
-                      <th className="py-2.5 px-3 text-right">Tuntas</th>
-                      <th className="py-2.5 px-3 text-right">Total Pagu Anggaran</th>
-                      <th className="py-2.5 px-3 text-right">Nilai Realisasi Selesai</th>
-                      <th className="py-2.5 px-3 text-right">Serapan (%)</th>
-                      <th className="py-2.5 px-3 text-right">Rata-Rata Progres</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {tahunSummaries.map((row) => (
-                      <tr
-                        key={row.tahunAnggaran}
-                        className="hover:bg-blue-50/50 transition-colors"
-                      >
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 tabular-nums">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTahunAnggaran(row.tahunAnggaran)}
-                            className="text-blue-700 hover:underline font-mono font-bold print:no-underline print:text-slate-900"
-                          >
-                            TA {row.tahunAnggaran}
-                          </button>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-800">
-                          {row.totalPaket}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-emerald-700 font-semibold">
-                          {row.selesai}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold text-slate-900">
-                          {formatRupiah(row.totalAnggaran)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-emerald-800">
-                          {formatRupiah(row.anggaranSelesai)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold text-slate-800">
-                          {row.persentaseRealisasiAnggaran}%
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono tabular-nums font-semibold text-blue-700">
-                          {row.rataRataProgres}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Breakdown per Jenis Pelaksanaan */}
-          {filteredPaketList.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {jenisSummaries.map((item) => (
-                <div
-                  key={item.jenisPelaksanaan}
-                  className="px-3.5 py-2.5 rounded-lg border border-slate-200 bg-white text-[11px]"
-                >
-                  <div className="font-semibold text-slate-700">{item.jenisPelaksanaan}</div>
-                  <div className="font-mono font-bold text-slate-900 tabular-nums mt-0.5">
-                    {formatRupiah(item.totalAnggaran)}
-                  </div>
-                  <div className="text-[10px] text-slate-500 tabular-nums mt-0.5">
-                    {item.totalPaket} paket · {item.selesai} selesai
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Main Printable Table */}
-          {filteredPaketList.length === 0 ? (
-            <div className="py-12 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50 space-y-2">
-              <p className="text-xs font-semibold text-slate-700">
-                Belum ada paket kegiatan &amp; pekerjaan pada Tahun Anggaran atau filter yang dipilih.
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Tambahkan paket pada menu Kegiatan &amp; Pekerjaan atau pilih Tahun Anggaran lainnya.
-              </p>
-              {hasActivePaketFilter && (
-                <button
-                  type="button"
-                  onClick={handleResetPaketFilters}
-                  className="mt-2 px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5 print:hidden"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Tampilkan Semua Tahun Anggaran</span>
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse border border-slate-800 text-[11px]">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-800 font-bold text-slate-900 uppercase">
-                    <th className="border border-slate-800 p-2 text-center w-9">No.</th>
-                    <th className="border border-slate-800 p-2 text-center w-16">TA</th>
-                    <th className="border border-slate-800 p-2">
-                      Kegiatan, Sub Kegiatan &amp; Pekerjaan
-                    </th>
-                    <th className="border border-slate-800 p-2 w-36">
-                      Pelaksanaan, Skema &amp; PIC
-                    </th>
-                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
-                      Pagu Anggaran
-                    </th>
-                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
-                      HPS
-                    </th>
-                    <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
-                      Nilai Kontrak
-                    </th>
-                    <th className="border border-slate-800 p-2 whitespace-nowrap">
-                      Pencairan
-                    </th>
-                    <th className="border border-slate-800 p-2 w-36">Durasi &amp; Jadwal</th>
-                    <th className="border border-slate-800 p-2 min-w-[180px]">
-                      Progres &amp; Tahapan
-                    </th>
-                    <th className="border border-slate-800 p-2 w-24 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {filteredPaketList.map((paket, idx) => {
-                    const progress = computePaketProgress(paket, todayIso);
-                    const tahun = getPaketTahunAnggaran(paket);
-                    return (
-                      <React.Fragment key={paket.id}>
-                        <tr className="align-top print:break-inside-avoid">
-                          <td className="border border-slate-800 p-2 text-center font-mono tabular-nums">
-                            {idx + 1}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-center font-mono font-bold tabular-nums text-slate-900">
-                            {tahun}
-                          </td>
-                          <td className="border border-slate-800 p-2">
-                            <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
-                            <div className="text-slate-700 mt-0.5">{paket.subKegiatan}</div>
-                            {paket.pekerjaan && (
-                              <div className="text-slate-900 font-medium mt-0.5">
-                                Pekerjaan: {paket.pekerjaan}
-                              </div>
-                            )}
-                            {paket.kodeRup && (
-                              <div className="text-[10px] font-mono text-slate-600 mt-0.5">
-                                Kode RUP: {paket.kodeRup}
-                              </div>
-                            )}
-                            {paket.nomorKontrak && (
-                              <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-                                No. Kontrak/SPK: {paket.nomorKontrak}
-                              </div>
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2">
-                            <div className="font-semibold text-slate-900">
-                              {paket.jenisPelaksanaan}
-                            </div>
-                            {paket.skemaKontrak && (
-                              <div className="text-[10px] font-semibold text-indigo-800 mt-0.5">
-                                Skema: {paket.skemaKontrak}
-                              </div>
-                            )}
-                            {paket.penyedia && (
-                              <div className="text-[10px] text-slate-600 mt-0.5">
-                                {paket.penyedia}
-                              </div>
-                            )}
-                            {paket.picNama && (
-                              <div className="text-[10px] text-slate-500 mt-0.5">
-                                PIC: {paket.picNama}
-                              </div>
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
-                            {formatRupiah(paket.nilaiAnggaran)}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-right font-mono text-slate-700 tabular-nums whitespace-nowrap">
-                            {typeof paket.hps === 'number' ? formatRupiah(paket.hps) : '-'}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
-                            {typeof paket.nilaiKontrak === 'number' ? (
-                              <span className="font-semibold text-emerald-800">
-                                {formatRupiah(paket.nilaiKontrak)}
-                              </span>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-[10px] whitespace-nowrap">
-                            <div className="font-semibold text-slate-800">
-                              {paket.statusPencairan || 'Belum'}
-                            </div>
-                            {paket.mekanismePencairan && (
-                              <div className="text-slate-600 mt-0.5">
-                                {paket.mekanismePencairan}
-                              </div>
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2 tabular-nums text-[10px] space-y-0.5">
-                            <div>Mulai: {formatTanggalDisplay(paket.tanggalMulai)}</div>
-                            <div className="font-mono">
-                              Durasi: {progress.durasiHariKerja} hari kalender
-                            </div>
-                            <div className="font-bold text-slate-900">
-                              Selesai: {formatTanggalDisplay(paket.tenggatWaktu)}
-                            </div>
-                            {paket.tanggalSelesai && (
-                              <div className="text-emerald-800 font-semibold">
-                                Tuntas: {formatTanggalDisplay(paket.tanggalSelesai)}
-                              </div>
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2 space-y-1">
-                            <div className="font-mono font-bold text-slate-900 tabular-nums">
-                              {progress.persentase}% ({progress.selesaiCount}/{progress.totalTahapan}{' '}
-                              Tahap)
-                            </div>
-                            {progress.activeStage && (
-                              <div className="text-[10px] text-slate-700">
-                                Tahap {progress.activeStage.urutan}: {progress.activeStage.nama}
-                              </div>
-                            )}
-                          </td>
-                          <td className="border border-slate-800 p-2 text-center font-bold">
-                            <span
-                              className={
-                                progress.overallStatus === 'selesai'
-                                  ? 'text-emerald-800'
-                                  : progress.overallStatus === 'terlambat'
-                                  ? 'text-rose-800'
-                                  : progress.overallStatus === 'sedang_berjalan'
-                                  ? 'text-blue-800'
-                                  : 'text-slate-600'
-                              }
-                            >
-                              {progress.overallStatusLabel}
-                            </span>
-                          </td>
-                        </tr>
-                        {showTahapanDetailRekap && paket.tahapan.length > 0 && (
-                          <tr className="bg-slate-50/70 print:break-inside-avoid">
-                            <td colSpan={11} className="border border-slate-800 px-3 py-1.5 text-[10px]">
-                              <span className="font-bold text-slate-800 mr-1.5">
-                                Rincian Tahapan:
-                              </span>
-                              <span className="text-slate-700">
-                                {paket.tahapan
-                                  .map(
-                                    (t) =>
-                                      `${t.urutan}. ${t.nama} [${
-                                        t.status === 'selesai'
-                                          ? 'Selesai'
-                                          : t.status === 'sedang_berjalan'
-                                          ? 'Proses'
-                                          : 'Belum'
-                                      }${
-                                        t.tanggalSelesai
-                                          ? ` · ${formatTanggalDdMmYyyy(t.tanggalSelesai)}`
-                                          : ''
-                                      }]`
-                                  )
-                                  .join(' | ')}
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-slate-100 font-bold text-slate-900">
-                    <td
-                      colSpan={4}
-                      className="border border-slate-800 p-2 text-right uppercase"
-                    >
-                      Total Anggaran (
-                      {selectedTahunAnggaran === 'all'
-                        ? 'Semua Tahun Anggaran'
-                        : `TA ${selectedTahunAnggaran}`}
-                      )
-                    </td>
-                    <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
-                      {formatRupiah(paketStats.totalAnggaran)}
-                    </td>
-                    <td className="border border-slate-800 p-2 text-right font-mono font-semibold tabular-nums whitespace-nowrap">
-                      {paketStats.totalHps > 0 ? formatRupiah(paketStats.totalHps) : '-'}
-                    </td>
-                    <td className="border border-slate-800 p-2 text-right font-mono font-semibold text-emerald-800 tabular-nums whitespace-nowrap">
-                      {paketStats.totalNilaiKontrak > 0
-                        ? formatRupiah(paketStats.totalNilaiKontrak)
-                        : '-'}
-                    </td>
-                    <td colSpan={4} className="border border-slate-800 p-2 text-[10px] font-mono tabular-nums">
-                      Realisasi Selesai: {formatRupiah(paketStats.anggaranSelesai)} (
-                      {realisasiAnggaranPct}%)
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-
-          {/* Tanda Tangan Pengesahan Laporan */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 sm:gap-4 pt-4 text-xs font-sans print:break-inside-avoid">
-            <div className="text-center">
-              <div className="text-slate-500">Mengetahui,</div>
-              <div className="font-bold text-slate-900">Kepala Bidang Perumahan</div>
-              <div className="h-16"></div>
-              <div className="font-bold underline">{pejabatConfig.kepalaBidang.nama}</div>
-              <div className="text-[11px] font-mono text-slate-600">
-                NIP. {pejabatConfig.kepalaBidang.nip}
-              </div>
-            </div>
-
-            <div className="text-center">
-              <div className="text-slate-500">Bandung, {printedDateText}</div>
-              <div className="font-bold text-slate-900">
-                Ketua Tim Pengawasan dan Pengendalian Perumahan
-              </div>
-              <div className="h-16"></div>
-              <div className="font-bold underline">{pejabatConfig.ketuaTim.nama}</div>
-              <div className="text-[11px] font-mono text-slate-600">
-                NIP. {pejabatConfig.ketuaTim.nip}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Printable Sheet View: Persuratan & Disposisi */
-        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-8 print:border-none print:p-0">
+      {/* Printable Sheet View: Persuratan & Disposisi */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-8 print:border-none print:p-0">
           {/* Kop Resmi Surat Laporan */}
           <div className="text-center border-b-2 border-slate-900 pb-4 mb-6">
             <h3 className="text-xs uppercase font-bold tracking-widest text-slate-600 font-sans">
@@ -1582,8 +548,7 @@ export const RekapView: React.FC<RekapViewProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

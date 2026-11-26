@@ -17,21 +17,31 @@ import {
   MekanismePencairan,
   PaketPekerjaan,
   Personel,
+  SkemaPembayaran,
   StatusPencairan,
   StatusTahapPekerjaan,
   TahapPekerjaan,
+  TerminPekerjaan,
 } from '../types';
 import {
+  MAX_TERMIN_PEKERJAAN,
   MEKANISME_PENCAIRAN_LIST,
+  SKEMA_PEMBAYARAN_LIST,
   STATUS_PENCAIRAN_LIST,
+  buildDefaultTerminPencairan,
   computePaketProgress,
   createTahapId,
+  createTerminId,
   formatRupiah,
   formatTanggalDisplay,
   getPaketTahunAnggaran,
   getTodayLocalIso,
   normalizeTahapanOrder,
+  normalizeTerminOrder,
+  parseRupiahInput,
   resolvePaketTanggalSelesai,
+  resolveStatusPencairanFromTermin,
+  summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
 
 interface ModalWorkflowTahapanProps {
@@ -44,6 +54,8 @@ interface ModalWorkflowTahapanProps {
     tahapan: TahapPekerjaan[],
     tanggalSelesai?: string,
     pencairan?: {
+      skemaPembayaran?: SkemaPembayaran;
+      terminPencairan?: TerminPekerjaan[];
       statusPencairan?: StatusPencairan;
       mekanismePencairan?: MekanismePencairan;
     }
@@ -61,6 +73,8 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 }) => {
   const [tahapan, setTahapan] = useState<TahapPekerjaan[]>([]);
   const [tanggalSelesaiPaket, setTanggalSelesaiPaket] = useState('');
+  const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran>('Sekaligus');
+  const [terminPencairan, setTerminPencairan] = useState<TerminPekerjaan[]>([]);
   const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
   const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [newStageName, setNewStageName] = useState('');
@@ -69,8 +83,23 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 
   useEffect(() => {
     if (!isOpen || !paket) return;
+    const initSkemaBayar: SkemaPembayaran =
+      paket.skemaPembayaran === 'Termin' ||
+      (Array.isArray(paket.terminPencairan) && paket.terminPencairan.length > 0)
+        ? 'Termin'
+        : 'Sekaligus';
     setTahapan(paket.tahapan.map((t, idx) => ({ ...t, urutan: idx + 1 })));
     setTanggalSelesaiPaket(paket.tanggalSelesai || '');
+    setSkemaPembayaran(initSkemaBayar);
+    setTerminPencairan(
+      initSkemaBayar === 'Termin'
+        ? normalizeTerminOrder(
+            paket.terminPencairan && paket.terminPencairan.length > 0
+              ? paket.terminPencairan
+              : buildDefaultTerminPencairan()
+          )
+        : []
+    );
     setStatusPencairan(paket.statusPencairan || 'Belum');
     setMekanismePencairan(paket.mekanismePencairan || '');
     setNewStageName('');
@@ -176,12 +205,67 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     });
   };
 
+  const handleChangeSkemaPembayaran = (next: SkemaPembayaran) => {
+    setSkemaPembayaran(next);
+    if (next === 'Termin' && terminPencairan.length === 0) {
+      setTerminPencairan(buildDefaultTerminPencairan());
+    }
+  };
+
+  const handleUpdateTermin = (id: string, patch: Partial<TerminPekerjaan>) => {
+    setTerminPencairan((prev) =>
+      prev.map((tr) => {
+        if (tr.id !== id) return tr;
+        const updated: TerminPekerjaan = { ...tr, ...patch };
+        if (patch.status === 'Sudah' && !updated.tanggalCair) {
+          updated.tanggalCair = todayIso;
+        } else if (patch.status === 'Belum') {
+          updated.tanggalCair = undefined;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleAddTermin = () => {
+    if (terminPencairan.length >= MAX_TERMIN_PEKERJAAN) return;
+    setTerminPencairan((prev) =>
+      normalizeTerminOrder([
+        ...prev,
+        {
+          id: createTerminId(prev.length + 1),
+          urutan: prev.length + 1,
+          nama: `Termin ${prev.length + 1}`,
+          status: 'Belum',
+        },
+      ])
+    );
+  };
+
+  const handleRemoveTermin = (id: string) => {
+    if (terminPencairan.length <= 1) return;
+    setTerminPencairan((prev) => normalizeTerminOrder(prev.filter((tr) => tr.id !== id)));
+  };
+
+  const terminSummary = summarizeTerminPencairan({
+    skemaPembayaran,
+    statusPencairan,
+    terminPencairan,
+  });
+
   const handleSave = async () => {
     const cleaned = normalizeTahapanOrder(
       tahapan.map((t) => ({
         ...t,
         nama: t.nama.trim() || `Tahap ${t.urutan}`,
       }))
+    );
+    const cleanedTermins =
+      skemaPembayaran === 'Termin' ? normalizeTerminOrder(terminPencairan) : undefined;
+    const resolvedStatusPencairan = resolveStatusPencairanFromTermin(
+      skemaPembayaran,
+      statusPencairan,
+      cleanedTermins
     );
     const resolvedTanggalSelesai = resolvePaketTanggalSelesai(
       cleaned,
@@ -192,7 +276,9 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     setIsSaving(true);
     try {
       await onSaveProgress(paket.id, cleaned, resolvedTanggalSelesai, {
-        statusPencairan,
+        skemaPembayaran,
+        terminPencairan: cleanedTermins,
+        statusPencairan: resolvedStatusPencairan,
         mekanismePencairan: mekanismePencairan || undefined,
       });
       onClose();
@@ -285,16 +371,6 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
               <span className="font-mono font-bold text-slate-900 tabular-nums">
                 Pagu: {formatRupiah(paket.nilaiAnggaran)}
               </span>
-              {typeof paket.hps === 'number' && (
-                <>
-                  <span aria-hidden="true" className="text-slate-300">
-                    ·
-                  </span>
-                  <span className="font-mono text-slate-700 tabular-nums">
-                    HPS: {formatRupiah(paket.hps)}
-                  </span>
-                </>
-              )}
               {typeof paket.nilaiKontrak === 'number' && (
                 <>
                   <span aria-hidden="true" className="text-slate-300">
@@ -364,51 +440,215 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
             </div>
           )}
 
-          {/* Status & Mekanisme Pencairan */}
-          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="workflow-status-pencairan"
-                className="block text-[11px] font-semibold text-slate-700 mb-1"
-              >
-                Tahapan Pencairan
-              </label>
-              <select
-                id="workflow-status-pencairan"
-                value={statusPencairan}
-                onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-              >
-                {STATUS_PENCAIRAN_LIST.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+          {/* Skema Pembayaran, Status & Termin Pencairan */}
+          <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label
+                  htmlFor="workflow-skema-pembayaran"
+                  className="block text-[11px] font-semibold text-slate-700 mb-1"
+                >
+                  Skema Pembayaran
+                </label>
+                <select
+                  id="workflow-skema-pembayaran"
+                  value={skemaPembayaran}
+                  onChange={(e) =>
+                    handleChangeSkemaPembayaran(e.target.value as SkemaPembayaran)
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  {SKEMA_PEMBAYARAN_LIST.map((sk) => (
+                    <option key={sk} value={sk}>
+                      {sk === 'Sekaligus' ? 'Sekaligus (Tanpa Termin)' : 'Bertahap (Termin)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {skemaPembayaran === 'Sekaligus' ? (
+                <div>
+                  <label
+                    htmlFor="workflow-status-pencairan"
+                    className="block text-[11px] font-semibold text-slate-700 mb-1"
+                  >
+                    Tahapan Pencairan
+                  </label>
+                  <select
+                    id="workflow-status-pencairan"
+                    value={statusPencairan}
+                    onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  >
+                    {STATUS_PENCAIRAN_LIST.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <div className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Ringkasan Termin Cair
+                  </div>
+                  <div className="px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 font-semibold text-xs tabular-nums">
+                    {terminSummary.summaryLabel} ({terminSummary.totalPersenCair}%)
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label
+                  htmlFor="workflow-mekanisme-pencairan"
+                  className="block text-[11px] font-semibold text-slate-700 mb-1"
+                >
+                  Mekanisme Pencairan
+                </label>
+                <select
+                  id="workflow-mekanisme-pencairan"
+                  value={mekanismePencairan}
+                  onChange={(e) =>
+                    setMekanismePencairan(e.target.value as MekanismePencairan | '')
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="">-- Pilih Mekanisme Pencairan --</option>
+                  {MEKANISME_PENCAIRAN_LIST.map((mek) => (
+                    <option key={mek} value={mek}>
+                      {mek}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label
-                htmlFor="workflow-mekanisme-pencairan"
-                className="block text-[11px] font-semibold text-slate-700 mb-1"
-              >
-                Mekanisme Pencairan
-              </label>
-              <select
-                id="workflow-mekanisme-pencairan"
-                value={mekanismePencairan}
-                onChange={(e) =>
-                  setMekanismePencairan(e.target.value as MekanismePencairan | '')
-                }
-                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-              >
-                <option value="">-- Pilih Mekanisme Pencairan --</option>
-                {MEKANISME_PENCAIRAN_LIST.map((mek) => (
-                  <option key={mek} value={mek}>
-                    {mek}
-                  </option>
-                ))}
-              </select>
-            </div>
+
+            {skemaPembayaran === 'Termin' && (
+              <div className="pt-2 border-t border-slate-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-slate-800">
+                    Rincian Termin Pembayaran ({terminPencairan.length} Termin)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddTermin}
+                    disabled={terminPencairan.length >= MAX_TERMIN_PEKERJAAN}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 text-white text-[11px] font-semibold"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Tambah Termin</span>
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {terminPencairan.map((tr, idx) => (
+                    <div
+                      key={tr.id}
+                      data-testid={`workflow-termin-row-${idx}`}
+                      className="p-2 rounded-lg border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                    >
+                      <div className="sm:col-span-3 flex items-center gap-1.5 min-w-0">
+                        <span className="w-5 h-5 rounded bg-indigo-700 text-white font-mono font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          aria-label={`Nama Termin ${idx + 1}`}
+                          value={tr.nama}
+                          onChange={(e) =>
+                            handleUpdateTermin(tr.id, { nama: e.target.value })
+                          }
+                          className="flex-1 min-w-0 px-2 py-1 rounded border border-slate-300 text-[11px] font-semibold text-slate-900"
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          aria-label={`Persen Termin ${idx + 1}`}
+                          value={tr.persentase ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            handleUpdateTermin(tr.id, {
+                              persentase: raw === '' ? undefined : Number(raw),
+                            });
+                          }}
+                          placeholder="%"
+                          className="w-full px-1.5 py-1 rounded border border-slate-300 font-mono text-[11px] text-slate-800"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          aria-label={`Nilai Termin ${idx + 1}`}
+                          value={
+                            typeof tr.nilaiRupiah === 'number'
+                              ? tr.nilaiRupiah.toLocaleString('id-ID')
+                              : ''
+                          }
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            handleUpdateTermin(tr.id, {
+                              nilaiRupiah: raw === '' ? undefined : parseRupiahInput(raw),
+                            });
+                          }}
+                          placeholder="Nilai Rp"
+                          className="w-full px-2 py-1 rounded border border-slate-300 font-mono text-[11px] text-slate-800"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <select
+                          aria-label={`Status Pencairan Termin ${idx + 1}`}
+                          value={tr.status}
+                          onChange={(e) =>
+                            handleUpdateTermin(tr.id, {
+                              status: e.target.value as StatusPencairan,
+                            })
+                          }
+                          className={`w-full px-2 py-1 rounded border text-[11px] font-semibold ${
+                            tr.status === 'Sudah'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-300 bg-white text-slate-800'
+                          }`}
+                        >
+                          {STATUS_PENCAIRAN_LIST.map((st) => (
+                            <option key={st} value={st}>
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-3">
+                        <input
+                          type="date"
+                          aria-label={`Tanggal Cair Termin ${idx + 1}`}
+                          title="Tanggal cair (opsional)"
+                          value={tr.tanggalCair || ''}
+                          onChange={(e) =>
+                            handleUpdateTermin(tr.id, {
+                              tanggalCair: e.target.value || undefined,
+                            })
+                          }
+                          className="w-full px-2 py-1 rounded border border-slate-300 font-mono text-[11px] text-slate-700"
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTermin(tr.id)}
+                          disabled={terminPencairan.length <= 1}
+                          aria-label={`Hapus termin ${idx + 1}`}
+                          className="p-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-35"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {tahapan.map((stage, idx) => {
             const isDone = stage.status === 'selesai';

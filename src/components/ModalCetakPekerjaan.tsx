@@ -14,6 +14,7 @@ import {
   PaketPekerjaan,
   PejabatConfig,
   SkemaKontrak,
+  SkemaPembayaran,
   StatusPencairan,
 } from '../types';
 import {
@@ -21,6 +22,7 @@ import {
   MEKANISME_PENCAIRAN_LIST,
   PaketOverallStatus,
   SKEMA_KONTRAK_LIST,
+  SKEMA_PEMBAYARAN_LIST,
   STATUS_PENCAIRAN_LIST,
   buildPekerjaanCsvContent,
   calculatePekerjaanStats,
@@ -33,6 +35,9 @@ import {
   getAvailableTahunAnggaran,
   getPaketTahunAnggaran,
   getTodayLocalIso,
+  summarizePaketByJenis,
+  summarizePaketByTahunAnggaran,
+  summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
 
 export type PrintPekerjaanMode = 'rekap' | 'kartu';
@@ -43,6 +48,7 @@ export interface ModalCetakPekerjaanInitialState {
   tahunAnggaran?: number | 'all';
   jenisPelaksanaan?: JenisPelaksanaan | 'all';
   skemaKontrak?: SkemaKontrak | 'all';
+  skemaPembayaran?: SkemaPembayaran | 'all';
   statusPencairan?: StatusPencairan | 'all';
   mekanismePencairan?: MekanismePencairan | 'all';
   status?: PaketOverallStatus | 'all';
@@ -74,11 +80,13 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   const [tahunAnggaran, setTahunAnggaran] = useState<number | 'all'>('all');
   const [jenisPelaksanaan, setJenisPelaksanaan] = useState<JenisPelaksanaan | 'all'>('all');
   const [skemaKontrak, setSkemaKontrak] = useState<SkemaKontrak | 'all'>('all');
+  const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran | 'all'>('all');
   const [statusPencairan, setStatusPencairan] = useState<StatusPencairan | 'all'>('all');
   const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | 'all'>('all');
   const [statusPaket, setStatusPaket] = useState<PaketOverallStatus | 'all'>('all');
   const [picNama, setPicNama] = useState<string | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [includeRingkasan, setIncludeRingkasan] = useState(true);
   const [includeTahapan, setIncludeTahapan] = useState(true);
   const [includeTtd, setIncludeTtd] = useState(true);
 
@@ -89,6 +97,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     setTahunAnggaran(initialState?.tahunAnggaran ?? 'all');
     setJenisPelaksanaan(initialState?.jenisPelaksanaan ?? 'all');
     setSkemaKontrak(initialState?.skemaKontrak ?? 'all');
+    setSkemaPembayaran(initialState?.skemaPembayaran ?? 'all');
     setStatusPencairan(initialState?.statusPencairan ?? 'all');
     setMekanismePencairan(initialState?.mekanismePencairan ?? 'all');
     setStatusPaket(initialState?.status ?? 'all');
@@ -107,6 +116,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
           tahunAnggaran,
           jenisPelaksanaan,
           skemaKontrak,
+          skemaPembayaran,
           statusPencairan,
           mekanismePencairan,
           status: statusPaket,
@@ -120,6 +130,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
       tahunAnggaran,
       jenisPelaksanaan,
       skemaKontrak,
+      skemaPembayaran,
       statusPencairan,
       mekanismePencairan,
       statusPaket,
@@ -142,6 +153,14 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     () => calculatePekerjaanStats(activeItems, todayIso),
     [activeItems, todayIso]
   );
+  const tahunSummaries = useMemo(
+    () => summarizePaketByTahunAnggaran(paketList, todayIso),
+    [paketList, todayIso]
+  );
+  const jenisSummaries = useMemo(
+    () => summarizePaketByJenis(filteredList, todayIso),
+    [filteredList, todayIso]
+  );
 
   if (!isOpen) return null;
 
@@ -149,6 +168,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     tahunAnggaran !== 'all' ||
     jenisPelaksanaan !== 'all' ||
     skemaKontrak !== 'all' ||
+    skemaPembayaran !== 'all' ||
     statusPencairan !== 'all' ||
     mekanismePencairan !== 'all' ||
     statusPaket !== 'all' ||
@@ -161,6 +181,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     setTahunAnggaran('all');
     setJenisPelaksanaan('all');
     setSkemaKontrak('all');
+    setSkemaPembayaran('all');
     setStatusPencairan('all');
     setMekanismePencairan('all');
     setStatusPaket('all');
@@ -169,28 +190,48 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   };
 
   const applyPreset = (
-    preset: 'all' | 'sudah_cair' | 'belum_cair' | 'terlambat' | 'selesai'
+    preset:
+      | 'all'
+      | 'sudah_cair'
+      | 'belum_cair'
+      | 'termin'
+      | 'sekaligus'
+      | 'lump_sum'
+      | 'waktu_penugasan'
+      | 'pengadaan_langsung'
+      | 'katalog'
+      | 'terlambat'
+      | 'selesai'
   ) => {
     setSelectedPaketId('all');
     setJenisPelaksanaan('all');
-    setSkemaKontrak('all');
     setMekanismePencairan('all');
     setPicNama('all');
     setSearchQuery('');
-    if (preset === 'all') {
-      setStatusPencairan('all');
-      setStatusPaket('all');
-    } else if (preset === 'sudah_cair') {
+    setSkemaKontrak('all');
+    setSkemaPembayaran('all');
+    setStatusPencairan('all');
+    setStatusPaket('all');
+
+    if (preset === 'sudah_cair') {
       setStatusPencairan('Sudah');
-      setStatusPaket('all');
     } else if (preset === 'belum_cair') {
       setStatusPencairan('Belum');
-      setStatusPaket('all');
+    } else if (preset === 'termin') {
+      setSkemaPembayaran('Termin');
+    } else if (preset === 'sekaligus') {
+      setSkemaPembayaran('Sekaligus');
+    } else if (preset === 'lump_sum') {
+      setSkemaKontrak('Lump Sum');
+    } else if (preset === 'waktu_penugasan') {
+      setSkemaKontrak('Waktu Penugasan');
+    } else if (preset === 'pengadaan_langsung') {
+      setSkemaKontrak('Pengadaan Langsung');
+    } else if (preset === 'katalog') {
+      setSkemaKontrak('Katalog');
     } else if (preset === 'terlambat') {
-      setStatusPencairan('all');
       setStatusPaket('terlambat');
     } else if (preset === 'selesai') {
-      setStatusPencairan('all');
       setStatusPaket('selesai');
     }
   };
@@ -198,7 +239,8 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   const activeFilterLabels: string[] = [];
   if (tahunAnggaran !== 'all') activeFilterLabels.push(`TA ${tahunAnggaran}`);
   if (jenisPelaksanaan !== 'all') activeFilterLabels.push(`Pelaksanaan: ${jenisPelaksanaan}`);
-  if (skemaKontrak !== 'all') activeFilterLabels.push(`Skema: ${skemaKontrak}`);
+  if (skemaKontrak !== 'all') activeFilterLabels.push(`Skema Kontrak: ${skemaKontrak}`);
+  if (skemaPembayaran !== 'all') activeFilterLabels.push(`Pembayaran: ${skemaPembayaran}`);
   if (statusPencairan !== 'all') activeFilterLabels.push(`Pencairan: ${statusPencairan}`);
   if (mekanismePencairan !== 'all') activeFilterLabels.push(`Mekanisme: ${mekanismePencairan}`);
   if (statusPaket !== 'all') {
@@ -328,49 +370,62 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
         </div>
 
         {/* Filter & Print Options Panel (hidden on print) */}
-        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-3 text-xs shrink-0 print:hidden">
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-2.5 text-xs shrink-0 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* TA Quick Selector Chips */}
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center gap-1 font-semibold text-slate-700 mr-1">
                 <Filter className="w-3.5 h-3.5 text-blue-600" />
-                <span>Filter Cepat Cetak:</span>
+                <span>Tahun Anggaran:</span>
               </span>
-              {(
-                [
-                  { id: 'all', label: 'Semua Paket' },
-                  { id: 'sudah_cair', label: 'Sudah Cair' },
-                  { id: 'belum_cair', label: 'Belum Cair' },
-                  { id: 'terlambat', label: 'Terlambat' },
-                  { id: 'selesai', label: 'Tuntas 100%' },
-                ] as const
-              ).map((p) => {
-                const active =
-                  (p.id === 'all' &&
-                    statusPencairan === 'all' &&
-                    statusPaket === 'all' &&
-                    selectedPaketId === 'all') ||
-                  (p.id === 'sudah_cair' && statusPencairan === 'Sudah') ||
-                  (p.id === 'belum_cair' && statusPencairan === 'Belum') ||
-                  (p.id === 'terlambat' && statusPaket === 'terlambat') ||
-                  (p.id === 'selesai' && statusPaket === 'selesai');
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPaketId('all');
+                  setTahunAnggaran('all');
+                }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                  tahunAnggaran === 'all'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                }`}
+              >
+                Semua TA ({paketList.length})
+              </button>
+              {availableYears.map((yr) => {
+                const count = paketList.filter((p) => getPaketTahunAnggaran(p) === yr).length;
                 return (
                   <button
-                    key={p.id}
+                    key={yr}
                     type="button"
-                    onClick={() => applyPreset(p.id)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
-                      active
-                        ? 'bg-slate-900 text-white border-slate-900'
+                    onClick={() => {
+                      setSelectedPaketId('all');
+                      setTahunAnggaran(yr);
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border transition-colors tabular-nums ${
+                      tahunAnggaran === yr
+                        ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                     }`}
                   >
-                    {p.label}
+                    TA {yr} ({count})
                   </button>
                 );
               })}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-[11px]">
+              {printMode === 'rekap' && (
+                <label className="inline-flex items-center gap-1.5 text-slate-700 font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeRingkasan}
+                    onChange={(e) => setIncludeRingkasan(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                  />
+                  <span>Ringkasan TA &amp; Jenis</span>
+                </label>
+              )}
               <label className="inline-flex items-center gap-1.5 text-slate-700 font-medium cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -402,7 +457,59 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          {/* Preset Quick Filter Chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-slate-600 mr-1">Filter Cepat:</span>
+            {(
+              [
+                { id: 'all', label: 'Semua Paket' },
+                { id: 'sudah_cair', label: 'Sudah Cair' },
+                { id: 'belum_cair', label: 'Belum Cair' },
+                { id: 'termin', label: 'Pembayaran Termin' },
+                { id: 'sekaligus', label: 'Sekaligus' },
+                { id: 'lump_sum', label: 'Lump Sum' },
+                { id: 'waktu_penugasan', label: 'Waktu Penugasan' },
+                { id: 'pengadaan_langsung', label: 'Pengadaan Langsung' },
+                { id: 'katalog', label: 'Katalog' },
+                { id: 'terlambat', label: 'Terlambat' },
+                { id: 'selesai', label: 'Tuntas 100%' },
+              ] as const
+            ).map((p) => {
+              const active =
+                (p.id === 'all' &&
+                  skemaKontrak === 'all' &&
+                  skemaPembayaran === 'all' &&
+                  statusPencairan === 'all' &&
+                  statusPaket === 'all' &&
+                  selectedPaketId === 'all') ||
+                (p.id === 'sudah_cair' && statusPencairan === 'Sudah') ||
+                (p.id === 'belum_cair' && statusPencairan === 'Belum') ||
+                (p.id === 'termin' && skemaPembayaran === 'Termin') ||
+                (p.id === 'sekaligus' && skemaPembayaran === 'Sekaligus') ||
+                (p.id === 'lump_sum' && skemaKontrak === 'Lump Sum') ||
+                (p.id === 'waktu_penugasan' && skemaKontrak === 'Waktu Penugasan') ||
+                (p.id === 'pengadaan_langsung' && skemaKontrak === 'Pengadaan Langsung') ||
+                (p.id === 'katalog' && skemaKontrak === 'Katalog') ||
+                (p.id === 'terlambat' && statusPaket === 'terlambat') ||
+                (p.id === 'selesai' && statusPaket === 'selesai');
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyPreset(p.id)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                    active
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2">
             <select
               aria-label="Filter cetak tahun anggaran"
               value={tahunAnggaran === 'all' ? 'all' : String(tahunAnggaran)}
@@ -450,6 +557,23 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
               {SKEMA_KONTRAK_LIST.map((s) => (
                 <option key={s} value={s}>
                   {s}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Filter cetak skema pembayaran"
+              value={skemaPembayaran}
+              onChange={(e) => {
+                setSelectedPaketId('all');
+                setSkemaPembayaran(e.target.value as SkemaPembayaran | 'all');
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-medium text-slate-800"
+            >
+              <option value="all">Semua Pembayaran</option>
+              {SKEMA_PEMBAYARAN_LIST.map((sp) => (
+                <option key={sp} value={sp}>
+                  {sp === 'Termin' ? 'Pembayaran Termin' : 'Sekaligus'}
                 </option>
               ))}
             </select>
@@ -597,64 +721,106 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                 </p>
               </div>
 
-              {/* Executive Financial & Disbursement Summary Box */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 border border-slate-800 divide-y sm:divide-y-0 sm:divide-x divide-slate-800 text-[11px]">
-                <div className="p-2.5">
-                  <div className="text-[10px] font-semibold uppercase text-slate-500">
-                    Jumlah Paket
-                  </div>
-                  <div className="text-sm font-bold font-mono tabular-nums mt-0.5">
-                    {stats.totalPaket} Paket
-                  </div>
-                  <div className="text-[10px] text-slate-600 tabular-nums">
-                    {stats.selesai} selesai · {stats.terlambat} terlambat
-                  </div>
+              {/* Ringkasan Lintas Tahun Anggaran & Jenis Pelaksanaan (gabungan dari Rekap Pekerjaan) */}
+              {includeRingkasan && (
+                <div className="space-y-4">
+                  {tahunAnggaran === 'all' && tahunSummaries.length > 0 && (
+                    <div className="space-y-1.5 print:break-inside-avoid">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-wide">
+                          Ringkasan Per Tahun Anggaran
+                        </h4>
+                        <span className="text-[10px] text-slate-500 print:hidden">
+                          Klik tahun untuk memfokuskan laporan
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto border border-slate-800">
+                        <table className="w-full text-left border-collapse text-[10px]">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-800 font-bold text-slate-900 uppercase">
+                              <th className="border-r border-slate-800 py-1.5 px-2.5">
+                                Tahun Anggaran
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Paket
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Tuntas
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Pagu Anggaran
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Nilai Kontrak
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Serapan (%)
+                              </th>
+                              <th className="py-1.5 px-2.5 text-right">Rata-Rata Progres</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-300">
+                            {tahunSummaries.map((row) => (
+                              <tr key={row.tahunAnggaran} className="hover:bg-blue-50/50">
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 font-mono font-bold tabular-nums">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTahunAnggaran(row.tahunAnggaran)}
+                                    className="text-blue-700 hover:underline font-mono font-bold print:no-underline print:text-slate-900"
+                                  >
+                                    TA {row.tahunAnggaran}
+                                  </button>
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono tabular-nums">
+                                  {row.totalPaket}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono font-semibold text-emerald-800 tabular-nums">
+                                  {row.selesai}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono font-semibold tabular-nums">
+                                  {formatRupiah(row.totalAnggaran)}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono text-emerald-800 tabular-nums">
+                                  {formatRupiah(row.totalNilaiKontrak)}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono font-semibold tabular-nums">
+                                  {row.persentaseRealisasiAnggaran}%
+                                </td>
+                                <td className="py-1.5 px-2.5 text-right font-mono font-semibold text-blue-800 tabular-nums">
+                                  {row.rataRataProgres}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {filteredList.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 print:grid-cols-2 print:break-inside-avoid">
+                      {jenisSummaries.map((item) => (
+                        <div
+                          key={item.jenisPelaksanaan}
+                          className="px-3 py-2 border border-slate-800 bg-slate-50/70 text-[10px] flex items-center justify-between gap-2"
+                        >
+                          <div>
+                            <div className="font-bold text-slate-900 uppercase">
+                              {item.jenisPelaksanaan}
+                            </div>
+                            <div className="text-slate-600 tabular-nums mt-0.5">
+                              {item.totalPaket} paket · {item.selesai} tuntas
+                            </div>
+                          </div>
+                          <div className="font-mono font-bold text-slate-900 tabular-nums text-right">
+                            {formatRupiah(item.totalAnggaran)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="p-2.5">
-                  <div className="text-[10px] font-semibold uppercase text-slate-500">
-                    Total Pagu Anggaran
-                  </div>
-                  <div className="text-sm font-bold font-mono tabular-nums mt-0.5">
-                    {formatRupiah(stats.totalAnggaran)}
-                  </div>
-                  <div className="text-[10px] text-slate-600 tabular-nums">
-                    Rata-rata progres {stats.rataRataProgres}%
-                  </div>
-                </div>
-                <div className="p-2.5">
-                  <div className="text-[10px] font-semibold uppercase text-slate-500">
-                    Total HPS
-                  </div>
-                  <div className="text-sm font-bold font-mono tabular-nums mt-0.5">
-                    {formatRupiah(stats.totalHps)}
-                  </div>
-                  <div className="text-[10px] text-slate-600 tabular-nums">
-                    Harga Perkiraan Sendiri
-                  </div>
-                </div>
-                <div className="p-2.5">
-                  <div className="text-[10px] font-semibold uppercase text-slate-500">
-                    Total Nilai Kontrak
-                  </div>
-                  <div className="text-sm font-bold font-mono tabular-nums text-emerald-800 mt-0.5">
-                    {formatRupiah(stats.totalNilaiKontrak)}
-                  </div>
-                  <div className="text-[10px] text-slate-600 font-mono tabular-nums">
-                    Selisih HPS: {formatRupiah(Math.max(0, stats.efisiensiKontrakVsHps))}
-                  </div>
-                </div>
-                <div className="p-2.5">
-                  <div className="text-[10px] font-semibold uppercase text-slate-500">
-                    Status Pencairan
-                  </div>
-                  <div className="text-sm font-bold font-mono tabular-nums mt-0.5">
-                    {stats.sudahCairCount} Sudah / {stats.belumCairCount} Belum
-                  </div>
-                  <div className="text-[10px] text-slate-600 tabular-nums">
-                    Tuntas: {formatRupiah(stats.anggaranSelesai)}
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Official Printable Table */}
               <div className="overflow-x-auto">
@@ -671,12 +837,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                         Pagu Anggaran
                       </th>
                       <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
-                        HPS
-                      </th>
-                      <th className="border border-slate-800 p-2 text-right whitespace-nowrap">
                         Nilai Kontrak
                       </th>
-                      <th className="border border-slate-800 p-2 whitespace-nowrap">Pencairan</th>
+                      <th className="border border-slate-800 p-2 whitespace-nowrap">
+                        Pencairan &amp; Termin
+                      </th>
                       <th className="border border-slate-800 p-2">Jadwal &amp; Durasi</th>
                       <th className="border border-slate-800 p-2">Progres</th>
                     </tr>
@@ -684,6 +849,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                   <tbody>
                     {activeItems.map((paket, idx) => {
                       const progress = computePaketProgress(paket, todayIso);
+                      const terminInfo = summarizeTerminPencairan(paket);
                       return (
                         <React.Fragment key={paket.id}>
                           <tr className="align-top print:break-inside-avoid">
@@ -728,20 +894,33 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               {formatRupiah(paket.nilaiAnggaran)}
                             </td>
                             <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
-                              {typeof paket.hps === 'number' ? formatRupiah(paket.hps) : '-'}
-                            </td>
-                            <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                               {typeof paket.nilaiKontrak === 'number'
                                 ? formatRupiah(paket.nilaiKontrak)
                                 : '-'}
                             </td>
-                            <td className="border border-slate-800 p-2 whitespace-nowrap">
-                              <div className="font-bold">{paket.statusPencairan || 'Belum'}</div>
-                              {paket.mekanismePencairan && (
-                                <div className="text-[9px] text-slate-600 mt-0.5">
-                                  {paket.mekanismePencairan}
-                                </div>
-                              )}
+                            <td className="border border-slate-800 p-2">
+                              <div className="font-bold whitespace-nowrap">
+                                {terminInfo.summaryLabel}
+                              </div>
+                              <div className="text-[9px] text-slate-700 mt-0.5">
+                                {terminInfo.skemaPembayaran}
+                                {paket.mekanismePencairan ? ` · ${paket.mekanismePencairan}` : ''}
+                              </div>
+                              {terminInfo.skemaPembayaran === 'Termin' &&
+                                Array.isArray(paket.terminPencairan) &&
+                                paket.terminPencairan.length > 0 && (
+                                  <div className="mt-1 space-y-0.5 text-[9px] text-slate-700">
+                                    {paket.terminPencairan.map((tr) => (
+                                      <div key={tr.id} className="leading-tight">
+                                        {tr.urutan}. {tr.nama}:{' '}
+                                        <span className="font-semibold">{tr.status}</span>
+                                        {typeof tr.persentase === 'number'
+                                          ? ` (${tr.persentase}%)`
+                                          : ''}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                             </td>
                             <td className="border border-slate-800 p-2 tabular-nums whitespace-nowrap">
                               <div>Mulai: {formatTanggalDisplay(paket.tanggalMulai)}</div>
@@ -761,7 +940,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                           </tr>
                           {includeTahapan && paket.tahapan.length > 0 && (
                             <tr className="bg-slate-50/70 print:break-inside-avoid">
-                              <td colSpan={10} className="border border-slate-800 px-3 py-1.5">
+                              <td colSpan={9} className="border border-slate-800 px-3 py-1.5">
                                 <span className="font-bold text-slate-800 mr-1.5">
                                   Alur Tahapan:
                                 </span>
@@ -791,9 +970,6 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                       </td>
                       <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                         {formatRupiah(stats.totalAnggaran)}
-                      </td>
-                      <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
-                        {stats.totalHps > 0 ? formatRupiah(stats.totalHps) : '-'}
                       </td>
                       <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                         {stats.totalNilaiKontrak > 0 ? formatRupiah(stats.totalNilaiKontrak) : '-'}
@@ -850,9 +1026,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
             <div className="space-y-8">
               {activeItems.map((paket, cardIdx) => {
                 const progress = computePaketProgress(paket, todayIso);
-                const hasEfisiensi =
-                  typeof paket.hps === 'number' && typeof paket.nilaiKontrak === 'number';
-                const selisihHps = hasEfisiensi ? (paket.hps as number) - (paket.nilaiKontrak as number) : 0;
+                const terminInfo = summarizeTerminPencairan(paket);
 
                 return (
                   <div
@@ -913,10 +1087,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                           </td>
                           <td className="border border-slate-800 p-2">{paket.subKegiatan}</td>
                           <td className="border border-slate-800 p-2 font-bold bg-slate-50">
-                            Harga Perkiraan Sendiri (HPS)
+                            Nilai Kontrak / Realisasi
                           </td>
-                          <td className="border border-slate-800 p-2 font-mono tabular-nums">
-                            {typeof paket.hps === 'number' ? formatRupiah(paket.hps) : '-'}
+                          <td className="border border-slate-800 p-2 font-mono font-bold text-emerald-800 tabular-nums">
+                            {typeof paket.nilaiKontrak === 'number'
+                              ? formatRupiah(paket.nilaiKontrak)
+                              : '-'}
                           </td>
                         </tr>
                         <tr>
@@ -927,17 +1103,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                             {paket.pekerjaan || '-'}
                           </td>
                           <td className="border border-slate-800 p-2 font-bold bg-slate-50">
-                            Nilai Kontrak / Realisasi
+                            Skema Pembayaran
                           </td>
-                          <td className="border border-slate-800 p-2 font-mono font-bold text-emerald-800 tabular-nums">
-                            {typeof paket.nilaiKontrak === 'number'
-                              ? formatRupiah(paket.nilaiKontrak)
-                              : '-'}
-                            {hasEfisiensi && (
-                              <span className="block text-[10px] font-normal text-slate-600">
-                                Selisih HPS: {formatRupiah(Math.max(0, selisihHps))}
-                              </span>
-                            )}
+                          <td className="border border-slate-800 p-2 font-semibold">
+                            {terminInfo.skemaPembayaran === 'Termin'
+                              ? `Bertahap (${terminInfo.totalTermin} Termin)`
+                              : 'Sekaligus (Tanpa Termin)'}
                           </td>
                         </tr>
                         <tr>
@@ -952,7 +1123,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                             Tahapan &amp; Mekanisme Pencairan
                           </td>
                           <td className="border border-slate-800 p-2 font-semibold">
-                            {paket.statusPencairan || 'Belum'}
+                            {terminInfo.summaryLabel}
                             {paket.mekanismePencairan ? ` · ${paket.mekanismePencairan}` : ''}
                           </td>
                         </tr>
@@ -983,6 +1154,68 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                         </tr>
                       </tbody>
                     </table>
+
+                    {/* Termin Breakdown Table (when Skema Pembayaran === 'Termin') */}
+                    {terminInfo.skemaPembayaran === 'Termin' &&
+                      Array.isArray(paket.terminPencairan) &&
+                      paket.terminPencairan.length > 0 && (
+                        <div className="space-y-1.5 print:break-inside-avoid">
+                          <div className="text-[11px] font-bold uppercase text-slate-900">
+                            Rincian Termin Pembayaran ({terminInfo.sudahCount}/
+                            {terminInfo.totalTermin} Termin Cair)
+                          </div>
+                          <table className="w-full border-collapse border border-slate-800 text-[10px]">
+                            <thead>
+                              <tr className="bg-slate-100 font-bold uppercase">
+                                <th className="border border-slate-800 p-1.5 text-center w-8">No.</th>
+                                <th className="border border-slate-800 p-1.5">Nama Termin</th>
+                                <th className="border border-slate-800 p-1.5 text-right w-20">
+                                  Persentase
+                                </th>
+                                <th className="border border-slate-800 p-1.5 text-right w-32">
+                                  Nilai (Rp)
+                                </th>
+                                <th className="border border-slate-800 p-1.5 text-center w-28">
+                                  Tanggal Cair
+                                </th>
+                                <th className="border border-slate-800 p-1.5 text-center w-24">
+                                  Status
+                                </th>
+                                <th className="border border-slate-800 p-1.5">Keterangan</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paket.terminPencairan.map((tr) => (
+                                <tr key={tr.id}>
+                                  <td className="border border-slate-800 p-1.5 text-center font-mono">
+                                    {tr.urutan}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 font-medium">
+                                    {tr.nama}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
+                                    {typeof tr.persentase === 'number' ? `${tr.persentase}%` : '-'}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
+                                    {typeof tr.nilaiRupiah === 'number'
+                                      ? formatRupiah(tr.nilaiRupiah)
+                                      : '-'}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 text-center font-mono">
+                                    {tr.tanggalCair ? formatTanggalDdMmYyyy(tr.tanggalCair) : '-'}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 text-center font-bold">
+                                    {tr.status}
+                                  </td>
+                                  <td className="border border-slate-800 p-1.5 text-slate-700">
+                                    {tr.catatan || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
 
                     {/* Stage Breakdown Table */}
                     {includeTahapan && (

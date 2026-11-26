@@ -13,10 +13,18 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { JenisPelaksanaan, PaketPekerjaan, Personel, Role, StatusPencairan } from '../types';
+import {
+  JenisPelaksanaan,
+  PaketPekerjaan,
+  Personel,
+  Role,
+  SkemaPembayaran,
+  StatusPencairan,
+} from '../types';
 import {
   JENIS_PELAKSANAAN_LIST,
   PaketOverallStatus,
+  SKEMA_PEMBAYARAN_LIST,
   STATUS_PENCAIRAN_LIST,
   buildPekerjaanCsvContent,
   calculatePekerjaanStats,
@@ -27,6 +35,7 @@ import {
   getAvailableTahunAnggaran,
   getPaketTahunAnggaran,
   getTodayLocalIso,
+  summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
 
 interface PekerjaanViewProps {
@@ -41,6 +50,7 @@ interface PekerjaanViewProps {
     selectedPaketId?: string;
     tahunAnggaran: number | 'all';
     jenisPelaksanaan: JenisPelaksanaan | 'all';
+    skemaPembayaran?: SkemaPembayaran | 'all';
     statusPencairan: StatusPencairan | 'all';
     status: PaketOverallStatus | 'all';
     searchQuery: string;
@@ -62,6 +72,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTahun, setSelectedTahun] = useState<number | 'all'>('all');
   const [selectedJenis, setSelectedJenis] = useState<JenisPelaksanaan | 'all'>('all');
+  const [selectedSkemaPembayaran, setSelectedSkemaPembayaran] = useState<SkemaPembayaran | 'all'>('all');
   const [selectedPencairan, setSelectedPencairan] = useState<StatusPencairan | 'all'>('all');
   const [selectedStatus, setSelectedStatus] = useState<PaketOverallStatus | 'all'>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -85,12 +96,22 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           searchQuery,
           tahunAnggaran: selectedTahun,
           jenisPelaksanaan: selectedJenis,
+          skemaPembayaran: selectedSkemaPembayaran,
           statusPencairan: selectedPencairan,
           status: selectedStatus,
         },
         todayIso
       ),
-    [paketList, searchQuery, selectedTahun, selectedJenis, selectedPencairan, selectedStatus, todayIso]
+    [
+      paketList,
+      searchQuery,
+      selectedTahun,
+      selectedJenis,
+      selectedSkemaPembayaran,
+      selectedPencairan,
+      selectedStatus,
+      todayIso,
+    ]
   );
 
   const handleExportCsv = () => {
@@ -145,6 +166,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                 onOpenPrint({
                   tahunAnggaran: selectedTahun,
                   jenisPelaksanaan: selectedJenis,
+                  skemaPembayaran: selectedSkemaPembayaran,
                   statusPencairan: selectedPencairan,
                   status: selectedStatus,
                   searchQuery,
@@ -191,9 +213,9 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
             <div>
               {stats.totalPaket} paket terdaftar · Rata-rata progres {stats.rataRataProgres}%
             </div>
-            {(stats.totalHps > 0 || stats.totalNilaiKontrak > 0) && (
-              <div className="font-mono text-[10px] text-slate-600">
-                HPS: {formatRupiah(stats.totalHps)} · Kontrak: {formatRupiah(stats.totalNilaiKontrak)}
+            {stats.totalNilaiKontrak > 0 && (
+              <div className="font-mono text-[10px] text-emerald-700">
+                Total Kontrak: {formatRupiah(stats.totalNilaiKontrak)}
               </div>
             )}
           </div>
@@ -285,6 +307,20 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           </select>
 
           <select
+            aria-label="Filter skema pembayaran"
+            value={selectedSkemaPembayaran}
+            onChange={(e) => setSelectedSkemaPembayaran(e.target.value as SkemaPembayaran | 'all')}
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="all">Semua Skema Bayar</option>
+            {SKEMA_PEMBAYARAN_LIST.map((sk) => (
+              <option key={sk} value={sk}>
+                {sk === 'Sekaligus' ? 'Sekaligus' : 'Termin'}
+              </option>
+            ))}
+          </select>
+
+          <select
             aria-label="Filter tahapan pencairan"
             value={selectedPencairan}
             onChange={(e) => setSelectedPencairan(e.target.value as StatusPencairan | 'all')}
@@ -361,6 +397,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               setSearchQuery('');
               setSelectedTahun('all');
               setSelectedJenis('all');
+              setSelectedSkemaPembayaran('all');
               setSelectedPencairan('all');
               setSelectedStatus('all');
             }}
@@ -383,9 +420,8 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                     </th>
                     <th className="py-2.5 px-2">Pelaksanaan &amp; Kontrak</th>
                     <th className="py-2.5 px-2 text-right whitespace-nowrap">Pagu Anggaran</th>
-                    <th className="py-2.5 px-2 text-right whitespace-nowrap">HPS</th>
                     <th className="py-2.5 px-2 text-right whitespace-nowrap">Nilai Kontrak</th>
-                    <th className="py-2.5 px-2 whitespace-nowrap">Pencairan</th>
+                    <th className="py-2.5 px-2 whitespace-nowrap">Pencairan &amp; Termin</th>
                     <th className="py-2.5 px-2 whitespace-nowrap">Jadwal &amp; Durasi</th>
                     <th className="py-2.5 px-2 w-[165px]">Progres &amp; Alur Tahapan</th>
                     <th className="py-2.5 pl-2 pr-3 text-right whitespace-nowrap">Aksi</th>
@@ -394,6 +430,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                 <tbody className="divide-y divide-slate-200">
                   {filteredList.map((paket) => {
                     const progress = computePaketProgress(paket, todayIso);
+                    const terminSummary = summarizeTerminPencairan(paket);
                     const statusColor =
                       progress.overallStatus === 'selesai'
                         ? 'text-emerald-700'
@@ -467,14 +504,6 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           {formatRupiah(paket.nilaiAnggaran)}
                         </td>
 
-                        <td className="py-3 px-2 text-right font-mono text-slate-700 tabular-nums whitespace-nowrap">
-                          {typeof paket.hps === 'number' ? (
-                            formatRupiah(paket.hps)
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-
                         <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
                           {typeof paket.nilaiKontrak === 'number' ? (
                             <span className="font-semibold text-emerald-700">
@@ -485,18 +514,45 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           )}
                         </td>
 
-                        <td className="py-3 px-2 min-w-[78px] max-w-[110px]">
+                        <td className="py-3 px-2 min-w-[110px] max-w-[165px]">
                           <div
                             className={`text-[11px] font-semibold ${
-                              paket.statusPencairan === 'Sudah'
+                              terminSummary.isAllSudah
                                 ? 'text-emerald-700'
+                                : terminSummary.isPartial
+                                ? 'text-blue-700'
                                 : 'text-amber-700'
                             }`}
                           >
-                            {paket.statusPencairan || 'Belum'}
+                            {terminSummary.skemaPembayaran === 'Termin'
+                              ? terminSummary.summaryLabel
+                              : terminSummary.compactLabel}
                           </div>
+                          {terminSummary.skemaPembayaran === 'Termin' &&
+                            paket.terminPencairan &&
+                            paket.terminPencairan.length > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                {paket.terminPencairan.map((tr) => (
+                                  <div
+                                    key={tr.id}
+                                    className="text-[10px] text-slate-600 flex items-center justify-between gap-1.5"
+                                  >
+                                    <span className="truncate">{tr.nama}</span>
+                                    <span
+                                      className={`font-semibold shrink-0 ${
+                                        tr.status === 'Sudah'
+                                          ? 'text-emerald-700'
+                                          : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {tr.status}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           {paket.mekanismePencairan && (
-                            <div className="text-[10px] text-slate-600 mt-0.5 leading-tight">
+                            <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">
                               {paket.mekanismePencairan}
                             </div>
                           )}
@@ -633,6 +689,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                                       selectedPaketId: paket.id,
                                       tahunAnggaran: selectedTahun,
                                       jenisPelaksanaan: selectedJenis,
+                                      skemaPembayaran: selectedSkemaPembayaran,
                                       statusPencairan: selectedPencairan,
                                       status: selectedStatus,
                                       searchQuery,
@@ -670,6 +727,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           <div className="lg:hidden space-y-3">
             {filteredList.map((paket) => {
               const progress = computePaketProgress(paket, todayIso);
+              const terminSummary = summarizeTerminPencairan(paket);
               return (
                 <div
                   key={paket.id}
@@ -712,12 +770,6 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                     <span className="font-mono font-bold text-slate-900 tabular-nums">
                       Pagu: {formatRupiah(paket.nilaiAnggaran)}
                     </span>
-                    {typeof paket.hps === 'number' && (
-                      <>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono tabular-nums">HPS: {formatRupiah(paket.hps)}</span>
-                      </>
-                    )}
                     {typeof paket.nilaiKontrak === 'number' && (
                       <>
                         <span aria-hidden="true">·</span>
@@ -734,10 +786,14 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                     <span aria-hidden="true">·</span>
                     <span
                       className={`font-semibold ${
-                        paket.statusPencairan === 'Sudah' ? 'text-emerald-700' : 'text-amber-700'
+                        terminSummary.isAllSudah
+                          ? 'text-emerald-700'
+                          : terminSummary.isPartial
+                          ? 'text-blue-700'
+                          : 'text-amber-700'
                       }`}
                     >
-                      Pencairan: {paket.statusPencairan || 'Belum'}
+                      Pencairan: {terminSummary.summaryLabel}
                       {paket.mekanismePencairan ? ` (${paket.mekanismePencairan})` : ''}
                     </span>
                     {paket.kodeRup && (
@@ -820,6 +876,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                                 selectedPaketId: paket.id,
                                 tahunAnggaran: selectedTahun,
                                 jenisPelaksanaan: selectedJenis,
+                                skemaPembayaran: selectedSkemaPembayaran,
                                 statusPencairan: selectedPencairan,
                                 status: selectedStatus,
                                 searchQuery,

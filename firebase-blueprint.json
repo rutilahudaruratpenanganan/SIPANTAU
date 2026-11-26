@@ -553,8 +553,8 @@
         },
         "skemaKontrak": {
           "type": "string",
-          "enum": ["Lump Sum", "Waktu Penugasan"],
-          "description": "Skema kontrak pengadaan (Lump Sum atau Waktu Penugasan)"
+          "enum": ["Lump Sum", "Waktu Penugasan", "Pengadaan Langsung", "Katalog"],
+          "description": "Skema kontrak pengadaan (Lump Sum, Waktu Penugasan, Pengadaan Langsung, atau Katalog)"
         },
         "tahunAnggaran": {
           "type": "integer",
@@ -566,7 +566,7 @@
         },
         "hps": {
           "type": "number",
-          "description": "Harga Perkiraan Sendiri (HPS) dalam Rupiah (Rp)"
+          "description": "Field historis opsional untuk kompatibilitas dokumen lama"
         },
         "nilaiKontrak": {
           "type": "number",
@@ -590,6 +590,15 @@
         "tanggalSelesai": {
           "type": "string",
           "maxLength": 40
+        },
+        "skemaPembayaran": {
+          "type": "string",
+          "enum": ["Sekaligus", "Termin"],
+          "description": "Pilihan skema pembayaran pencairan (Sekaligus atau Termin)"
+        },
+        "terminPencairan": {
+          "type": "array",
+          "description": "Daftar 1-20 termin pembayaran bila skemaPembayaran = Termin"
         },
         "statusPencairan": {
           "type": "string",

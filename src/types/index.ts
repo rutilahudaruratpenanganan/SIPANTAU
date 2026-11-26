@@ -181,7 +181,25 @@ export type MekanismePencairan =
   | 'Ganti Uang Persediaan (GU)'
   | 'Tambahan Uang Persediaan (TU)';
 
-export type SkemaKontrak = 'Lump Sum' | 'Waktu Penugasan';
+export type SkemaKontrak =
+  | 'Lump Sum'
+  | 'Waktu Penugasan'
+  | 'Pengadaan Langsung'
+  | 'Katalog';
+
+export type SkemaPembayaran = 'Sekaligus' | 'Termin';
+
+export interface TerminPekerjaan {
+  id: string;
+  urutan: number;
+  nama: string;
+  persentase?: number;
+  nilaiRupiah?: number;
+  status: StatusPencairan;
+  tanggalTarget?: string; // YYYY-MM-DD
+  tanggalCair?: string; // YYYY-MM-DD
+  catatan?: string;
+}
 
 export interface TahapPekerjaan {
   id: string;
@@ -204,12 +222,14 @@ export interface PaketPekerjaan {
   skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number; // Tahun anggaran kegiatan (mis. 2026)
   nilaiAnggaran: number; // Pagu Anggaran (Rp)
-  hps?: number; // Harga Perkiraan Sendiri (Rp)
+  hps?: number; // Legacy optional field for backward compatibility
   nilaiKontrak?: number; // Nilai Kontrak / Realisasi (Rp)
   tanggalMulai: string; // YYYY-MM-DD
   durasiHariKerja?: number; // Jumlah hari kalender (Senin-Minggu)
   tenggatWaktu: string; // YYYY-MM-DD (Tanggal selesai rencana otomatis)
   tanggalSelesai?: string; // YYYY-MM-DD (Tanggal tuntas aktual)
+  skemaPembayaran?: SkemaPembayaran;
+  terminPencairan?: TerminPekerjaan[];
   statusPencairan?: StatusPencairan;
   mekanismePencairan?: MekanismePencairan;
   kodeRup?: string;
