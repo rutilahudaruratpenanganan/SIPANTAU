@@ -57,7 +57,7 @@ export const ModalLembarDisposisi: React.FC<ModalLembarDisposisiProps> = ({
         </div>
 
         {/* Printable Official Sheet */}
-        <div className="p-4 sm:p-10 print:p-6 overflow-y-auto flex-1 font-serif text-slate-900 text-xs">
+        <div className="p-4 sm:p-10 print:p-6 overflow-y-auto flex-1 font-sans text-slate-900 text-xs">
           
           {/* KOP RESMI */}
           <div className="text-center border-b-4 border-double border-slate-900 pb-4 mb-4">

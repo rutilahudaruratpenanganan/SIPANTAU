@@ -586,7 +586,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                 setSelectedPaketId('all');
                 setTahunAnggaran(e.target.value === 'all' ? 'all' : Number(e.target.value));
               }}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-medium text-slate-800 font-mono tabular-nums"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-medium text-slate-800 tabular-nums"
             >
               <option value="all">Semua TA</option>
               {availableYears.map((yr) => (

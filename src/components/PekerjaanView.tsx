@@ -472,7 +472,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                 }
               }
             }}
-            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
           >
             <option value="all">Semua Tahun Anggaran</option>
             {availableYears.map((yr) => (
