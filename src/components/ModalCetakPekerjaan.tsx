@@ -39,6 +39,7 @@ import {
   getTodayLocalIso,
   resolvePaketPaguInfo,
   resolveTerminNominal,
+  summarizeMakananMinuman,
   summarizePaketByJenis,
   summarizePaketByTahunAnggaran,
   summarizeRekeningAnggaran,
@@ -995,6 +996,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                       const progress = computePaketProgress(paket, todayIso);
                       const terminInfo = summarizeTerminPencairan(paket);
                       const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+                      const maminInfo = summarizeMakananMinuman({
+                        ...paket,
+                        kodeRekening: paguInfo.kodeRekening || paket.kodeRekening,
+                        namaRekening: paguInfo.namaRekening || paket.namaRekening,
+                      });
                       const sharedCount = sharedCountByDedupeKey.get(paguInfo.dedupeKey) || 1;
                       return (
                         <React.Fragment key={paket.id}>
@@ -1019,6 +1025,28 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                                   {paket.pekerjaan}
                                 </div>
                               )}
+                              {maminInfo.isActive &&
+                                (maminInfo.jumlahPax !== undefined ||
+                                  maminInfo.hargaPerPax !== undefined ||
+                                  maminInfo.hargaRealisasi !== undefined) && (
+                                  <div className="mt-1 px-1.5 py-0.5 bg-amber-50 border border-amber-300 text-[9px] text-slate-900 tabular-nums">
+                                    <span className="font-bold text-amber-900">Mamin (At Cost):</span>{' '}
+                                    {maminInfo.jumlahPax !== undefined &&
+                                    maminInfo.hargaPerPax !== undefined
+                                      ? `${maminInfo.jumlahPax.toLocaleString('id-ID')} pax × ${formatRupiah(maminInfo.hargaPerPax)}/pax`
+                                      : ''}
+                                    {maminInfo.estimasiTotal !== undefined
+                                      ? ` · Est. ${formatRupiah(maminInfo.estimasiTotal)}`
+                                      : ''}
+                                    {maminInfo.hargaRealisasi !== undefined
+                                      ? ` · Realisasi: ${formatRupiah(maminInfo.hargaRealisasi)}${
+                                          maminInfo.realisasiPerPax !== undefined
+                                            ? ` (${formatRupiah(maminInfo.realisasiPerPax)}/pax)`
+                                            : ''
+                                        }`
+                                      : ''}
+                                  </div>
+                                )}
                               {(paket.kodeRup || paket.nomorKontrak || paket.penyedia) && (
                                 <div className="text-[9px] text-slate-600 font-mono mt-0.5">
                                   {[
@@ -1231,6 +1259,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                 const progress = computePaketProgress(paket, todayIso);
                 const terminInfo = summarizeTerminPencairan(paket);
                 const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+                const maminInfo = summarizeMakananMinuman({
+                  ...paket,
+                  kodeRekening: paguInfo.kodeRekening || paket.kodeRekening,
+                  namaRekening: paguInfo.namaRekening || paket.namaRekening,
+                });
 
                 return (
                   <div
@@ -1327,6 +1360,38 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               : 'Sekaligus (Tanpa Termin)'}
                           </td>
                         </tr>
+                        {maminInfo.isActive &&
+                          (maminInfo.jumlahPax !== undefined ||
+                            maminInfo.hargaPerPax !== undefined ||
+                            maminInfo.hargaRealisasi !== undefined) && (
+                            <tr>
+                              <td className="border border-slate-800 p-2 font-bold bg-amber-50">
+                                Rincian Makanan &amp; Minuman (SHS)
+                              </td>
+                              <td className="border border-slate-800 p-2 font-medium tabular-nums">
+                                {maminInfo.jumlahPax !== undefined &&
+                                maminInfo.hargaPerPax !== undefined
+                                  ? `${maminInfo.jumlahPax.toLocaleString('id-ID')} pax × ${formatRupiah(maminInfo.hargaPerPax)}/pax${
+                                      maminInfo.estimasiTotal !== undefined
+                                        ? ` = ${formatRupiah(maminInfo.estimasiTotal)}`
+                                        : ''
+                                    }`
+                                  : '-'}
+                              </td>
+                              <td className="border border-slate-800 p-2 font-bold bg-amber-50">
+                                Harga Realisasi (At Cost)
+                              </td>
+                              <td className="border border-slate-800 p-2 font-bold text-emerald-800 tabular-nums">
+                                {maminInfo.hargaRealisasi !== undefined
+                                  ? `${formatRupiah(maminInfo.hargaRealisasi)}${
+                                      maminInfo.realisasiPerPax !== undefined
+                                        ? ` (${formatRupiah(maminInfo.realisasiPerPax)}/pax)`
+                                        : ''
+                                    }`
+                                  : '-'}
+                              </td>
+                            </tr>
+                          )}
                         <tr>
                           <td className="border border-slate-800 p-2 font-bold bg-slate-50">
                             Pelaksanaan &amp; Skema

@@ -1596,6 +1596,12 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
     nilaiAnggaran: typeof data.nilaiAnggaran === 'number' ? data.nilaiAnggaran : 0,
     hps: typeof data.hps === 'number' ? data.hps : undefined,
     nilaiKontrak: typeof data.nilaiKontrak === 'number' ? data.nilaiKontrak : undefined,
+    isMakananMinuman:
+      typeof data.isMakananMinuman === 'boolean' ? data.isMakananMinuman : undefined,
+    jumlahPax: typeof data.jumlahPax === 'number' ? data.jumlahPax : undefined,
+    hargaPerPax: typeof data.hargaPerPax === 'number' ? data.hargaPerPax : undefined,
+    hargaRealisasi:
+      typeof data.hargaRealisasi === 'number' ? data.hargaRealisasi : undefined,
     tanggalMulai: (data.tanggalMulai as string) || '',
     durasiHariKerja:
       typeof data.durasiHariKerja === 'number' ? data.durasiHariKerja : undefined,
@@ -1896,6 +1902,10 @@ export interface PaketPekerjaanMutationPayload {
   nilaiAnggaran: number;
   hps?: number;
   nilaiKontrak?: number;
+  isMakananMinuman?: boolean;
+  jumlahPax?: number;
+  hargaPerPax?: number;
+  hargaRealisasi?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
@@ -1927,6 +1937,22 @@ export async function createPaketPekerjaanDb(
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
   const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
+  const cleanIsMamin =
+    typeof input.isMakananMinuman === 'boolean' ? input.isMakananMinuman : undefined;
+  const cleanJumlahPax =
+    cleanIsMamin !== false &&
+    typeof input.jumlahPax === 'number' &&
+    Number.isFinite(input.jumlahPax)
+      ? Math.max(1, Math.min(1_000_000, Math.round(input.jumlahPax)))
+      : undefined;
+  const cleanHargaPerPaxRaw =
+    cleanIsMamin !== false ? clampMoney(input.hargaPerPax) : undefined;
+  const cleanHargaPerPax =
+    cleanHargaPerPaxRaw !== undefined
+      ? Math.min(1_000_000_000, cleanHargaPerPaxRaw)
+      : undefined;
+  const cleanHargaRealisasi =
+    cleanIsMamin !== false ? clampMoney(input.hargaRealisasi) : undefined;
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
       ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
@@ -1974,6 +2000,18 @@ export async function createPaketPekerjaanDb(
   }
   if (cleanNilaiKontrak !== undefined) {
     payload.nilaiKontrak = cleanNilaiKontrak;
+  }
+  if (cleanIsMamin !== undefined) {
+    payload.isMakananMinuman = cleanIsMamin;
+  }
+  if (cleanJumlahPax !== undefined) {
+    payload.jumlahPax = cleanJumlahPax;
+  }
+  if (cleanHargaPerPax !== undefined) {
+    payload.hargaPerPax = cleanHargaPerPax;
+  }
+  if (cleanHargaRealisasi !== undefined) {
+    payload.hargaRealisasi = cleanHargaRealisasi;
   }
   if (cleanDurasi !== undefined) {
     payload.durasiHariKerja = cleanDurasi;
@@ -2032,6 +2070,22 @@ export async function updatePaketPekerjaanDb(
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
   const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
+  const cleanIsMamin =
+    typeof input.isMakananMinuman === 'boolean' ? input.isMakananMinuman : undefined;
+  const cleanJumlahPax =
+    cleanIsMamin !== false &&
+    typeof input.jumlahPax === 'number' &&
+    Number.isFinite(input.jumlahPax)
+      ? Math.max(1, Math.min(1_000_000, Math.round(input.jumlahPax)))
+      : undefined;
+  const cleanHargaPerPaxRaw =
+    cleanIsMamin !== false ? clampMoney(input.hargaPerPax) : undefined;
+  const cleanHargaPerPax =
+    cleanHargaPerPaxRaw !== undefined
+      ? Math.min(1_000_000_000, cleanHargaPerPaxRaw)
+      : undefined;
+  const cleanHargaRealisasi =
+    cleanIsMamin !== false ? clampMoney(input.hargaRealisasi) : undefined;
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
       ? Math.max(1, Math.min(1825, Math.round(input.durasiHariKerja)))
@@ -2067,6 +2121,11 @@ export async function updatePaketPekerjaanDb(
     nilaiAnggaran: cleanBudget,
     hps: cleanHps !== undefined ? cleanHps : deleteField(),
     nilaiKontrak: cleanNilaiKontrak !== undefined ? cleanNilaiKontrak : deleteField(),
+    isMakananMinuman: cleanIsMamin !== undefined ? cleanIsMamin : deleteField(),
+    jumlahPax: cleanJumlahPax !== undefined ? cleanJumlahPax : deleteField(),
+    hargaPerPax: cleanHargaPerPax !== undefined ? cleanHargaPerPax : deleteField(),
+    hargaRealisasi:
+      cleanHargaRealisasi !== undefined ? cleanHargaRealisasi : deleteField(),
     tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
     durasiHariKerja: cleanDurasi !== undefined ? cleanDurasi : deleteField(),
     tenggatWaktu: clampStr(input.tenggatWaktu, LIMITS.DATE_STR),

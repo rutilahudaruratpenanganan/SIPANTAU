@@ -30,6 +30,152 @@ export const SKEMA_PEMBAYARAN_LIST: SkemaPembayaran[] = [
 
 export const MAX_TERMIN_PEKERJAAN = 20;
 
+export const MAX_JUMLAH_PAX = 1_000_000;
+export const MAX_HARGA_PER_PAX = 1_000_000_000;
+export const MAX_HARGA_REALISASI = 1_000_000_000_000;
+
+const MAKANAN_MINUMAN_TEXT_REGEX =
+  /makanan\s*(?:dan|&)?\s*minuman|makan\s*(?:dan|&)?\s*minum|\bmamin\b|kudapan|snack\s*(?:rapat|kegiatan|tamu|peserta)?|jamuan\s*(?:tamu|rapat)?|konsumsi\s*(?:rapat|kegiatan|lapangan|peserta)/i;
+
+// SIPD Kode Rekening Belanja Makanan dan Minuman:
+// 5.1.02.01.01.0052..0058 (baku SIPD) atau format Pemda 3-5 digit seperti 5.1.02.01.001.00052..00058
+const MAKANAN_MINUMAN_REKENING_CODE_REGEX = /^5\.1\.02\.01\.0*1\.0*5[2-8](?:$|\.)/;
+
+export function isKodeRekeningMakananMinuman(
+  kodeRekening?: string,
+  uraian?: string
+): boolean {
+  const cleanKode = (kodeRekening || '').trim().replace(/\s+/g, '');
+  if (cleanKode && MAKANAN_MINUMAN_REKENING_CODE_REGEX.test(cleanKode)) {
+    return true;
+  }
+  return Boolean(uraian && MAKANAN_MINUMAN_TEXT_REGEX.test(uraian));
+}
+
+export function isTextMakananMinuman(...texts: Array<string | undefined>): boolean {
+  return texts.some((txt) => Boolean(txt && MAKANAN_MINUMAN_TEXT_REGEX.test(txt)));
+}
+
+export function isPaketMakananMinuman(
+  paket: Pick<
+    PaketPekerjaan,
+    | 'isMakananMinuman'
+    | 'jumlahPax'
+    | 'hargaPerPax'
+    | 'hargaRealisasi'
+    | 'kodeRekening'
+    | 'namaRekening'
+    | 'namaKegiatan'
+    | 'subKegiatan'
+    | 'pekerjaan'
+  >
+): boolean {
+  if (paket.isMakananMinuman === true) return true;
+  if (paket.isMakananMinuman === false) return false;
+  if (
+    typeof paket.jumlahPax === 'number' ||
+    typeof paket.hargaPerPax === 'number' ||
+    typeof paket.hargaRealisasi === 'number'
+  ) {
+    return true;
+  }
+  return (
+    isKodeRekeningMakananMinuman(paket.kodeRekening, paket.namaRekening) ||
+    isTextMakananMinuman(paket.namaKegiatan, paket.subKegiatan, paket.pekerjaan)
+  );
+}
+
+export interface MakananMinumanSummary {
+  isActive: boolean;
+  jumlahPax?: number;
+  hargaPerPax?: number;
+  hargaRealisasi?: number;
+  estimasiTotal?: number;
+  realisasiPerPax?: number;
+  selisihEstimasi?: number;
+  melebihiEstimasi: boolean;
+  melebihiHargaPerPax: boolean;
+  efisiensiPersen?: number;
+}
+
+/**
+ * Menghitung ringkasan rincian Belanja Makanan & Minuman berdasarkan ketentuan:
+ * - Perpres No. 33 Tahun 2020 (SHS sebagai batas tertinggi Harga/Pax)
+ * - Prinsip At Cost (Harga Realisasi sesuai bukti kuitansi/nota & daftar hadir riil)
+ */
+export function summarizeMakananMinuman(
+  paket: Pick<
+    PaketPekerjaan,
+    | 'isMakananMinuman'
+    | 'jumlahPax'
+    | 'hargaPerPax'
+    | 'hargaRealisasi'
+    | 'kodeRekening'
+    | 'namaRekening'
+    | 'namaKegiatan'
+    | 'subKegiatan'
+    | 'pekerjaan'
+  >
+): MakananMinumanSummary {
+  const isActive = isPaketMakananMinuman(paket);
+  const jumlahPax =
+    typeof paket.jumlahPax === 'number' && Number.isFinite(paket.jumlahPax) && paket.jumlahPax > 0
+      ? Math.round(paket.jumlahPax)
+      : undefined;
+  const hargaPerPax =
+    typeof paket.hargaPerPax === 'number' &&
+    Number.isFinite(paket.hargaPerPax) &&
+    paket.hargaPerPax >= 0
+      ? Math.round(paket.hargaPerPax)
+      : undefined;
+  const hargaRealisasi =
+    typeof paket.hargaRealisasi === 'number' &&
+    Number.isFinite(paket.hargaRealisasi) &&
+    paket.hargaRealisasi >= 0
+      ? Math.round(paket.hargaRealisasi)
+      : undefined;
+
+  const estimasiTotal =
+    jumlahPax !== undefined && hargaPerPax !== undefined
+      ? Math.round(jumlahPax * hargaPerPax)
+      : undefined;
+
+  const realisasiPerPax =
+    jumlahPax !== undefined && jumlahPax > 0 && hargaRealisasi !== undefined
+      ? Math.round(hargaRealisasi / jumlahPax)
+      : undefined;
+
+  const selisihEstimasi =
+    estimasiTotal !== undefined && hargaRealisasi !== undefined
+      ? estimasiTotal - hargaRealisasi
+      : undefined;
+
+  const melebihiEstimasi = selisihEstimasi !== undefined && selisihEstimasi < 0;
+  const melebihiHargaPerPax =
+    realisasiPerPax !== undefined &&
+    hargaPerPax !== undefined &&
+    hargaPerPax > 0 &&
+    realisasiPerPax > hargaPerPax;
+
+  const efisiensiPersen =
+    estimasiTotal !== undefined && estimasiTotal > 0 && selisihEstimasi !== undefined
+      ? Math.round((selisihEstimasi / estimasiTotal) * 100)
+      : undefined;
+
+  return {
+    isActive,
+    jumlahPax,
+    hargaPerPax,
+    hargaRealisasi,
+    estimasiTotal,
+    realisasiPerPax,
+    selisihEstimasi,
+    melebihiEstimasi,
+    melebihiHargaPerPax,
+    efisiensiPersen,
+  };
+}
+
 export const STATUS_PENCAIRAN_LIST: StatusPencairan[] = [
   'Belum',
   'Sudah',
@@ -912,6 +1058,10 @@ export interface PaketValidationInput {
   nilaiAnggaran: number;
   hps?: number;
   nilaiKontrak?: number;
+  isMakananMinuman?: boolean;
+  jumlahPax?: number;
+  hargaPerPax?: number;
+  hargaRealisasi?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
   tenggatWaktu: string;
@@ -975,6 +1125,55 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
     (!Number.isFinite(input.nilaiKontrak) || input.nilaiKontrak < 0)
   ) {
     return 'Nilai Kontrak / Realisasi harus berupa angka bernilai 0 atau lebih.';
+  }
+  if (input.isMakananMinuman) {
+    if (
+      input.jumlahPax === undefined ||
+      !Number.isFinite(input.jumlahPax) ||
+      !Number.isInteger(input.jumlahPax) ||
+      input.jumlahPax < 1
+    ) {
+      return 'Jumlah Pax untuk belanja makanan dan minuman wajib diisi minimal 1 pax.';
+    }
+    if (input.jumlahPax > MAX_JUMLAH_PAX) {
+      return `Jumlah Pax maksimal ${MAX_JUMLAH_PAX.toLocaleString('id-ID')} pax.`;
+    }
+    if (
+      input.hargaPerPax === undefined ||
+      !Number.isFinite(input.hargaPerPax) ||
+      input.hargaPerPax < 0
+    ) {
+      return 'Harga / Pax (SHS) untuk belanja makanan dan minuman wajib diisi (minimal Rp 0).';
+    }
+    if (input.hargaPerPax > MAX_HARGA_PER_PAX) {
+      return `Harga / Pax maksimal ${formatRupiah(MAX_HARGA_PER_PAX)}.`;
+    }
+  } else {
+    if (
+      input.jumlahPax !== undefined &&
+      (!Number.isFinite(input.jumlahPax) ||
+        !Number.isInteger(input.jumlahPax) ||
+        input.jumlahPax < 1 ||
+        input.jumlahPax > MAX_JUMLAH_PAX)
+    ) {
+      return `Jumlah Pax harus berupa bilangan bulat antara 1 sampai ${MAX_JUMLAH_PAX.toLocaleString('id-ID')} pax.`;
+    }
+    if (
+      input.hargaPerPax !== undefined &&
+      (!Number.isFinite(input.hargaPerPax) ||
+        input.hargaPerPax < 0 ||
+        input.hargaPerPax > MAX_HARGA_PER_PAX)
+    ) {
+      return `Harga / Pax harus bernilai antara Rp 0 hingga ${formatRupiah(MAX_HARGA_PER_PAX)}.`;
+    }
+  }
+  if (
+    input.hargaRealisasi !== undefined &&
+    (!Number.isFinite(input.hargaRealisasi) ||
+      input.hargaRealisasi < 0 ||
+      input.hargaRealisasi > MAX_HARGA_REALISASI)
+  ) {
+    return 'Harga Realisasi (At Cost) harus bernilai Rp 0 atau lebih.';
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test((input.tanggalMulai || '').trim())) {
     return 'Tanggal Mulai wajib diisi dengan format tanggal yang valid.';
@@ -1200,6 +1399,19 @@ export function filterPaketPekerjaan(
       const matchTermin = (item.terminPencairan || []).some((tr) =>
         tr.nama.toLowerCase().includes(q)
       );
+      const maminSum = summarizeMakananMinuman({
+        ...item,
+        kodeRekening: paguInfo.kodeRekening || item.kodeRekening,
+        namaRekening: paguInfo.namaRekening || item.namaRekening,
+      });
+      const matchMamin =
+        maminSum.isActive &&
+        ('makanan dan minuman'.includes(q) ||
+          'makanan & minuman'.includes(q) ||
+          'mamin'.includes(q) ||
+          'pax'.includes(q) ||
+          (typeof maminSum.jumlahPax === 'number' &&
+            `${maminSum.jumlahPax} pax`.includes(q)));
       if (
         !matchKodeRekening &&
         !matchNamaRekening &&
@@ -1215,7 +1427,8 @@ export function filterPaketPekerjaan(
         !matchPic &&
         !matchTahun &&
         !matchTahap &&
-        !matchTermin
+        !matchTermin &&
+        !matchMamin
       ) {
         return false;
       }
@@ -1422,6 +1635,11 @@ export function buildPekerjaanCsvContent(
     'Pagu Anggaran Rekening (Rp)',
     'Nilai HPS (Rp)',
     'Nilai Kontrak / Realisasi (Rp)',
+    'Kategori Makanan & Minuman',
+    'Jumlah Pax',
+    'Harga / Pax SHS (Rp)',
+    'Estimasi Mamin (Rp)',
+    'Harga Realisasi Mamin At Cost (Rp)',
     'Total Sudah Dibayar (Rp)',
     'Skema Pembayaran',
     'Tahapan Pencairan',
@@ -1443,6 +1661,11 @@ export function buildPekerjaanCsvContent(
     const tahunAnggaran = getPaketTahunAnggaran(item);
     const paguInfo = resolvePaketPaguInfo(item, rekeningList);
     const terminInfo = summarizeTerminPencairan(item);
+    const maminInfo = summarizeMakananMinuman({
+      ...item,
+      kodeRekening: paguInfo.kodeRekening || item.kodeRekening,
+      namaRekening: paguInfo.namaRekening || item.namaRekening,
+    });
     const terminDetail =
       terminInfo.skemaPembayaran === 'Termin' &&
       Array.isArray(item.terminPencairan) &&
@@ -1489,6 +1712,11 @@ export function buildPekerjaanCsvContent(
       String(paguInfo.paguAnggaran || 0),
       typeof item.hps === 'number' ? String(item.hps) : '',
       String(item.nilaiKontrak ?? 0),
+      escapeCsv(maminInfo.isActive ? 'Ya' : 'Tidak'),
+      maminInfo.jumlahPax !== undefined ? String(maminInfo.jumlahPax) : '',
+      maminInfo.hargaPerPax !== undefined ? String(maminInfo.hargaPerPax) : '',
+      maminInfo.estimasiTotal !== undefined ? String(maminInfo.estimasiTotal) : '',
+      maminInfo.hargaRealisasi !== undefined ? String(maminInfo.hargaRealisasi) : '',
       String(terminInfo.totalNilaiCair || 0),
       escapeCsv(terminInfo.skemaPembayaran),
       escapeCsv(terminInfo.summaryLabel),

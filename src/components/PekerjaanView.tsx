@@ -12,6 +12,7 @@ import {
   Printer,
   Search,
   Trash2,
+  UtensilsCrossed,
   Wallet,
 } from 'lucide-react';
 import {
@@ -42,6 +43,7 @@ import {
   normalizeKodeRekening,
   resolvePaketPaguInfo,
   resolveTerminNominal,
+  summarizeMakananMinuman,
   summarizeRekeningAnggaran,
   summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
@@ -624,6 +626,11 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                     const progress = computePaketProgress(paket, todayIso);
                     const terminSummary = summarizeTerminPencairan(paket);
                     const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+                    const maminSummary = summarizeMakananMinuman({
+                      ...paket,
+                      kodeRekening: paguInfo.kodeRekening || paket.kodeRekening,
+                      namaRekening: paguInfo.namaRekening || paket.namaRekening,
+                    });
                     const sharedCount = sharedCountByDedupeKey.get(paguInfo.dedupeKey) || 1;
                     const statusColor =
                       progress.overallStatus === 'selesai'
@@ -659,6 +666,41 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                               {paket.pekerjaan}
                             </div>
                           )}
+                          {maminSummary.isActive &&
+                            (maminSummary.jumlahPax !== undefined ||
+                              maminSummary.hargaPerPax !== undefined ||
+                              maminSummary.hargaRealisasi !== undefined) && (
+                              <div className="mt-1.5 p-1.5 rounded-lg bg-amber-50/70 border border-amber-200 text-[10px] text-amber-950 space-y-0.5 tabular-nums">
+                                <div className="font-bold flex items-center gap-1 text-amber-800">
+                                  <UtensilsCrossed className="w-3 h-3 shrink-0" />
+                                  <span>Makanan &amp; Minuman (At Cost)</span>
+                                </div>
+                                {maminSummary.jumlahPax !== undefined &&
+                                  maminSummary.hargaPerPax !== undefined && (
+                                    <div className="font-medium text-slate-800">
+                                      {maminSummary.jumlahPax.toLocaleString('id-ID')} pax ×{' '}
+                                      {formatRupiah(maminSummary.hargaPerPax)}/pax
+                                      {maminSummary.estimasiTotal !== undefined
+                                        ? ` (Est. ${formatRupiah(maminSummary.estimasiTotal)})`
+                                        : ''}
+                                    </div>
+                                  )}
+                                {maminSummary.hargaRealisasi !== undefined && (
+                                  <div
+                                    className={`font-bold ${
+                                      maminSummary.melebihiEstimasi
+                                        ? 'text-rose-700'
+                                        : 'text-emerald-700'
+                                    }`}
+                                  >
+                                    Realisasi: {formatRupiah(maminSummary.hargaRealisasi)}
+                                    {maminSummary.realisasiPerPax !== undefined
+                                      ? ` (${formatRupiah(maminSummary.realisasiPerPax)}/pax)`
+                                      : ''}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           {(paket.kodeRup || paket.nomorKontrak || paket.penyedia || paket.picNama) && (
                             <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                               {paket.kodeRup && (
@@ -976,6 +1018,11 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
               const progress = computePaketProgress(paket, todayIso);
               const terminSummary = summarizeTerminPencairan(paket);
               const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+              const maminSummary = summarizeMakananMinuman({
+                ...paket,
+                kodeRekening: paguInfo.kodeRekening || paket.kodeRekening,
+                namaRekening: paguInfo.namaRekening || paket.namaRekening,
+              });
               const sharedCount = sharedCountByDedupeKey.get(paguInfo.dedupeKey) || 1;
               return (
                 <div
@@ -996,6 +1043,41 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                       {paket.pekerjaan && (
                         <div className="text-slate-800 font-medium mt-0.5">{paket.pekerjaan}</div>
                       )}
+                      {maminSummary.isActive &&
+                        (maminSummary.jumlahPax !== undefined ||
+                          maminSummary.hargaPerPax !== undefined ||
+                          maminSummary.hargaRealisasi !== undefined) && (
+                          <div className="mt-1.5 p-2 rounded-lg bg-amber-50/70 border border-amber-200 text-[11px] text-amber-950 space-y-0.5 tabular-nums">
+                            <div className="font-bold flex items-center gap-1 text-amber-800">
+                              <UtensilsCrossed className="w-3 h-3 shrink-0" />
+                              <span>Makanan &amp; Minuman (At Cost)</span>
+                            </div>
+                            {maminSummary.jumlahPax !== undefined &&
+                              maminSummary.hargaPerPax !== undefined && (
+                                <div className="text-slate-800">
+                                  {maminSummary.jumlahPax.toLocaleString('id-ID')} pax ×{' '}
+                                  {formatRupiah(maminSummary.hargaPerPax)}/pax
+                                  {maminSummary.estimasiTotal !== undefined
+                                    ? ` · Est. ${formatRupiah(maminSummary.estimasiTotal)}`
+                                    : ''}
+                                </div>
+                              )}
+                            {maminSummary.hargaRealisasi !== undefined && (
+                              <div
+                                className={`font-bold ${
+                                  maminSummary.melebihiEstimasi
+                                    ? 'text-rose-700'
+                                    : 'text-emerald-700'
+                                }`}
+                              >
+                                Realisasi: {formatRupiah(maminSummary.hargaRealisasi)}
+                                {maminSummary.realisasiPerPax !== undefined
+                                  ? ` (${formatRupiah(maminSummary.realisasiPerPax)}/pax)`
+                                  : ''}
+                              </div>
+                            )}
+                          </div>
+                        )}
                     </div>
                     <span
                       className={`text-[11px] font-bold shrink-0 ${

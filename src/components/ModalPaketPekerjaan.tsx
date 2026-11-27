@@ -10,6 +10,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import {
@@ -32,6 +33,8 @@ import {
 import {
   JENIS_PELAKSANAAN_LIST,
   MAX_DURASI_HARI_KERJA,
+  MAX_HARGA_PER_PAX,
+  MAX_JUMLAH_PAX,
   MAX_TAHUN_ANGGARAN,
   MAX_TERMIN_PEKERJAAN,
   MEKANISME_PENCAIRAN_LIST,
@@ -52,12 +55,15 @@ import {
   getPaketDurasiHariKerja,
   getPaketTahunAnggaran,
   getTodayLocalIso,
+  isKodeRekeningMakananMinuman,
+  isTextMakananMinuman,
   normalizeTahapanOrder,
   normalizeTerminOrder,
   parseRupiahInput,
   resolvePaketPaguInfo,
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
+  summarizeMakananMinuman,
   summarizeRekeningAnggaran,
   summarizeTerminPencairan,
   validatePaketPekerjaanInput,
@@ -105,6 +111,14 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   const [hpsText, setHpsText] = useState<string>('');
   const [nilaiKontrak, setNilaiKontrak] = useState<number | undefined>(undefined);
   const [nilaiKontrakText, setNilaiKontrakText] = useState<string>('');
+  const [hasManualKontrakEdit, setHasManualKontrakEdit] = useState<boolean>(false);
+  const [maminOverride, setMaminOverride] = useState<'auto' | 'manual_on' | 'manual_off'>('auto');
+  const [jumlahPax, setJumlahPax] = useState<number | undefined>(undefined);
+  const [jumlahPaxText, setJumlahPaxText] = useState<string>('');
+  const [hargaPerPax, setHargaPerPax] = useState<number | undefined>(undefined);
+  const [hargaPerPaxText, setHargaPerPaxText] = useState<string>('');
+  const [hargaRealisasi, setHargaRealisasi] = useState<number | undefined>(undefined);
+  const [hargaRealisasiText, setHargaRealisasiText] = useState<string>('');
   const [tanggalMulai, setTanggalMulai] = useState(getTodayLocalIso());
   const [durasiHariText, setDurasiHariText] = useState('30');
   const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran>('Sekaligus');
@@ -179,6 +193,36 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           ? initialPaket.nilaiKontrak.toLocaleString('id-ID')
           : ''
       );
+      setHasManualKontrakEdit(typeof initialPaket.nilaiKontrak === 'number');
+      const hasMaminNumeric =
+        typeof initialPaket.jumlahPax === 'number' ||
+        typeof initialPaket.hargaPerPax === 'number' ||
+        typeof initialPaket.hargaRealisasi === 'number';
+      if (initialPaket.isMakananMinuman === true || hasMaminNumeric) {
+        setMaminOverride('manual_on');
+      } else if (initialPaket.isMakananMinuman === false) {
+        setMaminOverride('manual_off');
+      } else {
+        setMaminOverride('auto');
+      }
+      setJumlahPax(initialPaket.jumlahPax);
+      setJumlahPaxText(
+        typeof initialPaket.jumlahPax === 'number'
+          ? initialPaket.jumlahPax.toLocaleString('id-ID')
+          : ''
+      );
+      setHargaPerPax(initialPaket.hargaPerPax);
+      setHargaPerPaxText(
+        typeof initialPaket.hargaPerPax === 'number'
+          ? initialPaket.hargaPerPax.toLocaleString('id-ID')
+          : ''
+      );
+      setHargaRealisasi(initialPaket.hargaRealisasi);
+      setHargaRealisasiText(
+        typeof initialPaket.hargaRealisasi === 'number'
+          ? initialPaket.hargaRealisasi.toLocaleString('id-ID')
+          : ''
+      );
       setTanggalMulai(initialPaket.tanggalMulai || getTodayLocalIso());
       setDurasiHariText(String(getPaketDurasiHariKerja(initialPaket)));
       setSkemaPembayaran(initSkemaBayar);
@@ -220,6 +264,14 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setHpsText('');
       setNilaiKontrak(undefined);
       setNilaiKontrakText('');
+      setHasManualKontrakEdit(false);
+      setMaminOverride('auto');
+      setJumlahPax(undefined);
+      setJumlahPaxText('');
+      setHargaPerPax(undefined);
+      setHargaPerPaxText('');
+      setHargaRealisasi(undefined);
+      setHargaRealisasiText('');
       setTanggalMulai(today);
       setDurasiHariText('30');
       setSkemaPembayaran('Sekaligus');
@@ -336,6 +388,66 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       isOverBudget: totalKontrak > selectedRekening.paguAnggaran,
     };
   }, [selectedRekening, paketList, effectiveRekeningList, initialPaket?.id, nilaiKontrak]);
+
+  const autoDetectedMamin = useMemo(
+    () =>
+      (selectedRekening
+        ? isKodeRekeningMakananMinuman(
+            selectedRekening.kodeRekening,
+            selectedRekening.uraian
+          )
+        : false) || isTextMakananMinuman(namaKegiatan, subKegiatan, pekerjaan),
+    [selectedRekening, namaKegiatan, subKegiatan, pekerjaan]
+  );
+
+  const effectiveIsMamin =
+    maminOverride === 'manual_on'
+      ? true
+      : maminOverride === 'manual_off'
+      ? false
+      : autoDetectedMamin;
+
+  const maminSummary = useMemo(
+    () =>
+      summarizeMakananMinuman({
+        isMakananMinuman: effectiveIsMamin,
+        jumlahPax,
+        hargaPerPax,
+        hargaRealisasi,
+        kodeRekening: selectedRekening?.kodeRekening,
+        namaRekening: selectedRekening?.uraian,
+        namaKegiatan,
+        subKegiatan,
+        pekerjaan,
+      }),
+    [
+      effectiveIsMamin,
+      jumlahPax,
+      hargaPerPax,
+      hargaRealisasi,
+      selectedRekening,
+      namaKegiatan,
+      subKegiatan,
+      pekerjaan,
+    ]
+  );
+
+  useEffect(() => {
+    if (!isOpen || !effectiveIsMamin || hasManualKontrakEdit) return;
+    const syncedValue =
+      typeof hargaRealisasi === 'number'
+        ? hargaRealisasi
+        : typeof maminSummary.estimasiTotal === 'number' && maminSummary.estimasiTotal > 0
+        ? maminSummary.estimasiTotal
+        : undefined;
+    if (syncedValue !== undefined) {
+      setNilaiKontrak(syncedValue);
+      setNilaiKontrakText(syncedValue.toLocaleString('id-ID'));
+    } else {
+      setNilaiKontrak(undefined);
+      setNilaiKontrakText('');
+    }
+  }, [isOpen, effectiveIsMamin, hasManualKontrakEdit, hargaRealisasi, maminSummary.estimasiTotal]);
 
   if (!isOpen) return null;
 
@@ -459,6 +571,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   };
 
   const handleNilaiKontrakInputChange = (raw: string) => {
+    setHasManualKontrakEdit(true);
     if (raw.trim() === '') {
       setNilaiKontrak(undefined);
       setNilaiKontrakText('');
@@ -467,6 +580,46 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     const parsed = parseRupiahInput(raw);
     setNilaiKontrak(parsed);
     setNilaiKontrakText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleJumlahPaxChange = (raw: string) => {
+    const digits = raw.replace(/[^\d]/g, '');
+    if (!digits) {
+      setJumlahPax(undefined);
+      setJumlahPaxText('');
+      return;
+    }
+    const parsed = Math.min(MAX_JUMLAH_PAX, Math.max(0, Number(digits)));
+    setJumlahPax(parsed);
+    setJumlahPaxText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleHargaPerPaxChange = (raw: string) => {
+    if (raw.trim() === '') {
+      setHargaPerPax(undefined);
+      setHargaPerPaxText('');
+      return;
+    }
+    const parsed = Math.min(MAX_HARGA_PER_PAX, parseRupiahInput(raw));
+    setHargaPerPax(parsed);
+    setHargaPerPaxText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleHargaRealisasiChange = (raw: string) => {
+    if (raw.trim() === '') {
+      setHargaRealisasi(undefined);
+      setHargaRealisasiText('');
+      return;
+    }
+    const parsed = parseRupiahInput(raw);
+    setHargaRealisasi(parsed);
+    setHargaRealisasiText(parsed.toLocaleString('id-ID'));
+  };
+
+  const handleApplyMaminValueToKontrak = (value: number) => {
+    setNilaiKontrak(value);
+    setNilaiKontrakText(value.toLocaleString('id-ID'));
+    setHasManualKontrakEdit(false);
   };
 
   const handleChangeSkemaPembayaran = (next: SkemaPembayaran) => {
@@ -652,6 +805,12 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       ? selectedRekening.paguAnggaran
       : nilaiAnggaran;
 
+    const effectiveMaminFlag: boolean | undefined = effectiveIsMamin
+      ? true
+      : autoDetectedMamin
+      ? false
+      : undefined;
+
     const validationErr = validatePaketPekerjaanInput({
       rekeningId: selectedRekening ? selectedRekening.id : undefined,
       matchedRekening: selectedRekening,
@@ -664,6 +823,10 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       nilaiAnggaran: effectiveNilaiAnggaran,
       hps,
       nilaiKontrak,
+      isMakananMinuman: effectiveIsMamin,
+      jumlahPax: effectiveIsMamin ? jumlahPax : undefined,
+      hargaPerPax: effectiveIsMamin ? hargaPerPax : undefined,
+      hargaRealisasi: effectiveIsMamin ? hargaRealisasi : undefined,
       tanggalMulai,
       durasiHariKerja,
       tenggatWaktu: computedTanggalSelesai,
@@ -699,6 +862,10 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           nilaiAnggaran: effectiveNilaiAnggaran,
           hps,
           nilaiKontrak,
+          isMakananMinuman: effectiveMaminFlag,
+          jumlahPax: effectiveIsMamin ? jumlahPax : undefined,
+          hargaPerPax: effectiveIsMamin ? hargaPerPax : undefined,
+          hargaRealisasi: effectiveIsMamin ? hargaRealisasi : undefined,
           tanggalMulai: tanggalMulai.trim(),
           durasiHariKerja,
           tenggatWaktu: computedTanggalSelesai,
@@ -1311,6 +1478,218 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   );
                 })}
               </div>
+            </div>
+
+            {/* Rincian Khusus Belanja Makanan & Minuman (Perpres 33/2020 & At Cost) */}
+            <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="inline-flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    id="paket-is-makanan-minuman"
+                    type="checkbox"
+                    checked={effectiveIsMamin}
+                    onChange={(e) =>
+                      setMaminOverride(e.target.checked ? 'manual_on' : 'manual_off')
+                    }
+                    className="mt-0.5 w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <UtensilsCrossed className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span>Khusus Belanja Makanan &amp; Minuman (Rapat / Lapangan / Jamuan)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Aktif otomatis untuk rekening SIPD{' '}
+                      <span className="font-mono font-semibold text-slate-700">
+                        5.1.02.01.01.0052–0058
+                      </span>{' '}
+                      atau uraian konsumsi. Mengikuti batas tertinggi SHS (Perpres 33/2020) &amp; pertanggungjawaban riil <strong>At Cost</strong>.
+                    </p>
+                  </div>
+                </label>
+                {autoDetectedMamin && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-bold self-start sm:self-center shrink-0">
+                    Terdeteksi Otomatis
+                  </span>
+                )}
+              </div>
+
+              {effectiveIsMamin && (
+                <div
+                  data-testid="makanan-minuman-panel"
+                  className="p-3 rounded-xl border border-amber-200 bg-white space-y-3"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label
+                        htmlFor="paket-jumlah-pax"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Jumlah Pax <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="paket-jumlah-pax"
+                          type="text"
+                          inputMode="numeric"
+                          value={jumlahPaxText}
+                          onChange={(e) => handleJumlahPaxChange(e.target.value)}
+                          placeholder="0"
+                          className="w-full pl-3 pr-12 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-900"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500 pointer-events-none">
+                          pax
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Volume peserta / porsi sesuai undangan &amp; daftar hadir
+                      </p>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="paket-harga-per-pax"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Harga / Pax (SHS) <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
+                          Rp
+                        </span>
+                        <input
+                          id="paket-harga-per-pax"
+                          type="text"
+                          inputMode="numeric"
+                          value={hargaPerPaxText}
+                          onChange={(e) => handleHargaPerPaxChange(e.target.value)}
+                          placeholder="0"
+                          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-900"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 tabular-nums">
+                        {hargaPerPax !== undefined
+                          ? `Batas tertinggi SHS: ${formatRupiah(hargaPerPax)}/pax`
+                          : 'Batas tertinggi Perpres 33/2020'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="paket-harga-realisasi"
+                        className="block font-semibold text-slate-700 mb-1"
+                      >
+                        Harga Realisasi (At Cost)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
+                          Rp
+                        </span>
+                        <input
+                          id="paket-harga-realisasi"
+                          type="text"
+                          inputMode="numeric"
+                          value={hargaRealisasiText}
+                          onChange={(e) => handleHargaRealisasiChange(e.target.value)}
+                          placeholder="0"
+                          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 text-slate-900"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 tabular-nums">
+                        {hargaRealisasi !== undefined
+                          ? `Bukti SPJ riil: ${formatRupiah(hargaRealisasi)}`
+                          : 'Sesuai kuitansi/nota riil (opsional sebelum SPJ)'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Live Perpres 33/2020 & At Cost Summary */}
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-[11px] tabular-nums">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span>
+                        Estimasi SHS (Pax × Harga/Pax):{' '}
+                        <strong className="font-mono text-slate-900">
+                          {maminSummary.estimasiTotal !== undefined
+                            ? formatRupiah(maminSummary.estimasiTotal)
+                            : '-'}
+                        </strong>
+                      </span>
+                      {maminSummary.realisasiPerPax !== undefined && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>
+                            Realisasi / Pax:{' '}
+                            <strong
+                              className={`font-mono ${
+                                maminSummary.melebihiHargaPerPax
+                                  ? 'text-rose-700'
+                                  : 'text-emerald-700'
+                              }`}
+                            >
+                              {formatRupiah(maminSummary.realisasiPerPax)}/pax
+                            </strong>
+                          </span>
+                        </>
+                      )}
+                      {maminSummary.selisihEstimasi !== undefined && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span
+                            className={`font-semibold ${
+                              maminSummary.melebihiEstimasi
+                                ? 'text-rose-700'
+                                : 'text-emerald-700'
+                            }`}
+                          >
+                            {maminSummary.melebihiEstimasi
+                              ? `Melebihi SHS: +${formatRupiah(Math.abs(maminSummary.selisihEstimasi))}`
+                              : `Hemat / Efisiensi: ${formatRupiah(maminSummary.selisihEstimasi)}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      {maminSummary.hargaRealisasi !== undefined && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyMaminValueToKontrak(maminSummary.hargaRealisasi!)}
+                          className="px-2 py-1 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-semibold transition-colors"
+                        >
+                          Pakai Realisasi ke Nilai Kontrak
+                        </button>
+                      )}
+                      {maminSummary.estimasiTotal !== undefined && maminSummary.estimasiTotal > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyMaminValueToKontrak(maminSummary.estimasiTotal!)}
+                          className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-semibold transition-colors"
+                        >
+                          Pakai Estimasi ke Nilai Kontrak
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {(maminSummary.melebihiEstimasi ||
+                    (selectedRekening &&
+                      typeof (hargaRealisasi ?? maminSummary.estimasiTotal) === 'number' &&
+                      (hargaRealisasi ?? maminSummary.estimasiTotal)! > selectedRekening.paguAnggaran)) && (
+                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-start gap-1.5 font-medium">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                      <span>
+                        {maminSummary.melebihiEstimasi
+                          ? 'Harga Realisasi melampaui estimasi batas tertinggi SHS (Jumlah Pax × Harga/Pax). Pastikan sesuai Perkada SHS/SBU (Perpres 33/2020).'
+                          : 'Total konsumsi melebihi sisa/pagu anggaran Kode Rekening terpilih.'}
+                      </span>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500">
+                    Kelengkapan SPJ wajib: Nota/Kuitansi penyedia, Undangan, Daftar Hadir sesuai jumlah pax, Notulen/Laporan, dan Dokumentasi foto kegiatan.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

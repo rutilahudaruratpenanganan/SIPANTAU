@@ -654,6 +654,22 @@
           "type": "number",
           "description": "Nilai Kontrak / Realisasi dalam Rupiah (Rp)"
         },
+        "isMakananMinuman": {
+          "type": "boolean",
+          "description": "Penanda paket khusus belanja Makanan dan Minuman (rapat, jamuan tamu, atau aktivitas lapangan)"
+        },
+        "jumlahPax": {
+          "type": "integer",
+          "description": "Volume jumlah pax (orang/porsi/kali) khusus belanja Makanan dan Minuman (1-1000000)"
+        },
+        "hargaPerPax": {
+          "type": "number",
+          "description": "Harga satuan per pax dalam Rupiah (Rp), mengacu batas tertinggi SHS Perpres 33 Tahun 2020"
+        },
+        "hargaRealisasi": {
+          "type": "number",
+          "description": "Total harga realisasi riil (At Cost) belanja Makanan dan Minuman dalam Rupiah (Rp) sesuai SPJ/kuitansi"
+        },
         "tanggalMulai": {
           "type": "string",
           "minLength": 4,

@@ -240,6 +240,10 @@ export interface PaketPekerjaan {
   nilaiAnggaran: number; // Pagu Anggaran Rekening (Rp)
   hps?: number; // Legacy optional field for backward compatibility
   nilaiKontrak?: number; // Nilai Kontrak / Realisasi (Rp)
+  isMakananMinuman?: boolean; // Penanda khusus paket belanja Makanan & Minuman
+  jumlahPax?: number; // Volume pax khusus Makanan & Minuman
+  hargaPerPax?: number; // Harga satuan/pax (SHS Perpres 33/2020)
+  hargaRealisasi?: number; // Harga realisasi riil (At Cost) Makanan & Minuman
   tanggalMulai: string; // YYYY-MM-DD
   durasiHariKerja?: number; // Jumlah hari kalender (Senin-Minggu)
   tenggatWaktu: string; // YYYY-MM-DD (Tanggal selesai rencana otomatis)

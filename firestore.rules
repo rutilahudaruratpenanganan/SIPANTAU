@@ -526,6 +526,7 @@ service cloud.firestore {
           'ownerId', 'rekeningId', 'kodeRekening', 'namaRekening',
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
+          'isMakananMinuman', 'jumlahPax', 'hargaPerPax', 'hargaRealisasi',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
           'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'tanggalPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
@@ -546,6 +547,10 @@ service cloud.firestore {
         && data.nilaiAnggaran >= 0 && data.nilaiAnggaran <= 1000000000000
         && (!('hps' in data) || ((data.hps is int || data.hps is float) && data.hps >= 0 && data.hps <= 1000000000000))
         && (!('nilaiKontrak' in data) || ((data.nilaiKontrak is int || data.nilaiKontrak is float) && data.nilaiKontrak >= 0 && data.nilaiKontrak <= 1000000000000))
+        && (!('isMakananMinuman' in data) || data.isMakananMinuman is bool)
+        && (!('jumlahPax' in data) || (data.jumlahPax is int && data.jumlahPax >= 1 && data.jumlahPax <= 1000000))
+        && (!('hargaPerPax' in data) || ((data.hargaPerPax is int || data.hargaPerPax is float) && data.hargaPerPax >= 0 && data.hargaPerPax <= 1000000000))
+        && (!('hargaRealisasi' in data) || ((data.hargaRealisasi is int || data.hargaRealisasi is float) && data.hargaRealisasi >= 0 && data.hargaRealisasi <= 1000000000000))
         && data.tanggalMulai is string && data.tanggalMulai.size() >= 4 && data.tanggalMulai.size() <= 40
         && (!('durasiHariKerja' in data) || (data.durasiHariKerja is int && data.durasiHariKerja >= 1 && data.durasiHariKerja <= 1825))
         && data.tenggatWaktu is string && data.tenggatWaktu.size() >= 4 && data.tenggatWaktu.size() <= 40
@@ -596,6 +601,7 @@ service cloud.firestore {
           'rekeningId', 'kodeRekening', 'namaRekening',
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
+          'isMakananMinuman', 'jumlahPax', 'hargaPerPax', 'hargaRealisasi',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
           'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'tanggalPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'

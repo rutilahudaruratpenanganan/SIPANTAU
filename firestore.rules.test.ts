@@ -456,8 +456,9 @@ const PAKET_ALLOWED_KEYS = new Set([
   'ownerId', 'rekeningId', 'kodeRekening', 'namaRekening',
   'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
   'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
+  'isMakananMinuman', 'jumlahPax', 'hargaPerPax', 'hargaRealisasi',
   'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-  'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
+  'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'tanggalPencairan', 'mekanismePencairan',
   'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
   'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
 ]);
@@ -556,6 +557,33 @@ function evaluatePaketCreate(
   if (
     payload.nilaiKontrak !== undefined &&
     (typeof payload.nilaiKontrak !== 'number' || payload.nilaiKontrak < 0 || payload.nilaiKontrak > 1000000000000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.isMakananMinuman !== undefined &&
+    typeof payload.isMakananMinuman !== 'boolean'
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.jumlahPax !== undefined &&
+    (typeof payload.jumlahPax !== 'number' ||
+      !Number.isInteger(payload.jumlahPax) ||
+      payload.jumlahPax < 1 ||
+      payload.jumlahPax > 1000000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.hargaPerPax !== undefined &&
+    (typeof payload.hargaPerPax !== 'number' || payload.hargaPerPax < 0 || payload.hargaPerPax > 1000000000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.hargaRealisasi !== undefined &&
+    (typeof payload.hargaRealisasi !== 'number' || payload.hargaRealisasi < 0 || payload.hargaRealisasi > 1000000000000)
   ) {
     return 'PERMISSION_DENIED';
   }
@@ -738,5 +766,41 @@ test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, pemba
   assert.equal(stageProgressUpdateKeys.has('ownerId'), false);
   assert.equal(stageProgressUpdateKeys.has('dibuatOlehId'), false);
   assert.equal(stageProgressUpdateKeys.has('createdAt'), false);
+
+  // Makanan & Minuman fields
+  assert.equal(
+    evaluatePaketCreate(
+      'paket-170000-mamin1',
+      {
+        ...validPaket,
+        isMakananMinuman: true,
+        jumlahPax: 120,
+        hargaPerPax: 45000,
+        hargaRealisasi: 5100000,
+      },
+      true
+    ),
+    'ALLOW'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, jumlahPax: 0 }, true),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, jumlahPax: 12.5 }, true),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, hargaPerPax: -1 }, true),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, hargaRealisasi: -500 }, true),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, isMakananMinuman: 'ya' }, true),
+    'PERMISSION_DENIED'
+  );
 });
 

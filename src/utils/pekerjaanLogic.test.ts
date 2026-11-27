@@ -25,6 +25,9 @@ import {
   getAvailableTahunAnggaran,
   getPaketDurasiHariKerja,
   getPaketTahunAnggaran,
+  isKodeRekeningMakananMinuman,
+  isPaketMakananMinuman,
+  isTextMakananMinuman,
   normalizeKodeRekening,
   normalizeTahapanOrder,
   normalizeTerminOrder,
@@ -34,6 +37,7 @@ import {
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
   resolveTerminNominal,
+  summarizeMakananMinuman,
   summarizePaketByTahunAnggaran,
   summarizeRekeningAnggaran,
   summarizeTerminPencairan,
@@ -1104,5 +1108,143 @@ test('Multi-year Kode Rekening governance, annual rollover preview, and strict P
     null
   );
 });
+
+test('Belanja Makanan dan Minuman: SIPD detection, Perpres 33/2020 SHS & At Cost calculations, validation, search, and CSV', () => {
+  // 1. Kode Rekening detection (standard SIPD 2-digit and Pemda 3-5 digit variants)
+  assert.equal(isKodeRekeningMakananMinuman('5.1.02.01.01.0052', 'Belanja Makanan dan Minuman Rapat'), true);
+  assert.equal(isKodeRekeningMakananMinuman('5.1.02.01.001.00052', 'Belanja Makanan dan Minuman Rapat Full Day'), true);
+  assert.equal(isKodeRekeningMakananMinuman('5.1.02.01.01.0058', 'Belanja Makanan dan Minuman Aktivitas Lapangan'), true);
+  assert.equal(isKodeRekeningMakananMinuman('5.1.02.02.001.00029', 'Belanja Jasa Tenaga Ahli'), false);
+  assert.equal(isKodeRekeningMakananMinuman('5.1.02.01.01.0024', 'Belanja Alat Tulis Kantor'), false);
+
+  // 2. Text keyword detection
+  assert.equal(isTextMakananMinuman('Konsumsi Rapat Koordinasi Perumahan'), true);
+  assert.equal(isTextMakananMinuman('Pengadaan Makanan dan Minuman Sosialisasi'), true);
+  assert.equal(isTextMakananMinuman('Pengadaan Konsultan Pengawas'), false);
+
+  // Explicit opt-out overrides automatic keyword match
+  assert.equal(
+    isPaketMakananMinuman({
+      isMakananMinuman: false,
+      kodeRekening: '5.1.02.01.001.00052',
+      namaRekening: 'Belanja Makanan dan Minuman Rapat',
+      namaKegiatan: 'Rapat Koordinasi',
+      subKegiatan: 'Makan Minum',
+    }),
+    false
+  );
+
+  // 3. Perpres 33/2020 & At Cost calculations (compliant vs exceeding SHS)
+  const hemat = summarizeMakananMinuman({
+    isMakananMinuman: true,
+    jumlahPax: 100,
+    hargaPerPax: 45000,
+    hargaRealisasi: 4250000,
+    kodeRekening: '5.1.02.01.001.00052',
+    namaRekening: 'Belanja Makanan dan Minuman Rapat',
+    namaKegiatan: 'Rapat Koordinasi',
+    subKegiatan: 'Rapat Bidang',
+  });
+  assert.equal(hemat.isActive, true);
+  assert.equal(hemat.estimasiTotal, 4500000);
+  assert.equal(hemat.realisasiPerPax, 42500);
+  assert.equal(hemat.selisihEstimasi, 250000);
+  assert.equal(hemat.melebihiEstimasi, false);
+  assert.equal(hemat.melebihiHargaPerPax, false);
+  assert.equal(hemat.efisiensiPersen, 6);
+
+  const overShs = summarizeMakananMinuman({
+    isMakananMinuman: true,
+    jumlahPax: 50,
+    hargaPerPax: 40000,
+    hargaRealisasi: 2250000,
+    kodeRekening: '5.1.02.01.01.0052',
+    namaRekening: 'Belanja Makanan dan Minuman Rapat',
+    namaKegiatan: 'Rapat Teknis',
+    subKegiatan: 'Rapat Internal',
+  });
+  assert.equal(overShs.estimasiTotal, 2000000);
+  assert.equal(overShs.realisasiPerPax, 45000);
+  assert.equal(overShs.selisihEstimasi, -250000);
+  assert.equal(overShs.melebihiEstimasi, true);
+  assert.equal(overShs.melebihiHargaPerPax, true);
+
+  // 4. Validation when Mamin is active
+  const validStages = buildTemplateTahapan('Badan Usaha');
+  const maminBase = {
+    namaKegiatan: 'Rapat Koordinasi',
+    subKegiatan: 'Belanja Makanan & Minuman',
+    jenisPelaksanaan: 'Badan Usaha' as JenisPelaksanaan,
+    nilaiAnggaran: 25000000,
+    tanggalMulai: '2026-11-01',
+    durasiHariKerja: 5,
+    tenggatWaktu: '2026-11-05',
+    tahapan: validStages,
+    isMakananMinuman: true,
+  };
+
+  assert.equal(
+    validatePaketPekerjaanInput({ ...maminBase, jumlahPax: 0, hargaPerPax: 45000 }),
+    'Jumlah Pax untuk belanja makanan dan minuman wajib diisi minimal 1 pax.'
+  );
+  assert.equal(
+    validatePaketPekerjaanInput({ ...maminBase, jumlahPax: 100, hargaPerPax: undefined }),
+    'Harga / Pax (SHS) untuk belanja makanan dan minuman wajib diisi (minimal Rp 0).'
+  );
+  assert.equal(
+    validatePaketPekerjaanInput({ ...maminBase, jumlahPax: 100, hargaPerPax: 45000, hargaRealisasi: -10 }),
+    'Harga Realisasi (At Cost) harus bernilai Rp 0 atau lebih.'
+  );
+  assert.equal(
+    validatePaketPekerjaanInput({ ...maminBase, jumlahPax: 100, hargaPerPax: 45000, hargaRealisasi: 4250000 }),
+    null
+  );
+
+  // 5. Filter & CSV output include Mamin breakdown
+  const maminPaket: PaketPekerjaan = {
+    id: 'pkt-mamin-1',
+    rekeningId: 'rek-mamin',
+    kodeRekening: '5.1.02.01.001.00052',
+    namaRekening: 'Belanja Makanan dan Minuman Rapat Full Day',
+    namaKegiatan: 'Sosialisasi Program Wasdal',
+    subKegiatan: 'Pelaksanaan Rapat & Koordinasi',
+    pekerjaan: 'Pengadaan Konsumsi Peserta Rapat',
+    jenisPelaksanaan: 'Badan Usaha',
+    skemaKontrak: 'Pengadaan Langsung',
+    tahunAnggaran: 2026,
+    nilaiAnggaran: 245000000,
+    nilaiKontrak: 4250000,
+    isMakananMinuman: true,
+    jumlahPax: 100,
+    hargaPerPax: 45000,
+    hargaRealisasi: 4250000,
+    tanggalMulai: '2026-11-10',
+    tenggatWaktu: '2026-11-12',
+    tahapan: validStages,
+    dibuatOlehId: 'p1',
+    dibuatOlehNama: 'Yuliani',
+    createdAt: '2026-11-10',
+    updatedAt: '2026-11-10',
+  };
+
+  assert.equal(
+    filterPaketPekerjaan([maminPaket], { searchQuery: '100 pax' }, '2026-11-10').length,
+    1
+  );
+  assert.equal(
+    filterPaketPekerjaan([maminPaket], { searchQuery: 'mamin' }, '2026-11-10').length,
+    1
+  );
+
+  const csv = buildPekerjaanCsvContent([maminPaket], '2026-11-10');
+  assert.equal(csv.includes('Kategori Makanan & Minuman'), true);
+  assert.equal(csv.includes('Jumlah Pax'), true);
+  assert.equal(csv.includes('Harga / Pax SHS (Rp)'), true);
+  assert.equal(csv.includes('Estimasi Mamin (Rp)'), true);
+  assert.equal(csv.includes('Harga Realisasi Mamin At Cost (Rp)'), true);
+  assert.equal(csv.includes('4500000'), true);
+  assert.equal(csv.includes('4250000'), true);
+});
+
 
 
