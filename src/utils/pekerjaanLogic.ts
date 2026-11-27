@@ -410,10 +410,23 @@ export function getPaketTahunAnggaran(
   return new Date().getFullYear();
 }
 
-export function getAvailableTahunAnggaran(list: PaketPekerjaan[]): number[] {
+export function getAvailableTahunAnggaran(
+  list: PaketPekerjaan[],
+  rekeningList: RekeningAnggaran[] = []
+): number[] {
   const years = new Set<number>();
   for (const item of list) {
     years.add(getPaketTahunAnggaran(item));
+  }
+  for (const rek of rekeningList) {
+    if (
+      typeof rek.tahunAnggaran === 'number' &&
+      Number.isInteger(rek.tahunAnggaran) &&
+      rek.tahunAnggaran >= MIN_TAHUN_ANGGARAN &&
+      rek.tahunAnggaran <= MAX_TAHUN_ANGGARAN
+    ) {
+      years.add(rek.tahunAnggaran);
+    }
   }
   return Array.from(years).sort((a, b) => b - a);
 }
@@ -615,12 +628,127 @@ export function summarizeRekeningAnggaran(
     });
 }
 
+export function filterRekeningByTahun(
+  rekeningList: RekeningAnggaran[],
+  tahunAnggaran?: number | 'all'
+): RekeningAnggaran[] {
+  const filtered =
+    typeof tahunAnggaran === 'number' && Number.isInteger(tahunAnggaran)
+      ? rekeningList.filter((r) => r.tahunAnggaran === tahunAnggaran)
+      : rekeningList;
+  return [...filtered].sort((a, b) => {
+    if (b.tahunAnggaran !== a.tahunAnggaran) return b.tahunAnggaran - a.tahunAnggaran;
+    return a.kodeRekening.localeCompare(b.kodeRekening, 'id-ID');
+  });
+}
+
+export interface RolloverRekeningCandidate {
+  sourceRekeningId: string;
+  kodeRekening: string;
+  uraian: string;
+  tahunAnggaran: number;
+  paguAnggaran: number;
+  sourcePaguAnggaran: number;
+  catatan?: string;
+  selected: boolean;
+}
+
+export interface RolloverRekeningPreview {
+  candidates: RolloverRekeningCandidate[];
+  skippedExistingCount: number;
+  sourceCount: number;
+}
+
+/**
+ * Menyiapkan daftar salinan Kode Rekening dari Tahun Anggaran sumber ke Tahun Anggaran tujuan
+ * sesuai prinsip penganggaran tahunan DPA-SKPD (Permendagri 90/2019 & Permendagri 77/2020):
+ * 1 kode rekening + 1 pagu anggaran bersifat unik per Tahun Anggaran.
+ */
+export function buildRolloverRekeningPreview(
+  rekeningList: RekeningAnggaran[],
+  sourceYear: number,
+  targetYear: number,
+  copyPaguNominal: boolean = true
+): RolloverRekeningPreview {
+  if (
+    !Number.isInteger(sourceYear) ||
+    !Number.isInteger(targetYear) ||
+    sourceYear < MIN_TAHUN_ANGGARAN ||
+    targetYear < MIN_TAHUN_ANGGARAN ||
+    targetYear > MAX_TAHUN_ANGGARAN ||
+    sourceYear === targetYear
+  ) {
+    return { candidates: [], skippedExistingCount: 0, sourceCount: 0 };
+  }
+
+  const sourceList = filterRekeningByTahun(rekeningList, sourceYear);
+  const existingTargetKeys = new Set(
+    filterRekeningByTahun(rekeningList, targetYear).map((r) =>
+      buildRekeningUniqueKey(targetYear, r.kodeRekening)
+    )
+  );
+
+  const candidates: RolloverRekeningCandidate[] = [];
+  let skippedExistingCount = 0;
+
+  for (const src of sourceList) {
+    const targetKey = buildRekeningUniqueKey(targetYear, src.kodeRekening);
+    if (existingTargetKeys.has(targetKey)) {
+      skippedExistingCount += 1;
+      continue;
+    }
+    existingTargetKeys.add(targetKey);
+    const sourcePagu = Number.isFinite(src.paguAnggaran) ? src.paguAnggaran : 0;
+    candidates.push({
+      sourceRekeningId: src.id,
+      kodeRekening: src.kodeRekening,
+      uraian: src.uraian,
+      tahunAnggaran: targetYear,
+      paguAnggaran: copyPaguNominal ? sourcePagu : 0,
+      sourcePaguAnggaran: sourcePagu,
+      catatan: src.catatan,
+      selected: true,
+    });
+  }
+
+  return {
+    candidates,
+    skippedExistingCount,
+    sourceCount: sourceList.length,
+  };
+}
+
 export function getAvailableKodeRekeningOptions(
   paketList: PaketPekerjaan[],
-  rekeningList: RekeningAnggaran[] = []
-): Array<{ key: string; kodeRekening: string; uraian: string; tahunAnggaran?: number }> {
-  const map = new Map<string, { key: string; kodeRekening: string; uraian: string; tahunAnggaran?: number }>();
-  for (const r of rekeningList) {
+  rekeningList: RekeningAnggaran[] = [],
+  filterTahun?: number | 'all'
+): Array<{
+  key: string;
+  kodeRekening: string;
+  uraian: string;
+  tahunAnggaran?: number;
+  paguAnggaran?: number;
+}> {
+  const map = new Map<
+    string,
+    {
+      key: string;
+      kodeRekening: string;
+      uraian: string;
+      tahunAnggaran?: number;
+      paguAnggaran?: number;
+    }
+  >();
+  const scopedRekening =
+    filterTahun !== undefined && filterTahun !== 'all'
+      ? rekeningList.filter((r) => r.tahunAnggaran === filterTahun)
+      : rekeningList;
+  const scopedPaket =
+    filterTahun !== undefined && filterTahun !== 'all'
+      ? paketList.filter((p) => getPaketTahunAnggaran(p) === filterTahun)
+      : paketList;
+
+  for (const r of scopedRekening) {
     const norm = normalizeKodeRekening(r.kodeRekening);
     if (norm && !map.has(norm)) {
       map.set(norm, {
@@ -628,10 +756,11 @@ export function getAvailableKodeRekeningOptions(
         kodeRekening: r.kodeRekening,
         uraian: r.uraian,
         tahunAnggaran: r.tahunAnggaran,
+        paguAnggaran: r.paguAnggaran,
       });
     }
   }
-  for (const p of paketList) {
+  for (const p of scopedPaket) {
     const norm = normalizeKodeRekening(p.kodeRekening);
     if (norm && !map.has(norm)) {
       map.set(norm, {
@@ -772,6 +901,9 @@ export function computePaketProgress(
 }
 
 export interface PaketValidationInput {
+  rekeningId?: string;
+  matchedRekening?: RekeningAnggaran | null;
+  requireRekening?: boolean;
   namaKegiatan: string;
   subKegiatan: string;
   jenisPelaksanaan: JenisPelaksanaan;
@@ -793,6 +925,9 @@ export interface PaketValidationInput {
 }
 
 export function validatePaketPekerjaanInput(input: PaketValidationInput): string | null {
+  if (input.requireRekening && !(input.rekeningId || '').trim()) {
+    return 'Kode Rekening wajib dipilih atau dibuat baru agar Pagu Anggaran sesuai dengan master Kode Rekening pada Tahun Anggaran tersebut.';
+  }
   if (!input.namaKegiatan.trim()) {
     return 'Nama Kegiatan wajib diisi.';
   }
@@ -817,6 +952,17 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
   }
   if (!Number.isFinite(input.nilaiAnggaran) || input.nilaiAnggaran < 0) {
     return 'Pagu Anggaran harus berupa angka bernilai 0 atau lebih.';
+  }
+  if (input.matchedRekening) {
+    if (
+      input.tahunAnggaran !== undefined &&
+      input.tahunAnggaran !== input.matchedRekening.tahunAnggaran
+    ) {
+      return `Tahun Anggaran paket (${input.tahunAnggaran}) harus sama dengan Tahun Anggaran Kode Rekening (${input.matchedRekening.tahunAnggaran}).`;
+    }
+    if (Math.round(input.nilaiAnggaran) !== Math.round(input.matchedRekening.paguAnggaran)) {
+      return 'Pagu Anggaran paket harus sesuai dengan Pagu Anggaran pada Kode Rekening terpilih.';
+    }
   }
   if (
     input.hps !== undefined &&

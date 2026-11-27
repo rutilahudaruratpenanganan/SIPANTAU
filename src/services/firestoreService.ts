@@ -1760,6 +1760,73 @@ export async function createRekeningAnggaranDb(
   }
 }
 
+export async function createRekeningAnggaranBatchDb(
+  inputs: RekeningAnggaranMutationPayload[],
+  creator: { id: string; nama: string }
+): Promise<RekeningAnggaran[]> {
+  if (inputs.length === 0) return [];
+  const cleanCreatorId = clampStr(creator.id, LIMITS.ID) || 'system';
+  const cleanCreatorNama = clampStr(creator.nama, LIMITS.NAMA) || 'Tim Wasdal';
+  const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+  const created: RekeningAnggaran[] = [];
+  const batchBase = Date.now();
+
+  try {
+    const CHUNK_SIZE = 400;
+    for (let offset = 0; offset < inputs.length; offset += CHUNK_SIZE) {
+      const slice = inputs.slice(offset, offset + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      slice.forEach((input, idx) => {
+        const seq = offset + idx;
+        const id = `rek-${batchBase}-${seq}-${Math.random().toString(36).slice(2, 6)}`;
+        const cleanKode = clampStr(input.kodeRekening, LIMITS.KODE_REKENING) || '-';
+        const cleanUraian = clampStr(input.uraian, LIMITS.URAIAN_REKENING) || '-';
+        const cleanTahun = Math.max(
+          2000,
+          Math.min(2100, Math.round(Number(input.tahunAnggaran) || new Date().getFullYear()))
+        );
+        const cleanPagu = clampMoney(input.paguAnggaran) ?? 0;
+        const cleanCatatan = input.catatan?.trim()
+          ? clampStr(input.catatan, LIMITS.CATATAN_REKENING)
+          : undefined;
+
+        const payload: Record<string, unknown> = {
+          ownerId: INTERNAL_WORKSPACE_ID,
+          kodeRekening: cleanKode,
+          uraian: cleanUraian,
+          tahunAnggaran: cleanTahun,
+          paguAnggaran: cleanPagu,
+          dibuatOlehId: cleanCreatorId,
+          dibuatOlehNama: cleanCreatorNama,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        if (cleanCatatan) {
+          payload.catatan = cleanCatatan;
+        }
+
+        batch.set(doc(db, 'rekeningAnggaran', id), payload);
+        created.push({
+          id,
+          kodeRekening: cleanKode,
+          uraian: cleanUraian,
+          tahunAnggaran: cleanTahun,
+          paguAnggaran: cleanPagu,
+          catatan: cleanCatatan,
+          dibuatOlehId: cleanCreatorId,
+          dibuatOlehNama: cleanCreatorNama,
+          createdAt: nowStamp,
+          updatedAt: nowStamp,
+        });
+      });
+      await batch.commit();
+    }
+    return created;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'rekeningAnggaran/batch');
+  }
+}
+
 export async function updateRekeningAnggaranDb(
   rekeningId: string,
   input: RekeningAnggaranMutationPayload

@@ -86,6 +86,7 @@ import {
   createAgendaEventDb,
   createPaketPekerjaanDb,
   createPersonelDb,
+  createRekeningAnggaranBatchDb,
   createRekeningAnggaranDb,
   createSuratMasukDb,
   deleteAgendaEventDb,
@@ -1190,15 +1191,28 @@ export default function App() {
     payload: PaketPekerjaanMutationPayload,
     editingId?: string
   ) => {
+    const matchedRek = payload.rekeningId
+      ? rekeningList.find((r) => r.id === payload.rekeningId)
+      : undefined;
+    const syncedPayload: PaketPekerjaanMutationPayload = matchedRek
+      ? {
+          ...payload,
+          kodeRekening: matchedRek.kodeRekening,
+          namaRekening: matchedRek.uraian,
+          tahunAnggaran: matchedRek.tahunAnggaran,
+          nilaiAnggaran: matchedRek.paguAnggaran,
+        }
+      : payload;
+
     if (editingId) {
-      await updatePaketPekerjaanDb(editingId, payload);
-      showToast(`Paket pekerjaan "${payload.subKegiatan}" berhasil diperbarui.`);
+      await updatePaketPekerjaanDb(editingId, syncedPayload);
+      showToast(`Paket pekerjaan "${syncedPayload.subKegiatan}" berhasil diperbarui.`);
     } else {
-      await createPaketPekerjaanDb(payload, {
+      await createPaketPekerjaanDb(syncedPayload, {
         id: currentUser.id,
         nama: currentUser.nama,
       });
-      showToast(`Paket pekerjaan "${payload.subKegiatan}" berhasil disimpan.`);
+      showToast(`Paket pekerjaan "${syncedPayload.subKegiatan}" berhasil disimpan.`);
     }
   };
 
@@ -1254,6 +1268,21 @@ export default function App() {
     } else {
       await handleCreateRekeningInline(payload);
     }
+  };
+
+  const handleRolloverRekeningAnggaran = async (
+    items: RekeningAnggaranMutationPayload[]
+  ): Promise<RekeningAnggaran[]> => {
+    const created = await createRekeningAnggaranBatchDb(items, {
+      id: currentUser.id,
+      nama: currentUser.nama,
+    });
+    if (created.length > 0) {
+      showToast(
+        `${created.length} Kode Rekening berhasil disalin ke TA ${created[0].tahunAnggaran}.`
+      );
+    }
+    return created;
   };
 
   const handleDeleteRekeningAnggaran = async (rekeningId: string) => {
@@ -2005,6 +2034,7 @@ export default function App() {
           rekeningList={rekeningList}
           paketList={paketPekerjaanList}
           onSaveRekening={handleSaveRekeningAnggaran}
+          onRolloverRekening={handleRolloverRekeningAnggaran}
           onDeleteRekening={handleDeleteRekeningAnggaran}
         />
       )}

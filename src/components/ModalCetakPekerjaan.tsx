@@ -115,11 +115,14 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     setSearchQuery(initialState?.searchQuery ?? '');
   }, [isOpen, initialState]);
 
-  const availableYears = useMemo(() => getAvailableTahunAnggaran(paketList), [paketList]);
+  const availableYears = useMemo(
+    () => getAvailableTahunAnggaran(paketList, rekeningList),
+    [paketList, rekeningList]
+  );
   const availablePics = useMemo(() => getAvailablePicNames(paketList), [paketList]);
   const rekeningFilterOptions = useMemo(
-    () => getAvailableKodeRekeningOptions(paketList, rekeningList),
-    [paketList, rekeningList]
+    () => getAvailableKodeRekeningOptions(paketList, rekeningList, tahunAnggaran),
+    [paketList, rekeningList, tahunAnggaran]
   );
 
   const filteredList = useMemo(
@@ -182,9 +185,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   const rekeningPrintSummaries = useMemo(
     () =>
       summarizeRekeningAnggaran(rekeningList, activeItems, todayIso).filter(
-        (s) => s.jumlahPaket > 0
+        (s) =>
+          s.jumlahPaket > 0 &&
+          (tahunAnggaran === 'all' || s.rekening.tahunAnggaran === tahunAnggaran)
       ),
-    [rekeningList, activeItems, todayIso]
+    [rekeningList, activeItems, todayIso, tahunAnggaran]
   );
   const sharedCountByDedupeKey = useMemo(() => {
     const counts = new Map<string, number>();

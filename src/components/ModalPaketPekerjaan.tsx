@@ -41,9 +41,11 @@ import {
   STATUS_PENCAIRAN_LIST,
   addCalendarDaysIso,
   buildDefaultTerminPencairan,
+  buildRekeningUniqueKey,
   buildTemplateTahapan,
   createTahapId,
   createTerminId,
+  filterRekeningByTahun,
   formatRupiah,
   formatTanggalDdMmYyyy,
   formatTanggalDisplay,
@@ -261,6 +263,49 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     [effectiveRekeningList, selectedRekeningId]
   );
 
+  const trimmedTahunState = tahunAnggaranText.trim();
+  const parsedTahunState = trimmedTahunState === '' ? NaN : Number(trimmedTahunState);
+  const activeTahunFilter =
+    Number.isInteger(parsedTahunState) &&
+    parsedTahunState >= MIN_TAHUN_ANGGARAN &&
+    parsedTahunState <= MAX_TAHUN_ANGGARAN
+      ? parsedTahunState
+      : undefined;
+
+  const rekeningForActiveTa = useMemo(() => {
+    const scoped = activeTahunFilter
+      ? filterRekeningByTahun(effectiveRekeningList, activeTahunFilter)
+      : effectiveRekeningList;
+    if (
+      selectedRekening &&
+      !scoped.some((r) => r.id === selectedRekening.id)
+    ) {
+      return [selectedRekening, ...scoped];
+    }
+    return scoped;
+  }, [effectiveRekeningList, activeTahunFilter, selectedRekening]);
+
+  const copySourceRekeningOptions = useMemo(() => {
+    const targetYr = Number(newRekTahunText.trim());
+    const targetKeys = new Set(
+      Number.isInteger(targetYr)
+        ? effectiveRekeningList
+            .filter((r) => r.tahunAnggaran === targetYr)
+            .map((r) => buildRekeningUniqueKey(targetYr, r.kodeRekening))
+        : []
+    );
+    return [...effectiveRekeningList]
+      .filter(
+        (r) =>
+          !Number.isInteger(targetYr) ||
+          !targetKeys.has(buildRekeningUniqueKey(targetYr, r.kodeRekening))
+      )
+      .sort((a, b) => {
+        if (b.tahunAnggaran !== a.tahunAnggaran) return b.tahunAnggaran - a.tahunAnggaran;
+        return a.kodeRekening.localeCompare(b.kodeRekening, 'id-ID');
+      });
+  }, [effectiveRekeningList, newRekTahunText]);
+
   const rekeningSummariesMap = useMemo(() => {
     const map = new Map<string, ReturnType<typeof summarizeRekeningAnggaran>[number]>();
     for (const s of summarizeRekeningAnggaran(effectiveRekeningList, paketList)) {
@@ -294,9 +339,46 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
 
   if (!isOpen) return null;
 
+  const isLegacyUnlinkedEdit = Boolean(
+    isEditing && initialPaket && !initialPaket.rekeningId && !selectedRekening
+  );
+
+  const handleTahunAnggaranChange = (nextRaw: string) => {
+    setTahunAnggaranText(nextRaw);
+    const parsed = Number(nextRaw.trim());
+    if (
+      selectedRekening &&
+      Number.isInteger(parsed) &&
+      parsed !== selectedRekening.tahunAnggaran
+    ) {
+      setSelectedRekeningId('');
+      if (isEditing && initialPaket && !initialPaket.rekeningId) {
+        const legacyPagu = initialPaket.nilaiAnggaran || 0;
+        setNilaiAnggaran(legacyPagu);
+        setNilaiAnggaranText(legacyPagu > 0 ? legacyPagu.toLocaleString('id-ID') : '0');
+      } else {
+        setNilaiAnggaran(0);
+        setNilaiAnggaranText('');
+      }
+    }
+    if (showInlineNewRekening && nextRaw.trim()) {
+      setNewRekTahunText(nextRaw.trim());
+    }
+  };
+
   const handleSelectRekening = (nextId: string) => {
     setSelectedRekeningId(nextId);
-    if (!nextId) return;
+    if (!nextId) {
+      if (isEditing && initialPaket && !initialPaket.rekeningId) {
+        const legacyPagu = initialPaket.nilaiAnggaran || 0;
+        setNilaiAnggaran(legacyPagu);
+        setNilaiAnggaranText(legacyPagu > 0 ? legacyPagu.toLocaleString('id-ID') : '0');
+      } else {
+        setNilaiAnggaran(0);
+        setNilaiAnggaranText('');
+      }
+      return;
+    }
     const found = effectiveRekeningList.find((r) => r.id === nextId);
     if (found) {
       setNilaiAnggaran(found.paguAnggaran);
@@ -363,13 +445,6 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   const handleResetTemplate = () => {
     setTahapan(buildTemplateTahapan(jenisPelaksanaan));
     setHasCustomWorkflowEdit(false);
-  };
-
-  const handleAnggaranInputChange = (raw: string) => {
-    if (selectedRekening) return;
-    const parsed = parseRupiahInput(raw);
-    setNilaiAnggaran(parsed);
-    setNilaiAnggaranText(raw.trim() === '' ? '' : parsed.toLocaleString('id-ID'));
   };
 
   const handleHpsInputChange = (raw: string) => {
@@ -567,6 +642,9 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       initialPaket?.tanggalSelesai,
       getTodayLocalIso()
     );
+    const legacyAllowedWithoutRekening = Boolean(
+      isEditing && initialPaket && !initialPaket.rekeningId
+    );
     const effectiveTahunAnggaran = selectedRekening
       ? selectedRekening.tahunAnggaran
       : tahunAnggaran;
@@ -575,6 +653,9 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       : nilaiAnggaran;
 
     const validationErr = validatePaketPekerjaanInput({
+      rekeningId: selectedRekening ? selectedRekening.id : undefined,
+      matchedRekening: selectedRekening,
+      requireRekening: !legacyAllowedWithoutRekening,
       namaKegiatan,
       subKegiatan,
       jenisPelaksanaan,
@@ -698,20 +779,17 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
               1. Informasi Paket Pekerjaan
             </h3>
 
-            {/* Pemilih Kode Rekening & 1 Pagu Anggaran */}
+            {/* Pemilih Tahun Anggaran, Kode Rekening & 1 Pagu Anggaran */}
             <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Landmark className="w-4 h-4 text-emerald-700 shrink-0" />
                   <div>
-                    <label
-                      htmlFor="paket-kode-rekening"
-                      className="block font-bold text-slate-900"
-                    >
-                      Kode Rekening &amp; Pagu Anggaran (1 Rekening = 1 Pagu)
-                    </label>
+                    <div className="font-bold text-slate-900">
+                      Tahun Anggaran, Kode Rekening &amp; Pagu Anggaran (1 Rekening per TA = 1 Pagu)
+                    </div>
                     <p className="text-[11px] text-slate-600">
-                      Pilih Kode Rekening yang telah terdaftar agar beberapa kegiatan berbagi 1 pagu tanpa terhitung ganda.
+                      Kode Rekening &amp; Pagu berlaku per Tahun Anggaran DPA. Pagu kegiatan otomatis terkunci sesuai Kode Rekening TA terpilih.
                     </p>
                   </div>
                 </div>
@@ -737,29 +815,114 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                 )}
               </div>
 
-              <select
-                id="paket-kode-rekening"
-                value={selectedRekeningId}
-                onChange={(e) => handleSelectRekening(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
-              >
-                <option value="">
-                  -- Pilih Kode Rekening Terdaftar (atau isi manual untuk data tanpa rekening) --
-                </option>
-                {effectiveRekeningList.map((rek) => {
-                  const sum = rekeningSummariesMap.get(rek.id);
-                  const sisaLabel = sum
-                    ? `Sisa ${sum.isOverBudget ? '-' : ''}${formatRupiah(Math.abs(sum.sisaPagu))}`
-                    : '';
-                  return (
-                    <option key={rek.id} value={rek.id}>
-                      {rek.kodeRekening} — {rek.uraian} (TA {rek.tahunAnggaran} · Pagu{' '}
-                      {formatRupiah(rek.paguAnggaran)}
-                      {sum ? ` · ${sum.jumlahPaket} keg · ${sisaLabel}` : ''})
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <div className="sm:col-span-3">
+                  <label
+                    htmlFor="paket-tahun-anggaran"
+                    className="block font-semibold text-slate-700 mb-1"
+                  >
+                    Tahun Anggaran <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold text-[11px]">
+                      TA
+                    </span>
+                    <input
+                      id="paket-tahun-anggaran"
+                      type="number"
+                      min={MIN_TAHUN_ANGGARAN}
+                      max={MAX_TAHUN_ANGGARAN}
+                      step={1}
+                      list="tahun-anggaran-presets"
+                      required
+                      value={tahunAnggaranText}
+                      onChange={(e) => handleTahunAnggaranChange(e.target.value)}
+                      placeholder={String(currentYear)}
+                      className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white font-mono font-semibold tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
+                    />
+                    <datalist id="tahun-anggaran-presets">
+                      {Array.from(
+                        new Set([
+                          ...presetYears,
+                          ...effectiveRekeningList.map((r) => r.tahunAnggaran),
+                        ])
+                      )
+                        .sort((a, b) => b - a)
+                        .map((yr) => (
+                          <option key={yr} value={yr} />
+                        ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-9">
+                  <label
+                    htmlFor="paket-kode-rekening"
+                    className="block font-semibold text-slate-700 mb-1"
+                  >
+                    Kode Rekening (TA {activeTahunFilter ?? (tahunAnggaranText || currentYear)}){' '}
+                    {!isLegacyUnlinkedEdit && <span className="text-rose-600">*</span>}
+                  </label>
+                  <select
+                    id="paket-kode-rekening"
+                    value={selectedRekeningId}
+                    onChange={(e) => handleSelectRekening(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  >
+                    <option value="">
+                      {rekeningForActiveTa.length > 0
+                        ? `-- Pilih Kode Rekening TA ${activeTahunFilter ?? tahunAnggaranText} (${rekeningForActiveTa.length} tersedia) --`
+                        : `-- Belum ada Kode Rekening untuk TA ${activeTahunFilter ?? tahunAnggaranText} --`}
                     </option>
-                  );
-                })}
-              </select>
+                    {rekeningForActiveTa.map((rek) => {
+                      const sum = rekeningSummariesMap.get(rek.id);
+                      const sisaLabel = sum
+                        ? `Sisa ${sum.isOverBudget ? '-' : ''}${formatRupiah(Math.abs(sum.sisaPagu))}`
+                        : '';
+                      return (
+                        <option key={rek.id} value={rek.id}>
+                          {rek.kodeRekening} — {rek.uraian} (TA {rek.tahunAnggaran} · Pagu{' '}
+                          {formatRupiah(rek.paguAnggaran)}
+                          {sum ? ` · ${sum.jumlahPaket} keg · ${sisaLabel}` : ''})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {rekeningForActiveTa.length === 0 && !showInlineNewRekening && (
+                <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/90 text-amber-900 text-[11px] flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Belum ada master Kode Rekening untuk{' '}
+                    <strong>TA {activeTahunFilter ?? tahunAnggaranText}</strong>.{' '}
+                    {effectiveRekeningList.length > 0
+                      ? 'Tambahkan kode rekening TA ini (bisa menyalin kode & uraian dari TA sebelumnya).'
+                      : 'Tambahkan Kode Rekening terlebih dahulu agar Pagu Anggaran terisi otomatis.'}
+                  </span>
+                  {onCreateRekening && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInlineNewRekening(true);
+                        setInlineRekError('');
+                        setNewRekTahunText(
+                          tahunAnggaranText || String(new Date().getFullYear())
+                        );
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shrink-0"
+                    >
+                      + Buat Rekening TA {activeTahunFilter ?? tahunAnggaranText}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isLegacyUnlinkedEdit && (
+                <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[11px]">
+                  Data kegiatan ini belum tertaut ke Master Kode Rekening. Pilih atau buat Kode Rekening di atas untuk menyinkronkan Pagu Anggaran tahunan.
+                </div>
+              )}
 
               {selectedRekening && sharedRekeningUsage && (
                 <div
@@ -811,8 +974,36 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   data-testid="inline-rekening-form"
                   className="p-3 rounded-xl border border-emerald-300 bg-white space-y-2.5"
                 >
-                  <div className="font-bold text-slate-900 text-[11px]">
-                    Tambah Master Kode Rekening Baru
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="font-bold text-slate-900 text-[11px]">
+                      Tambah Master Kode Rekening Baru (Berlaku TA {newRekTahunText || currentYear})
+                    </div>
+                    {copySourceRekeningOptions.length > 0 && (
+                      <select
+                        id="inline-rek-copy-source"
+                        aria-label="Salin kode dan uraian dari tahun sebelumnya"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const src = effectiveRekeningList.find(
+                            (r) => r.id === e.target.value
+                          );
+                          if (src) {
+                            setNewRekKode(src.kodeRekening);
+                            setNewRekUraian(src.uraian);
+                          }
+                        }}
+                        className="px-2 py-1 rounded-md border border-indigo-200 bg-indigo-50/70 text-[11px] font-medium text-indigo-900"
+                      >
+                        <option value="">
+                          Salin kode &amp; uraian dari TA lain (Opsional)...
+                        </option>
+                        {copySourceRekeningOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            [TA {opt.tahunAnggaran}] {opt.kodeRekening} — {opt.uraian}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   {inlineRekError && (
                     <div
@@ -987,7 +1178,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label
                   htmlFor="paket-jenis-pelaksanaan"
@@ -1065,49 +1256,6 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   LS, GU, atau TU.
                 </p>
               </div>
-
-              <div>
-                <label
-                  htmlFor="paket-tahun-anggaran"
-                  className="block font-semibold text-slate-700 mb-1"
-                >
-                  Tahun Anggaran <span className="text-rose-600">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold text-[11px]">
-                    TA
-                  </span>
-                  <input
-                    id="paket-tahun-anggaran"
-                    type="number"
-                    min={MIN_TAHUN_ANGGARAN}
-                    max={MAX_TAHUN_ANGGARAN}
-                    step={1}
-                    list="tahun-anggaran-presets"
-                    required
-                    readOnly={Boolean(selectedRekening)}
-                    aria-readonly={Boolean(selectedRekening)}
-                    value={tahunAnggaranText}
-                    onChange={(e) => setTahunAnggaranText(e.target.value)}
-                    placeholder={String(currentYear)}
-                    className={`w-full pl-9 pr-3 py-2 rounded-lg border font-mono tabular-nums focus:outline-none ${
-                      selectedRekening
-                        ? 'border-slate-200 bg-slate-100 text-slate-700 cursor-not-allowed'
-                        : 'border-slate-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900'
-                    }`}
-                  />
-                  <datalist id="tahun-anggaran-presets">
-                    {presetYears.map((yr) => (
-                      <option key={yr} value={yr} />
-                    ))}
-                  </datalist>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  {selectedRekening
-                    ? 'Mengikuti tahun Kode Rekening terpilih.'
-                    : 'Dasar pengelompokan rekap tahunan.'}
-                </p>
-              </div>
             </div>
 
             {/* Pilihan di awal input: Pembayaran Sekaligus vs Termin */}
@@ -1171,7 +1319,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   htmlFor="paket-nilai-anggaran"
                   className="block font-semibold text-slate-700 mb-1"
                 >
-                  Pagu Anggaran {selectedRekening ? 'Rekening (1x)' : '(Rp)'}{' '}
+                  Pagu Anggaran {selectedRekening ? 'Rekening (1x)' : '(Sesuai Kode Rekening)'}{' '}
                   <span className="text-rose-600">*</span>
                 </label>
                 <div className="relative">
@@ -1182,23 +1330,29 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                     id="paket-nilai-anggaran"
                     type="text"
                     inputMode="numeric"
-                    required
-                    readOnly={Boolean(selectedRekening)}
-                    aria-readonly={Boolean(selectedRekening)}
-                    value={nilaiAnggaranText}
-                    onChange={(e) => handleAnggaranInputChange(e.target.value)}
-                    placeholder="0"
-                    className={`w-full pl-9 pr-3 py-2 rounded-lg border font-mono tabular-nums focus:outline-none ${
+                    readOnly
+                    aria-readonly="true"
+                    value={
                       selectedRekening
-                        ? 'border-slate-200 bg-slate-100 text-slate-800 font-semibold cursor-not-allowed'
-                        : 'border-slate-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900'
-                    }`}
+                        ? selectedRekening.paguAnggaran.toLocaleString('id-ID')
+                        : isLegacyUnlinkedEdit
+                        ? nilaiAnggaranText
+                        : ''
+                    }
+                    placeholder={
+                      selectedRekening || isLegacyUnlinkedEdit
+                        ? '0'
+                        : 'Pilih Kode Rekening terlebih dahulu'
+                    }
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-800 font-semibold font-mono tabular-nums cursor-not-allowed focus:outline-none"
                   />
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
                   {selectedRekening
-                    ? `Otomatis dari ${selectedRekening.kodeRekening}: ${formatRupiah(selectedRekening.paguAnggaran)}`
-                    : `Terbaca: ${formatRupiah(nilaiAnggaran)}`}
+                    ? `Terkunci sesuai ${selectedRekening.kodeRekening} (TA ${selectedRekening.tahunAnggaran}): ${formatRupiah(selectedRekening.paguAnggaran)}`
+                    : isLegacyUnlinkedEdit
+                    ? `Pagu data lama: ${formatRupiah(nilaiAnggaran)} (pilih Kode Rekening untuk sinkronisasi TA)`
+                    : 'Otomatis terisi & terkunci sesuai Kode Rekening TA terpilih'}
                 </p>
               </div>
 

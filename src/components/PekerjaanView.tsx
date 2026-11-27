@@ -94,18 +94,21 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   const availableYears = useMemo(
-    () => getAvailableTahunAnggaran(paketList),
-    [paketList]
-  );
-
-  const rekeningFilterOptions = useMemo(
-    () => getAvailableKodeRekeningOptions(paketList, rekeningList),
+    () => getAvailableTahunAnggaran(paketList, rekeningList),
     [paketList, rekeningList]
   );
 
+  const rekeningFilterOptions = useMemo(
+    () => getAvailableKodeRekeningOptions(paketList, rekeningList, selectedTahun),
+    [paketList, rekeningList, selectedTahun]
+  );
+
   const rekeningSummaries = useMemo(
-    () => summarizeRekeningAnggaran(rekeningList, paketList, todayIso),
-    [rekeningList, paketList, todayIso]
+    () =>
+      summarizeRekeningAnggaran(rekeningList, paketList, todayIso).filter(
+        (s) => selectedTahun === 'all' || s.rekening.tahunAnggaran === selectedTahun
+      ),
+    [rekeningList, paketList, todayIso, selectedTahun]
   );
 
   const sharedCountByDedupeKey = useMemo(() => {
@@ -356,14 +359,21 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
               {rekeningSummaries.map((item) => {
                 const normKey = normalizeKodeRekening(item.rekening.kodeRekening);
-                const isSelected = selectedKodeRekening === normKey;
+                const isSelected =
+                  selectedKodeRekening === normKey &&
+                  selectedTahun === item.rekening.tahunAnggaran;
                 return (
                   <button
                     key={item.rekening.id}
                     type="button"
-                    onClick={() =>
-                      setSelectedKodeRekening(isSelected ? 'all' : normKey)
-                    }
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedKodeRekening('all');
+                      } else {
+                        setSelectedTahun(item.rekening.tahunAnggaran);
+                        setSelectedKodeRekening(normKey);
+                      }
+                    }}
                     className={`text-left p-3 rounded-xl border transition-all space-y-1.5 ${
                       isSelected
                         ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600'
@@ -448,9 +458,20 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
           <select
             aria-label="Filter tahun anggaran"
             value={selectedTahun === 'all' ? 'all' : String(selectedTahun)}
-            onChange={(e) =>
-              setSelectedTahun(e.target.value === 'all' ? 'all' : Number(e.target.value))
-            }
+            onChange={(e) => {
+              const nextTa = e.target.value === 'all' ? 'all' : Number(e.target.value);
+              setSelectedTahun(nextTa);
+              if (nextTa !== 'all' && selectedKodeRekening !== 'all') {
+                const stillValid = getAvailableKodeRekeningOptions(
+                  paketList,
+                  rekeningList,
+                  nextTa
+                ).some((o) => o.key === selectedKodeRekening);
+                if (!stillValid) {
+                  setSelectedKodeRekening('all');
+                }
+              }
+            }}
             className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-800 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
           >
             <option value="all">Semua Tahun Anggaran</option>

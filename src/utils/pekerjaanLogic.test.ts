@@ -10,11 +10,13 @@ import {
   addCalendarDaysIso,
   buildDefaultTerminPencairan,
   buildPekerjaanCsvContent,
+  buildRolloverRekeningPreview,
   buildTemplateTahapan,
   calculatePekerjaanStats,
   computePaketProgress,
   countCalendarDaysBetweenIso,
   filterPaketPekerjaan,
+  filterRekeningByTahun,
   formatRupiah,
   formatTanggalDdMmYyyy,
   formatTanggalDisplay,
@@ -930,4 +932,177 @@ test('1 Kode Rekening = 1 Pagu Anggaran: shared across multiple activities witho
   assert.equal(csv.includes('5.1.02.02.01.0029'), true);
   assert.equal(csv.includes('Belanja Jasa Tenaga Ahli'), true);
 });
+
+test('Multi-year Kode Rekening governance, annual rollover preview, and strict Pagu validation', () => {
+  const rekList: RekeningAnggaran[] = [
+    {
+      id: 'rek-2026-a',
+      kodeRekening: '5.1.02.02.01.0029',
+      uraian: 'Belanja Jasa Tenaga Ahli TA 2026',
+      tahunAnggaran: 2026,
+      paguAnggaran: 150000000,
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-01-05',
+      updatedAt: '2026-01-05',
+    },
+    {
+      id: 'rek-2026-b',
+      kodeRekening: '5.1.02.02.01.0030',
+      uraian: 'Belanja Konsultansi Pengawasan',
+      tahunAnggaran: 2026,
+      paguAnggaran: 80000000,
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-01-05',
+      updatedAt: '2026-01-05',
+    },
+    {
+      id: 'rek-2027-a',
+      kodeRekening: '5.1.02.02.01.0029',
+      uraian: 'Belanja Jasa Tenaga Ahli TA 2027',
+      tahunAnggaran: 2027,
+      paguAnggaran: 200000000,
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2027-01-05',
+      updatedAt: '2027-01-05',
+    },
+  ];
+
+  // Year list combines both paketList and rekeningList
+  assert.deepEqual(getAvailableTahunAnggaran([], rekList), [2027, 2026]);
+  assert.equal(filterRekeningByTahun(rekList, 2026).length, 2);
+  assert.equal(filterRekeningByTahun(rekList, 2027).length, 1);
+
+  // Scoped Kode Rekening options preserve year-specific uraian & pagu
+  const opt2027 = getAvailableKodeRekeningOptions([], rekList, 2027);
+  assert.equal(opt2027.length, 1);
+  assert.equal(opt2027[0].uraian, 'Belanja Jasa Tenaga Ahli TA 2027');
+  assert.equal(opt2027[0].paguAnggaran, 200000000);
+
+  // Rollover 2026 -> 2027 skips 5.1.02.02.01.0029 (already exists in 2027) and prepares 0030
+  const previewCopy = buildRolloverRekeningPreview(rekList, 2026, 2027, true);
+  assert.equal(previewCopy.sourceCount, 2);
+  assert.equal(previewCopy.skippedExistingCount, 1);
+  assert.equal(previewCopy.candidates.length, 1);
+  assert.equal(previewCopy.candidates[0].kodeRekening, '5.1.02.02.01.0030');
+  assert.equal(previewCopy.candidates[0].tahunAnggaran, 2027);
+  assert.equal(previewCopy.candidates[0].paguAnggaran, 80000000);
+
+  // Rollover with reset Pagu = 0 to TA 2028
+  const previewZero = buildRolloverRekeningPreview(rekList, 2026, 2028, false);
+  assert.equal(previewZero.candidates.length, 2);
+  assert.equal(previewZero.skippedExistingCount, 0);
+  assert.equal(previewZero.candidates[0].paguAnggaran, 0);
+  assert.equal(previewZero.candidates[0].sourcePaguAnggaran, 150000000);
+
+  // Same year yields empty preview
+  const sameYear = buildRolloverRekeningPreview(rekList, 2026, 2026, true);
+  assert.equal(sameYear.candidates.length, 0);
+
+  // Same kodeRekening across TA 2026 and TA 2027 counts as 2 distinct annual pagus (150jt + 200jt = 350jt)
+  const crossYearPackets: PaketPekerjaan[] = [
+    {
+      id: 'pk-26',
+      rekeningId: 'rek-2026-a',
+      kodeRekening: '5.1.02.02.01.0029',
+      namaRekening: 'Belanja Jasa Tenaga Ahli TA 2026',
+      namaKegiatan: 'Keg 2026',
+      subKegiatan: 'Sub 2026',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 150000000,
+      nilaiKontrak: 50000000,
+      tanggalMulai: '2026-03-01',
+      tenggatWaktu: '2026-06-01',
+      tahapan: [{ id: 't1', urutan: 1, nama: 'SPK', status: 'selesai' }],
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-03-01',
+      updatedAt: '2026-03-01',
+    },
+    {
+      id: 'pk-27',
+      rekeningId: 'rek-2027-a',
+      kodeRekening: '5.1.02.02.01.0029',
+      namaRekening: 'Belanja Jasa Tenaga Ahli TA 2027',
+      namaKegiatan: 'Keg 2027',
+      subKegiatan: 'Sub 2027',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2027,
+      nilaiAnggaran: 200000000,
+      nilaiKontrak: 75000000,
+      tanggalMulai: '2027-03-01',
+      tenggatWaktu: '2027-06-01',
+      tahapan: [{ id: 't1', urutan: 1, nama: 'SPK', status: 'sedang_berjalan' }],
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2027-03-01',
+      updatedAt: '2027-03-01',
+    },
+  ];
+  const combinedStats = calculatePekerjaanStats(crossYearPackets, '2026-10-01', rekList);
+  assert.equal(combinedStats.totalAnggaran, 350000000);
+  assert.equal(combinedStats.jumlahRekeningUnik, 2);
+
+  // Strict Pagu-Kode Rekening validation invariants
+  const baseValid = {
+    namaKegiatan: 'Keg Uji',
+    subKegiatan: 'Sub Uji',
+    jenisPelaksanaan: 'Perorangan' as JenisPelaksanaan,
+    tanggalMulai: '2026-05-01',
+    durasiHariKerja: 30,
+    tenggatWaktu: '2026-05-30',
+    tahapan: buildTemplateTahapan('Perorangan'),
+  };
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      ...baseValid,
+      requireRekening: true,
+      rekeningId: '',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 0,
+    }),
+    'Kode Rekening wajib dipilih atau dibuat baru agar Pagu Anggaran sesuai dengan master Kode Rekening pada Tahun Anggaran tersebut.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      ...baseValid,
+      requireRekening: true,
+      rekeningId: rekList[0].id,
+      matchedRekening: rekList[0],
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 1000000, // Mismatch vs 150.000.000
+    }),
+    'Pagu Anggaran paket harus sesuai dengan Pagu Anggaran pada Kode Rekening terpilih.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      ...baseValid,
+      requireRekening: true,
+      rekeningId: rekList[0].id,
+      matchedRekening: rekList[0],
+      tahunAnggaran: 2027, // Mismatch vs TA 2026
+      nilaiAnggaran: 150000000,
+    }),
+    'Tahun Anggaran paket (2027) harus sama dengan Tahun Anggaran Kode Rekening (2026).'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      ...baseValid,
+      requireRekening: true,
+      rekeningId: rekList[0].id,
+      matchedRekening: rekList[0],
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 150000000,
+    }),
+    null
+  );
+});
+
 
