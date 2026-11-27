@@ -62,6 +62,7 @@ interface ModalWorkflowTahapanProps {
       skemaPembayaran?: SkemaPembayaran;
       terminPencairan?: TerminPekerjaan[];
       statusPencairan?: StatusPencairan;
+      tanggalPencairan?: string;
       mekanismePencairan?: MekanismePencairan;
     }
   ) => Promise<void>;
@@ -83,6 +84,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
   const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran>('Sekaligus');
   const [terminPencairan, setTerminPencairan] = useState<TerminPekerjaan[]>([]);
   const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
+  const [tanggalPencairan, setTanggalPencairan] = useState('');
   const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [newStageName, setNewStageName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -108,6 +110,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
         : []
     );
     setStatusPencairan(paket.statusPencairan || 'Belum');
+    setTanggalPencairan(paket.tanggalPencairan || '');
     setMekanismePencairan(paket.mekanismePencairan || '');
     setNewStageName('');
     setErrorMessage('');
@@ -223,6 +226,15 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     }
   };
 
+  const handleStatusPencairanSekaligusChange = (next: StatusPencairan) => {
+    setStatusPencairan(next);
+    if (next === 'Sudah') {
+      setTanggalPencairan((prev) => prev || todayIso);
+    } else {
+      setTanggalPencairan('');
+    }
+  };
+
   const handleUpdateTermin = (id: string, patch: Partial<TerminPekerjaan>) => {
     setTerminPencairan((prev) =>
       prev.map((tr) => {
@@ -291,6 +303,8 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
         skemaPembayaran,
         terminPencairan: cleanedTermins,
         statusPencairan: resolvedStatusPencairan,
+        tanggalPencairan:
+          skemaPembayaran === 'Sekaligus' ? tanggalPencairan.trim() || undefined : undefined,
         mekanismePencairan: mekanismePencairan || undefined,
       });
       onClose();
@@ -489,7 +503,13 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
 
           {/* Skema Pembayaran, Status & Termin Pencairan */}
           <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div
+              className={`grid grid-cols-1 gap-3 ${
+                skemaPembayaran === 'Sekaligus'
+                  ? 'sm:grid-cols-2 lg:grid-cols-4'
+                  : 'sm:grid-cols-3'
+              }`}
+            >
               <div>
                 <label
                   htmlFor="workflow-skema-pembayaran"
@@ -514,26 +534,45 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
               </div>
 
               {skemaPembayaran === 'Sekaligus' ? (
-                <div>
-                  <label
-                    htmlFor="workflow-status-pencairan"
-                    className="block text-[11px] font-semibold text-slate-700 mb-1"
-                  >
-                    Tahapan Pencairan
-                  </label>
-                  <select
-                    id="workflow-status-pencairan"
-                    value={statusPencairan}
-                    onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                  >
-                    {STATUS_PENCAIRAN_LIST.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label
+                      htmlFor="workflow-status-pencairan"
+                      className="block text-[11px] font-semibold text-slate-700 mb-1"
+                    >
+                      Tahapan Pencairan
+                    </label>
+                    <select
+                      id="workflow-status-pencairan"
+                      value={statusPencairan}
+                      onChange={(e) =>
+                        handleStatusPencairanSekaligusChange(e.target.value as StatusPencairan)
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    >
+                      {STATUS_PENCAIRAN_LIST.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="workflow-tanggal-pencairan"
+                      className="block text-[11px] font-semibold text-slate-700 mb-1"
+                    >
+                      Tanggal Pencairan
+                    </label>
+                    <input
+                      id="workflow-tanggal-pencairan"
+                      type="date"
+                      value={tanggalPencairan}
+                      onChange={(e) => setTanggalPencairan(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                  </div>
+                </>
               ) : (
                 <div>
                   <div className="block text-[11px] font-semibold text-slate-700 mb-1">

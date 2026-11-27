@@ -1210,6 +1210,7 @@ export default function App() {
       skemaPembayaran?: SkemaPembayaran;
       terminPencairan?: TerminPekerjaan[];
       statusPencairan?: 'Belum' | 'Sudah';
+      tanggalPencairan?: string;
       mekanismePencairan?:
         | 'Langsung (LS)'
         | 'Ganti Uang Persediaan (GU)'

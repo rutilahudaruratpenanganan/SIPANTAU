@@ -527,7 +527,7 @@ service cloud.firestore {
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
+          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'tanggalPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan',
           'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
         ])
@@ -557,6 +557,7 @@ service cloud.firestore {
           && (data.terminPencairan.size() == 0 || data.terminPencairan[0] is map)
         ))
         && (!('statusPencairan' in data) || (data.statusPencairan in ['Belum', 'Sudah']))
+        && (!('tanggalPencairan' in data) || (data.tanggalPencairan is string && data.tanggalPencairan.size() <= 40))
         && (!('mekanismePencairan' in data) || (data.mekanismePencairan in ['Langsung (LS)', 'Ganti Uang Persediaan (GU)', 'Tambahan Uang Persediaan (TU)']))
         && (!('kodeRup' in data) || (data.kodeRup is string && data.kodeRup.size() <= 100))
         && (!('nomorKontrak' in data) || (data.nomorKontrak is string && data.nomorKontrak.size() <= 150))
@@ -582,6 +583,7 @@ service cloud.firestore {
           && (data.terminPencairan.size() == 0 || data.terminPencairan[0] is map)
         ))
         && (!('statusPencairan' in data) || (data.statusPencairan in ['Belum', 'Sudah']))
+        && (!('tanggalPencairan' in data) || (data.tanggalPencairan is string && data.tanggalPencairan.size() <= 40))
         && (!('mekanismePencairan' in data) || (data.mekanismePencairan in ['Langsung (LS)', 'Ganti Uang Persediaan (GU)', 'Tambahan Uang Persediaan (TU)']))
         && data.tahapan is list
         && data.tahapan.size() >= 1
@@ -595,7 +597,7 @@ service cloud.firestore {
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
-          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
+          'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'tanggalPencairan', 'mekanismePencairan',
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'
         ])
         || affected.hasOnly([
@@ -603,7 +605,7 @@ service cloud.firestore {
         ])
         || affected.hasOnly([
           'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',
-          'statusPencairan', 'mekanismePencairan', 'updatedAt'
+          'statusPencairan', 'tanggalPencairan', 'mekanismePencairan', 'updatedAt'
         ]);
     }
 
@@ -632,7 +634,7 @@ service cloud.firestore {
           || (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',
-              'statusPencairan', 'mekanismePencairan', 'updatedAt'
+              'statusPencairan', 'tanggalPencairan', 'mekanismePencairan', 'updatedAt'
             ])
             && isValidPaketTahapanUpdate(request.resource.data)
           )

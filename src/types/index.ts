@@ -247,6 +247,7 @@ export interface PaketPekerjaan {
   skemaPembayaran?: SkemaPembayaran;
   terminPencairan?: TerminPekerjaan[];
   statusPencairan?: StatusPencairan;
+  tanggalPencairan?: string; // YYYY-MM-DD (Tanggal pencairan untuk pembayaran Sekaligus)
   mekanismePencairan?: MekanismePencairan;
   kodeRup?: string;
   nomorKontrak?: string;

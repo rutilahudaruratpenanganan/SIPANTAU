@@ -687,6 +687,11 @@
           "enum": ["Belum", "Sudah"],
           "description": "Status tahapan pencairan anggaran"
         },
+        "tanggalPencairan": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Tanggal pencairan anggaran (YYYY-MM-DD) untuk pembayaran Sekaligus"
+        },
         "mekanismePencairan": {
           "type": "string",
           "enum": ["Langsung (LS)", "Ganti Uang Persediaan (GU)", "Tambahan Uang Persediaan (TU)"],

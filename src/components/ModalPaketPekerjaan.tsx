@@ -108,6 +108,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   const [skemaPembayaran, setSkemaPembayaran] = useState<SkemaPembayaran>('Sekaligus');
   const [terminPencairan, setTerminPencairan] = useState<TerminPekerjaan[]>([]);
   const [statusPencairan, setStatusPencairan] = useState<StatusPencairan>('Belum');
+  const [tanggalPencairan, setTanggalPencairan] = useState<string>('');
   const [mekanismePencairan, setMekanismePencairan] = useState<MekanismePencairan | ''>('');
   const [kodeRup, setKodeRup] = useState('');
   const [nomorKontrak, setNomorKontrak] = useState('');
@@ -189,6 +190,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           : []
       );
       setStatusPencairan(initialPaket.statusPencairan || 'Belum');
+      setTanggalPencairan(initialPaket.tanggalPencairan || '');
       setMekanismePencairan(initialPaket.mekanismePencairan || '');
       setKodeRup(initialPaket.kodeRup || '');
       setNomorKontrak(initialPaket.nomorKontrak || '');
@@ -221,6 +223,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setSkemaPembayaran('Sekaligus');
       setTerminPencairan([]);
       setStatusPencairan('Belum');
+      setTanggalPencairan('');
       setMekanismePencairan('');
       setKodeRup('');
       setNomorKontrak('');
@@ -395,6 +398,15 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     setSkemaPembayaran(next);
     if (next === 'Termin' && terminPencairan.length === 0) {
       setTerminPencairan(buildDefaultTerminPencairan());
+    }
+  };
+
+  const handleStatusPencairanSekaligusChange = (next: StatusPencairan) => {
+    setStatusPencairan(next);
+    if (next === 'Sudah') {
+      setTanggalPencairan((prev) => prev || getTodayLocalIso());
+    } else {
+      setTanggalPencairan('');
     }
   };
 
@@ -578,6 +590,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       skemaPembayaran,
       terminPencairan: cleanedTermins,
       statusPencairan: resolvedStatusPencairan,
+      tanggalPencairan:
+        skemaPembayaran === 'Sekaligus' ? tanggalPencairan.trim() || undefined : undefined,
       mekanismePencairan: mekanismePencairan || undefined,
       tahapan: cleanedTahapan,
     });
@@ -611,6 +625,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
           skemaPembayaran,
           terminPencairan: cleanedTermins,
           statusPencairan: resolvedStatusPencairan,
+          tanggalPencairan:
+            skemaPembayaran === 'Sekaligus' ? tanggalPencairan.trim() || undefined : undefined,
           mekanismePencairan: mekanismePencairan || undefined,
           kodeRup: kodeRup.trim() || undefined,
           nomorKontrak: nomorKontrak.trim() || undefined,
@@ -1433,7 +1449,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
 
             {/* Tahapan Pencairan dalam Alur Tahapan Pekerjaan */}
             {skemaPembayaran === 'Sekaligus' ? (
-              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div>
                   <label
                     htmlFor="paket-status-pencairan"
@@ -1442,22 +1458,52 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                     Tahapan Pencairan (Pembayaran Sekaligus)
                   </label>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Status pencairan anggaran penuh sebagai bagian dari alur tahapan pekerjaan.
+                    Status dan tanggal pencairan anggaran penuh sebagai bagian dari alur tahapan pekerjaan.
                   </p>
                 </div>
-                <div className="w-full sm:w-48 shrink-0">
-                  <select
-                    id="paket-status-pencairan"
-                    value={statusPencairan}
-                    onChange={(e) => setStatusPencairan(e.target.value as StatusPencairan)}
-                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 font-medium"
-                  >
-                    {STATUS_PENCAIRAN_LIST.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full lg:w-auto shrink-0">
+                  <div className="sm:w-36">
+                    <label
+                      htmlFor="paket-status-pencairan"
+                      className="block text-[10px] font-semibold text-slate-600 mb-1"
+                    >
+                      Status Pencairan
+                    </label>
+                    <select
+                      id="paket-status-pencairan"
+                      value={statusPencairan}
+                      onChange={(e) =>
+                        handleStatusPencairanSekaligusChange(e.target.value as StatusPencairan)
+                      }
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 font-medium"
+                    >
+                      {STATUS_PENCAIRAN_LIST.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:w-44">
+                    <label
+                      htmlFor="paket-tanggal-pencairan"
+                      className="block text-[10px] font-semibold text-slate-600 mb-1"
+                    >
+                      Tanggal Pencairan
+                    </label>
+                    <input
+                      id="paket-tanggal-pencairan"
+                      type="date"
+                      value={tanggalPencairan}
+                      onChange={(e) => setTanggalPencairan(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    />
+                    {tanggalPencairan && (
+                      <p className="text-[10px] text-emerald-700 mt-0.5 tabular-nums">
+                        {formatTanggalDisplay(tanggalPencairan)}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1498,14 +1544,23 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   </button>
                 </div>
 
+                <div className="hidden lg:flex items-center gap-2 px-2.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="flex-1 min-w-0 pl-8">Nama Termin</div>
+                  <div className="w-[68px] text-center">Persen</div>
+                  <div className="w-[136px]">Nilai (Rp)</div>
+                  <div className="w-[92px]">Status</div>
+                  <div className="w-[142px]">Tanggal Pencairan</div>
+                  <div className="w-[30px]" />
+                </div>
+
                 <div className="space-y-2">
                   {terminPencairan.map((tr, idx) => (
                     <div
                       key={tr.id}
                       data-testid={`termin-row-${idx}`}
-                      className="p-2.5 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                      className="p-2.5 rounded-xl border border-slate-200 bg-white grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2"
                     >
-                      <div className="sm:col-span-4 flex items-center gap-2 min-w-0">
+                      <div className="sm:col-span-2 lg:flex-1 flex items-center gap-2 min-w-0">
                         <span className="w-6 h-6 rounded-md bg-indigo-700 text-white font-mono font-bold text-[11px] flex items-center justify-center shrink-0 tabular-nums">
                           {idx + 1}
                         </span>
@@ -1521,7 +1576,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                         />
                       </div>
 
-                      <div className="sm:col-span-2">
+                      <div className="lg:w-[68px] shrink-0">
                         <div className="relative">
                           <input
                             type="number"
@@ -1537,15 +1592,15 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                               });
                             }}
                             placeholder="%"
-                            className="w-full pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className="w-full pl-2 pr-5 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
                             %
                           </span>
                         </div>
                       </div>
 
-                      <div className="sm:col-span-3">
+                      <div className="lg:w-[136px] shrink-0">
                         <div className="relative">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 pointer-events-none">
                             Rp
@@ -1565,13 +1620,13 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                                 nilaiRupiah: raw === '' ? undefined : parseRupiahInput(raw),
                               });
                             }}
-                            placeholder="Nilai Rp (opsional)"
+                            placeholder="Nilai Rp"
                             className="w-full pl-7 pr-2 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
                         </div>
                       </div>
 
-                      <div className="sm:col-span-2">
+                      <div className="lg:w-[92px] shrink-0">
                         <select
                           aria-label={`Status Termin ${idx + 1}`}
                           value={tr.status}
@@ -1594,7 +1649,22 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                         </select>
                       </div>
 
-                      <div className="sm:col-span-1 flex justify-end">
+                      <div className="lg:w-[142px] shrink-0">
+                        <input
+                          type="date"
+                          aria-label={`Tanggal Pencairan Termin ${idx + 1}`}
+                          title="Tanggal Pencairan Termin"
+                          value={tr.tanggalCair || ''}
+                          onChange={(e) =>
+                            handleTerminFieldChange(tr.id, {
+                              tanggalCair: e.target.value || undefined,
+                            })
+                          }
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-[11px] text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                      </div>
+
+                      <div className="flex justify-end shrink-0">
                         <button
                           type="button"
                           onClick={() => handleDeleteTermin(tr.id)}

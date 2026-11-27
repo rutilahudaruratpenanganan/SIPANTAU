@@ -1604,6 +1604,7 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
     skemaPembayaran,
     terminPencairan,
     statusPencairan,
+    tanggalPencairan: (data.tanggalPencairan as string | undefined) || undefined,
     mekanismePencairan,
     kodeRup: (data.kodeRup as string | undefined) || undefined,
     nomorKontrak: (data.nomorKontrak as string | undefined) || undefined,
@@ -1835,6 +1836,7 @@ export interface PaketPekerjaanMutationPayload {
   skemaPembayaran?: SkemaPembayaran;
   terminPencairan?: TerminPekerjaan[];
   statusPencairan?: PaketPekerjaan['statusPencairan'];
+  tanggalPencairan?: string;
   mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
   kodeRup?: string;
   nomorKontrak?: string;
@@ -1925,6 +1927,9 @@ export async function createPaketPekerjaanDb(
   if (input.statusPencairan) {
     payload.statusPencairan = input.statusPencairan;
   }
+  if (input.skemaPembayaran !== 'Termin' && input.tanggalPencairan?.trim()) {
+    payload.tanggalPencairan = clampStr(input.tanggalPencairan, LIMITS.DATE_STR);
+  }
   if (input.mekanismePencairan) {
     payload.mekanismePencairan = input.mekanismePencairan;
   }
@@ -2006,6 +2011,10 @@ export async function updatePaketPekerjaanDb(
       ? sanitizeTerminPekerjaan(input.terminPencairan!)
       : deleteField(),
     statusPencairan: input.statusPencairan ? input.statusPencairan : deleteField(),
+    tanggalPencairan:
+      !isTermin && input.tanggalPencairan?.trim()
+        ? clampStr(input.tanggalPencairan, LIMITS.DATE_STR)
+        : deleteField(),
     mekanismePencairan: input.mekanismePencairan ? input.mekanismePencairan : deleteField(),
     kodeRup: input.kodeRup?.trim()
       ? clampStr(input.kodeRup, LIMITS.KODE_RUP)
@@ -2041,6 +2050,7 @@ export async function updatePaketPekerjaanTahapanDb(
     skemaPembayaran?: SkemaPembayaran;
     terminPencairan?: TerminPekerjaan[];
     statusPencairan?: PaketPekerjaan['statusPencairan'];
+    tanggalPencairan?: string;
     mekanismePencairan?: PaketPekerjaan['mekanismePencairan'];
   }
 ): Promise<void> {
@@ -2061,6 +2071,7 @@ export async function updatePaketPekerjaanTahapanDb(
         pencairan.terminPencairan.length > 0
       ) {
         updatePayload.terminPencairan = sanitizeTerminPekerjaan(pencairan.terminPencairan);
+        updatePayload.tanggalPencairan = deleteField();
       } else if (pencairan.skemaPembayaran === 'Sekaligus') {
         updatePayload.terminPencairan = deleteField();
       }
@@ -2072,6 +2083,11 @@ export async function updatePaketPekerjaanTahapanDb(
     }
     if (pencairan.statusPencairan !== undefined) {
       updatePayload.statusPencairan = pencairan.statusPencairan;
+    }
+    if (pencairan.skemaPembayaran !== 'Termin' && 'tanggalPencairan' in pencairan) {
+      updatePayload.tanggalPencairan = pencairan.tanggalPencairan?.trim()
+        ? clampStr(pencairan.tanggalPencairan, LIMITS.DATE_STR)
+        : deleteField();
     }
     if (pencairan.mekanismePencairan !== undefined) {
       updatePayload.mekanismePencairan = pencairan.mekanismePencairan

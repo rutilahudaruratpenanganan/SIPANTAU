@@ -28,6 +28,7 @@ import {
   normalizeTerminOrder,
   parseRupiahInput,
   resolvePaketPaguInfo,
+  resolvePaketTanggalPencairan,
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
   resolveTerminNominal,
@@ -442,9 +443,47 @@ test('validatePaketPekerjaanInput rejects invalid dates, durasiHariKerja, budget
       tenggatWaktu: '2026-11-10',
       skemaPembayaran: 'Sekaligus',
       statusPencairan: 'Sudah',
+      tanggalPencairan: '2026-11-12',
       tahapan: validStages,
     }),
     null
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg B',
+      subKegiatan: 'Sub B',
+      jenisPelaksanaan: 'Badan Usaha',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 10,
+      tenggatWaktu: '2026-11-10',
+      skemaPembayaran: 'Sekaligus',
+      statusPencairan: 'Sudah',
+      tanggalPencairan: '12-11-2026',
+      tahapan: validStages,
+    }),
+    'Format Tanggal Pencairan tidak valid.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg C',
+      subKegiatan: 'Sub C',
+      jenisPelaksanaan: 'Badan Usaha',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 10,
+      tenggatWaktu: '2026-11-10',
+      skemaPembayaran: 'Termin',
+      terminPencairan: [
+        { id: 't1', urutan: 1, nama: 'Termin 1', persentase: 50, status: 'Sudah', tanggalCair: 'bad-date' },
+      ],
+      tahapan: validStages,
+    }),
+    'Format Tanggal Pencairan pada "Termin 1" tidak valid.'
   );
 });
 
@@ -514,6 +553,7 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
       tenggatWaktu: '2025-12-10',
       skemaPembayaran: 'Sekaligus',
       statusPencairan: 'Sudah',
+      tanggalPencairan: '2025-12-12',
       mekanismePencairan: 'Langsung (LS)',
       kodeRup: '51234567',
       penyedia: 'Tenaga Ahli Sipil',
@@ -665,6 +705,11 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   assert.equal(csv.includes('Rincian Termin Pencairan'), true);
   assert.equal(csv.includes('Sebagian (1/2 Termin)'), true);
   assert.equal(csv.includes('Tahapan Pencairan'), true);
+  assert.equal(csv.includes('Tanggal Pencairan'), true);
+  assert.equal(csv.includes('12 Desember 2025'), true);
+  assert.equal(csv.includes('Cair 10-11-2026'), true);
+  assert.equal(resolvePaketTanggalPencairan(list[0]), '2025-12-12');
+  assert.equal(resolvePaketTanggalPencairan(list[1]), '2026-11-10');
   assert.equal(csv.includes('Mekanisme Pencairan'), true);
   assert.equal(csv.includes('Langsung (LS)'), true);
   assert.equal(csv.includes('1 November 2025'), true);

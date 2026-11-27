@@ -1054,6 +1054,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               <div className="font-bold whitespace-nowrap">
                                 {terminInfo.summaryLabel}
                               </div>
+                              {terminInfo.skemaPembayaran === 'Sekaligus' &&
+                                paket.tanggalPencairan && (
+                                  <div className="text-[9px] text-slate-700 mt-0.5 tabular-nums">
+                                    Tgl Cair: {formatTanggalDisplay(paket.tanggalPencairan)}
+                                  </div>
+                                )}
                               {terminInfo.sudahCount > 0 && terminInfo.hasNominalCair && (
                                 <div className="font-mono text-[9px] font-bold text-emerald-800 mt-0.5 tabular-nums whitespace-nowrap">
                                   Sudah Dibayar: {formatRupiah(terminInfo.totalNilaiCair)}
@@ -1078,6 +1084,9 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                                             : ''}
                                           {tr.status === 'Sudah' && nom !== undefined
                                             ? ` · ${formatRupiah(nom)}`
+                                            : ''}
+                                          {tr.tanggalCair
+                                            ? ` · Cair ${formatTanggalDdMmYyyy(tr.tanggalCair)}`
                                             : ''}
                                         </div>
                                       );
@@ -1326,6 +1335,9 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                           </td>
                           <td className="border border-slate-800 p-2 font-semibold">
                             {terminInfo.summaryLabel}
+                            {terminInfo.skemaPembayaran === 'Sekaligus' && paket.tanggalPencairan
+                              ? ` · Tgl Cair: ${formatTanggalDisplay(paket.tanggalPencairan)}`
+                              : ''}
                             {terminInfo.sudahCount > 0 && terminInfo.hasNominalCair
                               ? ` · Dibayar ${formatRupiah(terminInfo.totalNilaiCair)}`
                               : ''}

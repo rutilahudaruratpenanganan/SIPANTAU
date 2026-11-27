@@ -33,6 +33,7 @@ import {
   computePaketProgress,
   filterPaketPekerjaan,
   formatRupiah,
+  formatTanggalDdMmYyyy,
   formatTanggalDisplay,
   getAvailableKodeRekeningOptions,
   getAvailableTahunAnggaran,
@@ -708,7 +709,7 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                           )}
                         </td>
 
-                        <td className="py-3 px-1.5 min-w-[125px] max-w-[165px]">
+                        <td className="py-3 px-1.5 min-w-[125px] max-w-[170px]">
                           <div
                             className={`text-[11px] font-semibold ${
                               terminSummary.isAllSudah
@@ -722,6 +723,12 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                               ? terminSummary.summaryLabel
                               : terminSummary.compactLabel}
                           </div>
+                          {terminSummary.skemaPembayaran === 'Sekaligus' &&
+                            paket.tanggalPencairan && (
+                              <div className="text-[10px] text-slate-600 mt-0.5 tabular-nums">
+                                Tgl Cair: {formatTanggalDisplay(paket.tanggalPencairan)}
+                              </div>
+                            )}
                           {terminSummary.sudahCount > 0 && terminSummary.hasNominalCair && (
                             <div className="font-mono text-[11px] font-bold text-emerald-700 mt-0.5 tabular-nums">
                               Sudah Dibayar: {formatRupiah(terminSummary.totalNilaiCair)}
@@ -745,22 +752,26 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                                 {paket.terminPencairan.map((tr) => {
                                   const trNominal = resolveTerminNominal(tr, paket.nilaiKontrak);
                                   return (
-                                    <div
-                                      key={tr.id}
-                                      className="text-[10px] text-slate-600 flex items-center justify-between gap-1.5"
-                                    >
-                                      <span className="truncate">{tr.nama}</span>
-                                      <span
-                                        className={`font-semibold shrink-0 tabular-nums ${
-                                          tr.status === 'Sudah'
-                                            ? 'text-emerald-700'
-                                            : 'text-slate-500'
-                                        }`}
-                                      >
-                                        {tr.status === 'Sudah' && trNominal !== undefined
-                                          ? `Sudah · ${formatRupiah(trNominal)}`
-                                          : tr.status}
-                                      </span>
+                                    <div key={tr.id} className="text-[10px] text-slate-600">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="truncate">{tr.nama}</span>
+                                        <span
+                                          className={`font-semibold shrink-0 tabular-nums ${
+                                            tr.status === 'Sudah'
+                                              ? 'text-emerald-700'
+                                              : 'text-slate-500'
+                                          }`}
+                                        >
+                                          {tr.status === 'Sudah' && trNominal !== undefined
+                                            ? `Sudah · ${formatRupiah(trNominal)}`
+                                            : tr.status}
+                                        </span>
+                                      </div>
+                                      {tr.tanggalCair && (
+                                        <div className="text-[9px] text-slate-500 font-mono tabular-nums text-right leading-tight">
+                                          Cair {formatTanggalDdMmYyyy(tr.tanggalCair)}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1029,11 +1040,30 @@ export const PekerjaanView: React.FC<PekerjaanViewProps> = ({
                       }`}
                     >
                       Pencairan: {terminSummary.summaryLabel}
+                      {terminSummary.skemaPembayaran === 'Sekaligus' && paket.tanggalPencairan
+                        ? ` · Tgl Cair ${formatTanggalDisplay(paket.tanggalPencairan)}`
+                        : ''}
                       {terminSummary.sudahCount > 0 && terminSummary.hasNominalCair
                         ? ` · Sudah Dibayar ${formatRupiah(terminSummary.totalNilaiCair)}`
                         : ''}
                       {paket.mekanismePencairan ? ` (${paket.mekanismePencairan})` : ''}
                     </span>
+                    {terminSummary.skemaPembayaran === 'Termin' &&
+                      paket.terminPencairan &&
+                      paket.terminPencairan.some((tr) => Boolean(tr.tanggalCair)) && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="text-slate-600 font-mono tabular-nums">
+                            {paket.terminPencairan
+                              .filter((tr) => Boolean(tr.tanggalCair))
+                              .map(
+                                (tr) =>
+                                  `${tr.nama}: Cair ${formatTanggalDdMmYyyy(tr.tanggalCair)}`
+                              )
+                              .join(' · ')}
+                          </span>
+                        </>
+                      )}
                     {paket.kodeRup && (
                       <>
                         <span aria-hidden="true">·</span>

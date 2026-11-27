@@ -224,6 +224,31 @@ export function summarizeTerminPencairan(
   };
 }
 
+export function resolvePaketTanggalPencairan(
+  paket: Pick<
+    PaketPekerjaan,
+    'skemaPembayaran' | 'statusPencairan' | 'tanggalPencairan' | 'terminPencairan'
+  >
+): string | undefined {
+  const termins = Array.isArray(paket.terminPencairan) ? paket.terminPencairan : [];
+  const skema: SkemaPembayaran =
+    paket.skemaPembayaran === 'Termin' || (paket.skemaPembayaran === undefined && termins.length > 0)
+      ? 'Termin'
+      : 'Sekaligus';
+
+  if (skema === 'Termin' && termins.length > 0) {
+    const dates = termins
+      .filter((tr) => tr.status === 'Sudah' && (tr.tanggalCair || '').trim() !== '')
+      .map((tr) => (tr.tanggalCair || '').trim())
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .sort();
+    return dates.length > 0 ? dates[dates.length - 1] : undefined;
+  }
+
+  const raw = (paket.tanggalPencairan || '').trim();
+  return raw || undefined;
+}
+
 export function normalizeTahapanOrder(tahapan: TahapPekerjaan[]): TahapPekerjaan[] {
   return tahapan.map((t, idx) => ({
     ...t,
@@ -762,6 +787,7 @@ export interface PaketValidationInput {
   skemaPembayaran?: SkemaPembayaran;
   terminPencairan?: TerminPekerjaan[];
   statusPencairan?: StatusPencairan;
+  tanggalPencairan?: string;
   mekanismePencairan?: MekanismePencairan;
   tahapan: TahapPekerjaan[];
 }
@@ -865,6 +891,13 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
       ) {
         return 'Nilai Rupiah termin harus bernilai 0 atau lebih.';
       }
+      if (
+        t.tanggalCair &&
+        t.tanggalCair.trim() !== '' &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(t.tanggalCair.trim())
+      ) {
+        return `Format Tanggal Pencairan pada "${t.nama}" tidak valid.`;
+      }
     }
   }
   if (
@@ -872,6 +905,13 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
     !STATUS_PENCAIRAN_LIST.includes(input.statusPencairan)
   ) {
     return 'Status Tahapan Pencairan tidak valid.';
+  }
+  if (
+    input.tanggalPencairan &&
+    input.tanggalPencairan.trim() !== '' &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.tanggalPencairan.trim())
+  ) {
+    return 'Format Tanggal Pencairan tidak valid.';
   }
   if (
     input.mekanismePencairan !== undefined &&
@@ -1239,6 +1279,7 @@ export function buildPekerjaanCsvContent(
     'Total Sudah Dibayar (Rp)',
     'Skema Pembayaran',
     'Tahapan Pencairan',
+    'Tanggal Pencairan',
     'Mekanisme Pencairan',
     'Rincian Termin Pencairan',
     'Tanggal Mulai',
@@ -1305,6 +1346,12 @@ export function buildPekerjaanCsvContent(
       String(terminInfo.totalNilaiCair || 0),
       escapeCsv(terminInfo.skemaPembayaran),
       escapeCsv(terminInfo.summaryLabel),
+      escapeCsv(
+        (() => {
+          const tgl = resolvePaketTanggalPencairan(item);
+          return tgl ? formatTanggalDisplay(tgl) : '-';
+        })()
+      ),
       escapeCsv(item.mekanismePencairan || '-'),
       escapeCsv(terminDetail),
       escapeCsv(item.tanggalMulai ? formatTanggalDisplay(item.tanggalMulai) : ''),
