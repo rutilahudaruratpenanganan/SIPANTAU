@@ -2,6 +2,7 @@ import type {
   JenisPelaksanaan,
   MekanismePencairan,
   PaketPekerjaan,
+  RekeningAnggaran,
   SkemaKontrak,
   SkemaPembayaran,
   StatusPencairan,
@@ -124,12 +125,35 @@ export interface TerminPencairanSummary {
   isPartial: boolean;
   totalPersenCair: number;
   totalNilaiCair: number;
+  hasNominalCair: boolean;
   summaryLabel: string;
   compactLabel: string;
 }
 
+export function resolveTerminNominal(
+  termin: Pick<TerminPekerjaan, 'nilaiRupiah' | 'persentase'>,
+  nilaiKontrak?: number
+): number | undefined {
+  if (typeof termin.nilaiRupiah === 'number' && Number.isFinite(termin.nilaiRupiah)) {
+    return Math.max(0, Math.round(termin.nilaiRupiah));
+  }
+  if (
+    typeof termin.persentase === 'number' &&
+    Number.isFinite(termin.persentase) &&
+    typeof nilaiKontrak === 'number' &&
+    Number.isFinite(nilaiKontrak) &&
+    nilaiKontrak >= 0
+  ) {
+    return Math.round((termin.persentase / 100) * nilaiKontrak);
+  }
+  return undefined;
+}
+
 export function summarizeTerminPencairan(
-  paket: Pick<PaketPekerjaan, 'skemaPembayaran' | 'statusPencairan' | 'terminPencairan'>
+  paket: Pick<
+    PaketPekerjaan,
+    'skemaPembayaran' | 'statusPencairan' | 'terminPencairan' | 'nilaiKontrak'
+  >
 ): TerminPencairanSummary {
   const termins = Array.isArray(paket.terminPencairan) ? paket.terminPencairan : [];
   const skema: SkemaPembayaran =
@@ -139,6 +163,9 @@ export function summarizeTerminPencairan(
 
   if (skema === 'Sekaligus' || termins.length === 0) {
     const isSudah = paket.statusPencairan === 'Sudah';
+    const hasKontrak =
+      typeof paket.nilaiKontrak === 'number' && Number.isFinite(paket.nilaiKontrak);
+    const totalNilaiCair = isSudah && hasKontrak ? Math.max(0, Math.round(paket.nilaiKontrak!)) : 0;
     return {
       skemaPembayaran: 'Sekaligus',
       totalTermin: 0,
@@ -147,7 +174,8 @@ export function summarizeTerminPencairan(
       isAllSudah: isSudah,
       isPartial: false,
       totalPersenCair: isSudah ? 100 : 0,
-      totalNilaiCair: 0,
+      totalNilaiCair,
+      hasNominalCair: isSudah && hasKontrak,
       summaryLabel: isSudah ? 'Sudah (Sekaligus)' : 'Belum (Sekaligus)',
       compactLabel: isSudah ? 'Sudah' : 'Belum',
     };
@@ -156,14 +184,17 @@ export function summarizeTerminPencairan(
   let sudahCount = 0;
   let totalPersenCair = 0;
   let totalNilaiCair = 0;
+  let hasNominalCair = false;
   for (const t of termins) {
     if (t.status === 'Sudah') {
       sudahCount += 1;
       if (typeof t.persentase === 'number' && Number.isFinite(t.persentase)) {
         totalPersenCair += t.persentase;
       }
-      if (typeof t.nilaiRupiah === 'number' && Number.isFinite(t.nilaiRupiah)) {
-        totalNilaiCair += t.nilaiRupiah;
+      const nominal = resolveTerminNominal(t, paket.nilaiKontrak);
+      if (nominal !== undefined) {
+        totalNilaiCair += nominal;
+        hasNominalCair = true;
       }
     }
   }
@@ -187,6 +218,7 @@ export function summarizeTerminPencairan(
     isPartial,
     totalPersenCair: Math.min(100, Math.round(totalPersenCair)),
     totalNilaiCair,
+    hasNominalCair,
     summaryLabel,
     compactLabel: `${sudahCount}/${totalTermin} Termin Cair`,
   };
@@ -370,6 +402,226 @@ export function getAvailablePicNames(list: PaketPekerjaan[]): string[] {
   return Array.from(names).sort((a, b) => a.localeCompare(b, 'id-ID'));
 }
 
+export function normalizeKodeRekening(raw?: string): string {
+  return (raw || '').trim().replace(/\s+/g, '').toUpperCase();
+}
+
+export function buildRekeningUniqueKey(tahunAnggaran: number, kodeRekening: string): string {
+  return `${tahunAnggaran}::${normalizeKodeRekening(kodeRekening)}`;
+}
+
+export interface RekeningValidationInput {
+  kodeRekening: string;
+  uraian: string;
+  tahunAnggaran: number;
+  paguAnggaran: number;
+}
+
+export function validateRekeningAnggaranInput(
+  input: RekeningValidationInput,
+  existingList: RekeningAnggaran[],
+  editingId?: string
+): string | null {
+  const cleanedKode = (input.kodeRekening || '').trim();
+  if (!cleanedKode) {
+    return 'Kode Rekening wajib diisi (contoh: 5.1.02.02.01.0029).';
+  }
+  if (cleanedKode.length > 100) {
+    return 'Kode Rekening maksimal 100 karakter.';
+  }
+  if (!/^[a-zA-Z0-9._\-\/\s]+$/.test(cleanedKode)) {
+    return 'Kode Rekening hanya boleh berisi angka, huruf, titik, garis miring, atau tanda hubung.';
+  }
+  if (!(input.uraian || '').trim()) {
+    return 'Uraian / Nama Rekening Belanja wajib diisi.';
+  }
+  if (input.uraian.trim().length > 300) {
+    return 'Uraian Rekening maksimal 300 karakter.';
+  }
+  if (
+    !Number.isFinite(input.tahunAnggaran) ||
+    !Number.isInteger(input.tahunAnggaran) ||
+    input.tahunAnggaran < MIN_TAHUN_ANGGARAN ||
+    input.tahunAnggaran > MAX_TAHUN_ANGGARAN
+  ) {
+    return `Tahun Anggaran harus berupa tahun valid (${MIN_TAHUN_ANGGARAN}–${MAX_TAHUN_ANGGARAN}).`;
+  }
+  if (!Number.isFinite(input.paguAnggaran) || input.paguAnggaran < 0 || input.paguAnggaran > 1_000_000_000_000) {
+    return 'Pagu Anggaran Rekening harus berupa angka bernilai 0 atau lebih.';
+  }
+
+  const targetKey = buildRekeningUniqueKey(input.tahunAnggaran, cleanedKode);
+  const duplicate = existingList.find(
+    (r) => r.id !== editingId && buildRekeningUniqueKey(r.tahunAnggaran, r.kodeRekening) === targetKey
+  );
+  if (duplicate) {
+    return `Kode Rekening "${cleanedKode}" untuk TA ${input.tahunAnggaran} sudah terdaftar (${duplicate.uraian}). 1 Kode Rekening hanya memiliki 1 Pagu Anggaran.`;
+  }
+
+  return null;
+}
+
+export interface ResolvedPaketPaguInfo {
+  rekening: RekeningAnggaran | null;
+  dedupeKey: string;
+  kodeRekening: string;
+  namaRekening: string;
+  paguAnggaran: number;
+  hasRekening: boolean;
+}
+
+export function resolvePaketPaguInfo(
+  paket: Pick<
+    PaketPekerjaan,
+    'id' | 'rekeningId' | 'kodeRekening' | 'namaRekening' | 'nilaiAnggaran' | 'tahunAnggaran' | 'tanggalMulai'
+  >,
+  rekeningList: RekeningAnggaran[] = []
+): ResolvedPaketPaguInfo {
+  const byId = paket.rekeningId
+    ? rekeningList.find((r) => r.id === paket.rekeningId) || null
+    : null;
+  const tahun = getPaketTahunAnggaran(paket);
+  const normalizedKode = normalizeKodeRekening(paket.kodeRekening);
+  const byKode =
+    !byId && normalizedKode
+      ? rekeningList.find(
+          (r) => buildRekeningUniqueKey(r.tahunAnggaran, r.kodeRekening) === `${tahun}::${normalizedKode}`
+        ) || null
+      : null;
+
+  const matched = byId || byKode;
+  if (matched) {
+    return {
+      rekening: matched,
+      dedupeKey: `rek:${matched.id}`,
+      kodeRekening: matched.kodeRekening,
+      namaRekening: matched.uraian,
+      paguAnggaran: Number.isFinite(matched.paguAnggaran) ? matched.paguAnggaran : 0,
+      hasRekening: true,
+    };
+  }
+
+  if (paket.rekeningId) {
+    return {
+      rekening: null,
+      dedupeKey: `rek:${paket.rekeningId}`,
+      kodeRekening: (paket.kodeRekening || '').trim(),
+      namaRekening: (paket.namaRekening || '').trim(),
+      paguAnggaran: Number.isFinite(paket.nilaiAnggaran) ? paket.nilaiAnggaran : 0,
+      hasRekening: true,
+    };
+  }
+
+  if (normalizedKode) {
+    return {
+      rekening: null,
+      dedupeKey: `kode:${tahun}::${normalizedKode}`,
+      kodeRekening: (paket.kodeRekening || '').trim(),
+      namaRekening: (paket.namaRekening || '').trim(),
+      paguAnggaran: Number.isFinite(paket.nilaiAnggaran) ? paket.nilaiAnggaran : 0,
+      hasRekening: true,
+    };
+  }
+
+  return {
+    rekening: null,
+    dedupeKey: `paket:${paket.id}`,
+    kodeRekening: '',
+    namaRekening: '',
+    paguAnggaran: Number.isFinite(paket.nilaiAnggaran) ? paket.nilaiAnggaran : 0,
+    hasRekening: false,
+  };
+}
+
+export interface RekeningAnggaranSummary {
+  rekening: RekeningAnggaran;
+  jumlahPaket: number;
+  paketSelesai: number;
+  totalNilaiKontrak: number;
+  sisaPagu: number;
+  serapanPersen: number;
+  isOverBudget: boolean;
+}
+
+export function summarizeRekeningAnggaran(
+  rekeningList: RekeningAnggaran[],
+  paketList: PaketPekerjaan[],
+  todayIso: string = getTodayLocalIso()
+): RekeningAnggaranSummary[] {
+  const grouped = new Map<string, PaketPekerjaan[]>();
+  for (const paket of paketList) {
+    const info = resolvePaketPaguInfo(paket, rekeningList);
+    if (info.rekening) {
+      const bucket = grouped.get(info.rekening.id) || [];
+      bucket.push(paket);
+      grouped.set(info.rekening.id, bucket);
+    }
+  }
+
+  return [...rekeningList]
+    .sort((a, b) => {
+      if (b.tahunAnggaran !== a.tahunAnggaran) return b.tahunAnggaran - a.tahunAnggaran;
+      return a.kodeRekening.localeCompare(b.kodeRekening, 'id-ID');
+    })
+    .map((rekening) => {
+      const linked = grouped.get(rekening.id) || [];
+      let totalNilaiKontrak = 0;
+      let paketSelesai = 0;
+      for (const p of linked) {
+        if (typeof p.nilaiKontrak === 'number' && Number.isFinite(p.nilaiKontrak)) {
+          totalNilaiKontrak += p.nilaiKontrak;
+        }
+        if (computePaketProgress(p, todayIso).overallStatus === 'selesai') {
+          paketSelesai += 1;
+        }
+      }
+      const pagu = Number.isFinite(rekening.paguAnggaran) ? rekening.paguAnggaran : 0;
+      const sisaPagu = pagu - totalNilaiKontrak;
+      const serapanPersen = pagu > 0 ? Math.round((totalNilaiKontrak / pagu) * 100) : 0;
+      return {
+        rekening,
+        jumlahPaket: linked.length,
+        paketSelesai,
+        totalNilaiKontrak,
+        sisaPagu,
+        serapanPersen,
+        isOverBudget: totalNilaiKontrak > pagu,
+      };
+    });
+}
+
+export function getAvailableKodeRekeningOptions(
+  paketList: PaketPekerjaan[],
+  rekeningList: RekeningAnggaran[] = []
+): Array<{ key: string; kodeRekening: string; uraian: string; tahunAnggaran?: number }> {
+  const map = new Map<string, { key: string; kodeRekening: string; uraian: string; tahunAnggaran?: number }>();
+  for (const r of rekeningList) {
+    const norm = normalizeKodeRekening(r.kodeRekening);
+    if (norm && !map.has(norm)) {
+      map.set(norm, {
+        key: norm,
+        kodeRekening: r.kodeRekening,
+        uraian: r.uraian,
+        tahunAnggaran: r.tahunAnggaran,
+      });
+    }
+  }
+  for (const p of paketList) {
+    const norm = normalizeKodeRekening(p.kodeRekening);
+    if (norm && !map.has(norm)) {
+      map.set(norm, {
+        key: norm,
+        kodeRekening: (p.kodeRekening || '').trim(),
+        uraian: (p.namaRekening || '').trim(),
+        tahunAnggaran: getPaketTahunAnggaran(p),
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    a.kodeRekening.localeCompare(b.kodeRekening, 'id-ID')
+  );
+}
+
 export function getPaketDurasiHariKerja(
   paket: Pick<PaketPekerjaan, 'tanggalMulai' | 'tenggatWaktu' | 'durasiHariKerja'>
 ): number {
@@ -501,6 +753,7 @@ export interface PaketValidationInput {
   skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number;
   nilaiAnggaran: number;
+  hps?: number;
   nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
@@ -538,6 +791,12 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
   }
   if (!Number.isFinite(input.nilaiAnggaran) || input.nilaiAnggaran < 0) {
     return 'Pagu Anggaran harus berupa angka bernilai 0 atau lebih.';
+  }
+  if (
+    input.hps !== undefined &&
+    (!Number.isFinite(input.hps) || input.hps < 0)
+  ) {
+    return 'Nilai HPS harus berupa angka bernilai 0 atau lebih.';
   }
   if (
     input.nilaiKontrak !== undefined &&
@@ -634,6 +893,8 @@ export function validatePaketPekerjaanInput(input: PaketValidationInput): string
 
 export interface PekerjaanFilterOptions {
   searchQuery?: string;
+  rekeningId?: string | 'all';
+  kodeRekening?: string | 'all';
   jenisPelaksanaan?: JenisPelaksanaan | 'all';
   skemaKontrak?: SkemaKontrak | 'all';
   skemaPembayaran?: SkemaPembayaran | 'all';
@@ -647,9 +908,28 @@ export interface PekerjaanFilterOptions {
 export function filterPaketPekerjaan(
   list: PaketPekerjaan[],
   filters: PekerjaanFilterOptions,
-  todayIso: string
+  todayIso: string,
+  rekeningList: RekeningAnggaran[] = []
 ): PaketPekerjaan[] {
   return list.filter((item) => {
+    const paguInfo = resolvePaketPaguInfo(item, rekeningList);
+
+    if (
+      filters.rekeningId &&
+      filters.rekeningId !== 'all' &&
+      item.rekeningId !== filters.rekeningId &&
+      paguInfo.rekening?.id !== filters.rekeningId
+    ) {
+      return false;
+    }
+
+    if (filters.kodeRekening && filters.kodeRekening !== 'all') {
+      const targetNorm = normalizeKodeRekening(filters.kodeRekening);
+      if (normalizeKodeRekening(paguInfo.kodeRekening) !== targetNorm) {
+        return false;
+      }
+    }
+
     if (
       filters.tahunAnggaran !== undefined &&
       filters.tahunAnggaran !== 'all' &&
@@ -717,6 +997,8 @@ export function filterPaketPekerjaan(
 
     if (filters.searchQuery && filters.searchQuery.trim() !== '') {
       const q = filters.searchQuery.toLowerCase().trim();
+      const matchKodeRekening = paguInfo.kodeRekening.toLowerCase().includes(q);
+      const matchNamaRekening = paguInfo.namaRekening.toLowerCase().includes(q);
       const matchKegiatan = item.namaKegiatan.toLowerCase().includes(q);
       const matchSub = item.subKegiatan.toLowerCase().includes(q);
       const matchPekerjaan = (item.pekerjaan || '').toLowerCase().includes(q);
@@ -733,6 +1015,8 @@ export function filterPaketPekerjaan(
         tr.nama.toLowerCase().includes(q)
       );
       if (
+        !matchKodeRekening &&
+        !matchNamaRekening &&
         !matchKegiatan &&
         !matchSub &&
         !matchPekerjaan &&
@@ -757,9 +1041,13 @@ export function filterPaketPekerjaan(
 
 export interface PekerjaanDashboardStats {
   totalPaket: number;
+  jumlahRekeningUnik: number;
   totalAnggaran: number;
   totalNilaiKontrak: number;
+  totalNilaiSudahCair: number;
+  sisaPaguTotal: number;
   anggaranSelesai: number;
+  kontrakSelesai: number;
   sudahCairCount: number;
   belumCairCount: number;
   belumMulai: number;
@@ -772,13 +1060,18 @@ export interface PekerjaanDashboardStats {
 
 export function calculatePekerjaanStats(
   list: PaketPekerjaan[],
-  todayIso: string
+  todayIso: string,
+  rekeningList: RekeningAnggaran[] = []
 ): PekerjaanDashboardStats {
   const stats: PekerjaanDashboardStats = {
     totalPaket: list.length,
+    jumlahRekeningUnik: 0,
     totalAnggaran: 0,
     totalNilaiKontrak: 0,
+    totalNilaiSudahCair: 0,
+    sisaPaguTotal: 0,
     anggaranSelesai: 0,
+    kontrakSelesai: 0,
     sudahCairCount: 0,
     belumCairCount: 0,
     belumMulai: 0,
@@ -791,15 +1084,31 @@ export function calculatePekerjaanStats(
 
   if (list.length === 0) return stats;
 
+  const seenPaguKeys = new Set<string>();
+  const seenRekeningKeys = new Set<string>();
+  const seenCompletedPaguKeys = new Set<string>();
   let totalPct = 0;
+
   for (const item of list) {
-    const val = Number.isFinite(item.nilaiAnggaran) ? item.nilaiAnggaran : 0;
+    const paguInfo = resolvePaketPaguInfo(item, rekeningList);
+    const val = Number.isFinite(paguInfo.paguAnggaran) ? paguInfo.paguAnggaran : 0;
     const kontrakVal =
       typeof item.nilaiKontrak === 'number' && Number.isFinite(item.nilaiKontrak)
         ? item.nilaiKontrak
         : 0;
-    stats.totalAnggaran += val;
+
+    // 1 Kode Rekening = 1 Pagu Anggaran: jangan pernah menjumlahkan pagu yang sama berulang kali
+    if (!seenPaguKeys.has(paguInfo.dedupeKey)) {
+      seenPaguKeys.add(paguInfo.dedupeKey);
+      stats.totalAnggaran += val;
+    }
+    if (paguInfo.hasRekening) {
+      seenRekeningKeys.add(paguInfo.dedupeKey);
+    }
     stats.totalNilaiKontrak += kontrakVal;
+
+    const terminSum = summarizeTerminPencairan(item);
+    stats.totalNilaiSudahCair += terminSum.totalNilaiCair;
 
     const resolvedStatus = resolveStatusPencairanFromTermin(
       item.skemaPembayaran,
@@ -817,7 +1126,11 @@ export function calculatePekerjaanStats(
 
     if (progress.overallStatus === 'selesai') {
       stats.selesai += 1;
-      stats.anggaranSelesai += val;
+      stats.kontrakSelesai += kontrakVal;
+      if (!seenCompletedPaguKeys.has(paguInfo.dedupeKey)) {
+        seenCompletedPaguKeys.add(paguInfo.dedupeKey);
+        stats.anggaranSelesai += val;
+      }
     } else if (progress.overallStatus === 'terlambat') {
       stats.terlambat += 1;
     } else if (progress.overallStatus === 'sedang_berjalan') {
@@ -831,6 +1144,8 @@ export function calculatePekerjaanStats(
     }
   }
 
+  stats.jumlahRekeningUnik = seenRekeningKeys.size;
+  stats.sisaPaguTotal = stats.totalAnggaran - stats.totalNilaiKontrak;
   stats.rataRataProgres = Math.round(totalPct / list.length);
   return stats;
 }
@@ -842,7 +1157,8 @@ export interface TahunAnggaranSummary extends PekerjaanDashboardStats {
 
 export function summarizePaketByTahunAnggaran(
   list: PaketPekerjaan[],
-  todayIso: string
+  todayIso: string,
+  rekeningList: RekeningAnggaran[] = []
 ): TahunAnggaranSummary[] {
   const byYear = new Map<number, PaketPekerjaan[]>();
   for (const item of list) {
@@ -855,7 +1171,7 @@ export function summarizePaketByTahunAnggaran(
   return Array.from(byYear.entries())
     .sort((a, b) => b[0] - a[0])
     .map(([tahunAnggaran, items]) => {
-      const st = calculatePekerjaanStats(items, todayIso);
+      const st = calculatePekerjaanStats(items, todayIso, rekeningList);
       const persentaseRealisasiAnggaran =
         st.totalAnggaran > 0
           ? Math.round((st.anggaranSelesai / st.totalAnggaran) * 100)
@@ -873,21 +1189,24 @@ export interface JenisPelaksanaanSummary {
   totalPaket: number;
   selesai: number;
   totalAnggaran: number;
+  totalNilaiKontrak: number;
   anggaranSelesai: number;
 }
 
 export function summarizePaketByJenis(
   list: PaketPekerjaan[],
-  todayIso: string
+  todayIso: string,
+  rekeningList: RekeningAnggaran[] = []
 ): JenisPelaksanaanSummary[] {
   return JENIS_PELAKSANAAN_LIST.map((jenis) => {
     const subset = list.filter((p) => p.jenisPelaksanaan === jenis);
-    const st = calculatePekerjaanStats(subset, todayIso);
+    const st = calculatePekerjaanStats(subset, todayIso, rekeningList);
     return {
       jenisPelaksanaan: jenis,
       totalPaket: st.totalPaket,
       selesai: st.selesai,
       totalAnggaran: st.totalAnggaran,
+      totalNilaiKontrak: st.totalNilaiKontrak,
       anggaranSelesai: st.anggaranSelesai,
     };
   });
@@ -895,13 +1214,16 @@ export function summarizePaketByJenis(
 
 export function buildPekerjaanCsvContent(
   list: PaketPekerjaan[],
-  todayIso: string
+  todayIso: string,
+  rekeningList: RekeningAnggaran[] = []
 ): string {
   const escapeCsv = (val: string) => `"${(val || '').replace(/"/g, '""')}"`;
 
   const headers = [
     'No',
     'Tahun Anggaran',
+    'Kode Rekening',
+    'Uraian Rekening',
     'Nama Kegiatan',
     'Sub Kegiatan',
     'Pekerjaan',
@@ -911,8 +1233,10 @@ export function buildPekerjaanCsvContent(
     'Nomor Kontrak / SPK',
     'Penyedia / Pelaksana',
     'PIC / Penanggung Jawab',
-    'Pagu Anggaran (Rp)',
+    'Pagu Anggaran Rekening (Rp)',
+    'Nilai HPS (Rp)',
     'Nilai Kontrak / Realisasi (Rp)',
+    'Total Sudah Dibayar (Rp)',
     'Skema Pembayaran',
     'Tahapan Pencairan',
     'Mekanisme Pencairan',
@@ -930,6 +1254,7 @@ export function buildPekerjaanCsvContent(
   const rows = list.map((item, idx) => {
     const progress = computePaketProgress(item, todayIso);
     const tahunAnggaran = getPaketTahunAnggaran(item);
+    const paguInfo = resolvePaketPaguInfo(item, rekeningList);
     const terminInfo = summarizeTerminPencairan(item);
     const terminDetail =
       terminInfo.skemaPembayaran === 'Termin' &&
@@ -939,7 +1264,8 @@ export function buildPekerjaanCsvContent(
             .map((tr) => {
               const parts: string[] = [];
               if (typeof tr.persentase === 'number') parts.push(`${tr.persentase}%`);
-              if (typeof tr.nilaiRupiah === 'number') parts.push(formatRupiah(tr.nilaiRupiah));
+              const nom = resolveTerminNominal(tr, item.nilaiKontrak);
+              if (nom !== undefined) parts.push(formatRupiah(nom));
               if (tr.tanggalCair) parts.push(`Cair ${formatTanggalDdMmYyyy(tr.tanggalCair)}`);
               const meta = parts.length > 0 ? ` (${parts.join(' · ')})` : '';
               return `${tr.urutan}. ${tr.nama}: ${tr.status}${meta}`;
@@ -962,6 +1288,8 @@ export function buildPekerjaanCsvContent(
     return [
       String(idx + 1),
       String(tahunAnggaran),
+      escapeCsv(paguInfo.kodeRekening),
+      escapeCsv(paguInfo.namaRekening),
       escapeCsv(item.namaKegiatan),
       escapeCsv(item.subKegiatan),
       escapeCsv(item.pekerjaan || ''),
@@ -971,8 +1299,10 @@ export function buildPekerjaanCsvContent(
       escapeCsv(item.nomorKontrak || ''),
       escapeCsv(item.penyedia || ''),
       escapeCsv(item.picNama || ''),
-      String(item.nilaiAnggaran || 0),
+      String(paguInfo.paguAnggaran || 0),
+      typeof item.hps === 'number' ? String(item.hps) : '',
       String(item.nilaiKontrak ?? 0),
+      String(terminInfo.totalNilaiCair || 0),
       escapeCsv(terminInfo.skemaPembayaran),
       escapeCsv(terminInfo.summaryLabel),
       escapeCsv(item.mekanismePencairan || '-'),

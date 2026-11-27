@@ -18,23 +18,30 @@ import {
   formatRupiah,
   formatTanggalDdMmYyyy,
   formatTanggalDisplay,
+  getAvailableKodeRekeningOptions,
   getAvailablePicNames,
   getAvailableTahunAnggaran,
   getPaketDurasiHariKerja,
   getPaketTahunAnggaran,
+  normalizeKodeRekening,
   normalizeTahapanOrder,
   normalizeTerminOrder,
   parseRupiahInput,
+  resolvePaketPaguInfo,
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
+  resolveTerminNominal,
   summarizePaketByTahunAnggaran,
+  summarizeRekeningAnggaran,
   summarizeTerminPencairan,
   validatePaketPekerjaanInput,
+  validateRekeningAnggaranInput,
 } from './pekerjaanLogic.ts';
 import type {
   JenisPelaksanaan,
   MekanismePencairan,
   PaketPekerjaan,
+  RekeningAnggaran,
   SkemaKontrak,
   SkemaPembayaran,
   StatusPencairan,
@@ -294,6 +301,22 @@ test('validatePaketPekerjaanInput rejects invalid dates, durasiHariKerja, budget
       jenisPelaksanaan: 'Perorangan',
       tahunAnggaran: 2026,
       nilaiAnggaran: 10000000,
+      hps: -500,
+      tanggalMulai: '2026-11-01',
+      durasiHariKerja: 22,
+      tenggatWaktu: '2026-11-22',
+      tahapan: validStages,
+    }),
+    'Nilai HPS harus berupa angka bernilai 0 atau lebih.'
+  );
+
+  assert.equal(
+    validatePaketPekerjaanInput({
+      namaKegiatan: 'Keg A',
+      subKegiatan: 'Sub A',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 10000000,
       nilaiKontrak: -1,
       tanggalMulai: '2026-11-01',
       durasiHariKerja: 22,
@@ -485,6 +508,7 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
       skemaKontrak: 'Lump Sum',
       tahunAnggaran: 2025,
       nilaiAnggaran: 45000000,
+      hps: 44000000,
       nilaiKontrak: 43500000,
       tanggalMulai: '2025-11-01',
       tenggatWaktu: '2025-12-10',
@@ -537,6 +561,8 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   const terminSum1 = summarizeTerminPencairan(list[0]);
   assert.equal(terminSum1.skemaPembayaran, 'Sekaligus');
   assert.equal(terminSum1.summaryLabel, 'Sudah (Sekaligus)');
+  assert.equal(terminSum1.totalNilaiCair, 43500000);
+  assert.equal(terminSum1.hasNominalCair, true);
 
   const terminSum2 = summarizeTerminPencairan(list[1]);
   assert.equal(terminSum2.skemaPembayaran, 'Termin');
@@ -545,7 +571,24 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   assert.equal(terminSum2.isPartial, true);
   assert.equal(terminSum2.totalPersenCair, 40);
   assert.equal(terminSum2.totalNilaiCair, 59200000);
+  assert.equal(terminSum2.hasNominalCair, true);
   assert.equal(terminSum2.summaryLabel, 'Sebagian (1/2 Termin)');
+
+  // Fallback calculation when termin only has persentase + paket.nilaiKontrak (no manual nilaiRupiah)
+  assert.equal(resolveTerminNominal({ persentase: 25 }, 651414600), 162853650);
+  const terminFallbackSum = summarizeTerminPencairan({
+    skemaPembayaran: 'Termin',
+    nilaiKontrak: 100000000,
+    terminPencairan: [
+      { id: 'a', urutan: 1, nama: 'Termin 1', persentase: 25, status: 'Sudah' },
+      { id: 'b', urutan: 2, nama: 'Termin 2', persentase: 25, status: 'Sudah' },
+      { id: 'c', urutan: 3, nama: 'Termin 3', persentase: 50, status: 'Belum' },
+    ],
+  });
+  assert.equal(terminFallbackSum.sudahCount, 2);
+  assert.equal(terminFallbackSum.totalPersenCair, 50);
+  assert.equal(terminFallbackSum.totalNilaiCair, 50000000);
+  assert.equal(terminFallbackSum.hasNominalCair, true);
 
   assert.equal(
     resolveStatusPencairanFromTermin('Termin', 'Sudah', list[1].terminPencairan),
@@ -612,8 +655,11 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   assert.equal(csv.includes('Lump Sum'), true);
   assert.equal(csv.includes('Pengadaan Langsung'), true);
   assert.equal(csv.includes('Pengawasan Pembangunan Perumahan Wilayah Barat'), true);
-  assert.equal(csv.includes('Pagu Anggaran (Rp)'), true);
-  assert.equal(csv.includes('HPS'), false);
+  assert.equal(csv.includes('Kode Rekening'), true);
+  assert.equal(csv.includes('Uraian Rekening'), true);
+  assert.equal(csv.includes('Pagu Anggaran Rekening (Rp)'), true);
+  assert.equal(csv.includes('Nilai HPS (Rp)'), true);
+  assert.equal(csv.includes('44000000'), true);
   assert.equal(csv.includes('Nilai Kontrak / Realisasi (Rp)'), true);
   assert.equal(csv.includes('Skema Pembayaran'), true);
   assert.equal(csv.includes('Rincian Termin Pencairan'), true);
@@ -630,6 +676,9 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   assert.equal(csv.includes('Kajian Teknis A'), true);
   assert.equal(csv.includes('Badan Usaha'), true);
 
+  assert.equal(csv.includes('Total Sudah Dibayar (Rp)'), true);
+  assert.equal(csv.includes('59200000'), true);
+  assert.equal(stats.totalNilaiSudahCair, 43500000 + 59200000);
   assert.equal(stats.sudahCairCount, 1);
   assert.equal(stats.belumCairCount, 1);
 
@@ -654,3 +703,186 @@ test('filterPaketPekerjaan, termin summaries, calculatePekerjaanStats, Tahun Ang
   assert.equal(byPic.length, 1);
   assert.equal(byPic[0].id, 'pkt-1');
 });
+
+test('1 Kode Rekening = 1 Pagu Anggaran: shared across multiple activities without double-counting total Pagu', () => {
+  const existingRek: RekeningAnggaran[] = [
+    {
+      id: 'rek-1',
+      kodeRekening: '5.1.02.02.01.0029',
+      uraian: 'Belanja Jasa Tenaga Ahli',
+      tahunAnggaran: 2026,
+      paguAnggaran: 141670000,
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-01-05',
+      updatedAt: '2026-01-05',
+    },
+    {
+      id: 'rek-2',
+      kodeRekening: '5.1.02.02.01.0030',
+      uraian: 'Belanja Jasa Konsultansi Pengawasan',
+      tahunAnggaran: 2026,
+      paguAnggaran: 80000000,
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-01-05',
+      updatedAt: '2026-01-05',
+    },
+  ];
+
+  // Uniqueness checks
+  assert.equal(normalizeKodeRekening(' 5.1.02. 02.01.0029 '), '5.1.02.02.01.0029');
+  assert.notEqual(
+    validateRekeningAnggaranInput(
+      {
+        kodeRekening: '5.1.02.02.01.0029',
+        uraian: 'Duplikat Rekening',
+        tahunAnggaran: 2026,
+        paguAnggaran: 50000000,
+      },
+      existingRek
+    ),
+    null
+  );
+  // Same Kode Rekening in DIFFERENT Tahun Anggaran IS allowed
+  assert.equal(
+    validateRekeningAnggaranInput(
+      {
+        kodeRekening: '5.1.02.02.01.0029',
+        uraian: 'Belanja Jasa Tenaga Ahli',
+        tahunAnggaran: 2027,
+        paguAnggaran: 150000000,
+      },
+      existingRek
+    ),
+    null
+  );
+  // Editing the same Rekening record IS allowed
+  assert.equal(
+    validateRekeningAnggaranInput(
+      {
+        kodeRekening: '5.1.02.02.01.0029',
+        uraian: 'Belanja Jasa Tenaga Ahli',
+        tahunAnggaran: 2026,
+        paguAnggaran: 145000000,
+      },
+      existingRek,
+      'rek-1'
+    ),
+    null
+  );
+
+  // Two activities sharing rek-1 (1 Pagu = Rp 141.670.000) + 1 activity on rek-2 (Rp 80.000.000)
+  const paketList: PaketPekerjaan[] = [
+    {
+      id: 'p-1',
+      rekeningId: 'rek-1',
+      kodeRekening: '5.1.02.02.01.0029',
+      namaRekening: 'Belanja Jasa Tenaga Ahli',
+      namaKegiatan: 'FASILITASI PENGELOLAAN KELEMBAGAAN',
+      subKegiatan: 'Fasilitasi Kelembagaan Perumahan',
+      pekerjaan: 'Konsultan Individual 01',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 141670000,
+      nilaiKontrak: 28000000,
+      tanggalMulai: '2026-08-01',
+      tenggatWaktu: '2026-11-30',
+      tahapan: [{ id: '1', urutan: 1, nama: 'SPK', status: 'selesai' }],
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-08-01',
+      updatedAt: '2026-08-01',
+    },
+    {
+      id: 'p-2',
+      rekeningId: 'rek-1',
+      kodeRekening: '5.1.02.02.01.0029',
+      namaRekening: 'Belanja Jasa Tenaga Ahli',
+      namaKegiatan: 'FASILITASI PENGELOLAAN KELEMBAGAAN',
+      subKegiatan: 'Fasilitasi Kelembagaan Perumahan',
+      pekerjaan: 'Konsultan Individual 02',
+      jenisPelaksanaan: 'Perorangan',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 141670000,
+      nilaiKontrak: 32000000,
+      tanggalMulai: '2026-08-01',
+      tenggatWaktu: '2026-11-30',
+      tahapan: [{ id: '1', urutan: 1, nama: 'SPK', status: 'sedang_berjalan' }],
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-08-01',
+      updatedAt: '2026-08-01',
+    },
+    {
+      id: 'p-3',
+      rekeningId: 'rek-2',
+      kodeRekening: '5.1.02.02.01.0030',
+      namaRekening: 'Belanja Jasa Konsultansi Pengawasan',
+      namaKegiatan: 'PENGAWASAN PERUMAHAN',
+      subKegiatan: 'Pengawasan Teknis',
+      pekerjaan: 'Supervisi Lapangan',
+      jenisPelaksanaan: 'Badan Usaha',
+      tahunAnggaran: 2026,
+      nilaiAnggaran: 80000000,
+      nilaiKontrak: 85000000, // Over budget example
+      tanggalMulai: '2026-09-01',
+      tenggatWaktu: '2026-12-15',
+      tahapan: [{ id: '1', urutan: 1, nama: 'PCM', status: 'belum_mulai' }],
+      dibuatOlehId: 'p1',
+      dibuatOlehNama: 'Yuliani',
+      createdAt: '2026-09-01',
+      updatedAt: '2026-09-01',
+    },
+  ];
+
+  // CRITICAL: Total Pagu = 141.670.000 + 80.000.000 = 221.670.000 (NOT 363.340.000!)
+  const stats = calculatePekerjaanStats(paketList, '2026-10-01', existingRek);
+  assert.equal(stats.totalPaket, 3);
+  assert.equal(stats.jumlahRekeningUnik, 2);
+  assert.equal(stats.totalAnggaran, 221670000);
+  assert.equal(stats.totalNilaiKontrak, 145000000);
+  assert.equal(stats.sisaPaguTotal, 221670000 - 145000000);
+
+  // Also test Tahun Anggaran summary deduplication
+  const taSummary = summarizePaketByTahunAnggaran(paketList, '2026-10-01', existingRek);
+  assert.equal(taSummary.length, 1);
+  assert.equal(taSummary[0].totalAnggaran, 221670000);
+  assert.equal(taSummary[0].totalNilaiKontrak, 145000000);
+
+  // Per-Kode-Rekening breakdown
+  const rekSummary = summarizeRekeningAnggaran(existingRek, paketList, '2026-10-01');
+  assert.equal(rekSummary.length, 2);
+  assert.equal(rekSummary[0].rekening.kodeRekening, '5.1.02.02.01.0029');
+  assert.equal(rekSummary[0].jumlahPaket, 2);
+  assert.equal(rekSummary[0].paketSelesai, 1);
+  assert.equal(rekSummary[0].totalNilaiKontrak, 60000000);
+  assert.equal(rekSummary[0].sisaPagu, 141670000 - 60000000);
+  assert.equal(rekSummary[0].isOverBudget, false);
+
+  assert.equal(rekSummary[1].rekening.kodeRekening, '5.1.02.02.01.0030');
+  assert.equal(rekSummary[1].jumlahPaket, 1);
+  assert.equal(rekSummary[1].sisaPagu, -5000000);
+  assert.equal(rekSummary[1].isOverBudget, true);
+
+  // Resolve info & filter & CSV
+  const resolved = resolvePaketPaguInfo(paketList[0], existingRek);
+  assert.equal(resolved.paguAnggaran, 141670000);
+  assert.equal(resolved.hasRekening, true);
+
+  const onlyRek1 = filterPaketPekerjaan(
+    paketList,
+    { kodeRekening: '5.1.02.02.01.0029' },
+    '2026-10-01',
+    existingRek
+  );
+  assert.equal(onlyRek1.length, 2);
+
+  const rekOpts = getAvailableKodeRekeningOptions(paketList, existingRek);
+  assert.equal(rekOpts.length, 2);
+
+  const csv = buildPekerjaanCsvContent(paketList, '2026-10-01', existingRek);
+  assert.equal(csv.includes('5.1.02.02.01.0029'), true);
+  assert.equal(csv.includes('Belanja Jasa Tenaga Ahli'), true);
+});
+

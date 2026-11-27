@@ -521,6 +521,72 @@
         "updatedAt"
       ]
     },
+    "RekeningAnggaran": {
+      "title": "RekeningAnggaran",
+      "description": "Master kode rekening belanja dan 1 pagu anggaran yang dapat dipakai bersama oleh beberapa kegiatan/paket pekerjaan",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "kodeRekening": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Kode rekening belanja (1 kode rekening per tahun anggaran = 1 pagu anggaran)"
+        },
+        "uraian": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Uraian / nama rekening belanja"
+        },
+        "tahunAnggaran": {
+          "type": "integer",
+          "description": "Tahun anggaran rekening (2000-2100)"
+        },
+        "paguAnggaran": {
+          "type": "number",
+          "description": "Nilai pagu anggaran tunggal pada kode rekening dalam Rupiah (Rp)"
+        },
+        "catatan": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "dibuatOlehId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "dibuatOlehNama": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "kodeRekening",
+        "uraian",
+        "tahunAnggaran",
+        "paguAnggaran",
+        "dibuatOlehId",
+        "dibuatOlehNama",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "PaketPekerjaan": {
       "title": "PaketPekerjaan",
       "description": "Paket kegiatan dan pekerjaan beserta alur tahapan pelaksanaan yang dapat dikustomisasi",
@@ -531,6 +597,22 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "rekeningId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Referensi ID master rekeningAnggaran"
+        },
+        "kodeRekening": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Kode rekening belanja terkait paket pekerjaan"
+        },
+        "namaRekening": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Uraian rekening belanja terkait paket pekerjaan"
         },
         "namaKegiatan": {
           "type": "string",
@@ -698,6 +780,10 @@
     "/notifikasi/{notifId}": {
       "schema": { "$ref": "#/entities/NotifikasiDisposisi" },
       "description": "Notifikasi disposisi surat yang ditujukan khusus bagi akun penerima disposisi"
+    },
+    "/rekeningAnggaran/{rekeningId}": {
+      "schema": { "$ref": "#/entities/RekeningAnggaran" },
+      "description": "Master kode rekening dan 1 pagu anggaran untuk satu atau lebih paket pekerjaan"
     },
     "/paketPekerjaan/{paketId}": {
       "schema": { "$ref": "#/entities/PaketPekerjaan" },

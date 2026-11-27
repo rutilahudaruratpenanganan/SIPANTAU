@@ -27,6 +27,7 @@ import {
   PaketPekerjaan,
   PejabatConfig,
   Personel,
+  RekeningAnggaran,
   RiwayatTindakLanjut,
   Role,
   SkemaKontrak,
@@ -78,6 +79,9 @@ const LIMITS = {
   KEGIATAN_NAMA: 300,
   KODE_RUP: 100,
   PENYEDIA: 200,
+  KODE_REKENING: 100,
+  URAIAN_REKENING: 300,
+  CATATAN_REKENING: 1000,
   MAX_TAHAPAN_PEKERJAAN: 30,
   MAX_TERMIN_PEKERJAAN: 20,
 };
@@ -1579,6 +1583,9 @@ function docToPaketPekerjaan(id: string, data: Record<string, unknown>): PaketPe
 
   return {
     id,
+    rekeningId: (data.rekeningId as string | undefined) || undefined,
+    kodeRekening: (data.kodeRekening as string | undefined) || undefined,
+    namaRekening: (data.namaRekening as string | undefined) || undefined,
     namaKegiatan: (data.namaKegiatan as string) || '',
     subKegiatan: (data.subKegiatan as string) || '',
     pekerjaan: (data.pekerjaan as string | undefined) || undefined,
@@ -1640,7 +1647,178 @@ export function subscribePaketPekerjaan(
   );
 }
 
+export interface RekeningAnggaranMutationPayload {
+  kodeRekening: string;
+  uraian: string;
+  tahunAnggaran: number;
+  paguAnggaran: number;
+  catatan?: string;
+}
+
+function docToRekeningAnggaran(
+  id: string,
+  data: Record<string, unknown>
+): RekeningAnggaran {
+  return {
+    id,
+    kodeRekening: (data.kodeRekening as string) || '',
+    uraian: (data.uraian as string) || '',
+    tahunAnggaran:
+      typeof data.tahunAnggaran === 'number'
+        ? data.tahunAnggaran
+        : new Date().getFullYear(),
+    paguAnggaran: typeof data.paguAnggaran === 'number' ? data.paguAnggaran : 0,
+    catatan: (data.catatan as string | undefined) || undefined,
+    dibuatOlehId: (data.dibuatOlehId as string) || '',
+    dibuatOlehNama: (data.dibuatOlehNama as string) || '',
+    createdAt: formatTimestamp(data.createdAt),
+    updatedAt: formatTimestamp(data.updatedAt),
+  };
+}
+
+export function subscribeRekeningAnggaran(
+  onData: (list: RekeningAnggaran[]) => void,
+  onError: (err: Error) => void
+) {
+  const path = 'rekeningAnggaran';
+  const q = query(collection(db, path), where('ownerId', '==', INTERNAL_WORKSPACE_ID));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) =>
+        docToRekeningAnggaran(docSnap.id, docSnap.data() as Record<string, unknown>)
+      );
+      list.sort((a, b) => {
+        if (b.tahunAnggaran !== a.tahunAnggaran) return b.tahunAnggaran - a.tahunAnggaran;
+        return a.kodeRekening.localeCompare(b.kodeRekening, 'id-ID');
+      });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
+export async function createRekeningAnggaranDb(
+  input: RekeningAnggaranMutationPayload,
+  creator: { id: string; nama: string }
+): Promise<RekeningAnggaran> {
+  const id = `rek-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const path = `rekeningAnggaran/${id}`;
+  const cleanKode = clampStr(input.kodeRekening, LIMITS.KODE_REKENING) || '-';
+  const cleanUraian = clampStr(input.uraian, LIMITS.URAIAN_REKENING) || '-';
+  const cleanTahun = Math.max(
+    2000,
+    Math.min(2100, Math.round(Number(input.tahunAnggaran) || new Date().getFullYear()))
+  );
+  const cleanPagu = clampMoney(input.paguAnggaran) ?? 0;
+  const cleanCatatan = input.catatan?.trim()
+    ? clampStr(input.catatan, LIMITS.CATATAN_REKENING)
+    : undefined;
+  const cleanCreatorId = clampStr(creator.id, LIMITS.ID) || 'system';
+  const cleanCreatorNama = clampStr(creator.nama, LIMITS.NAMA) || 'Tim Wasdal';
+
+  const payload: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    kodeRekening: cleanKode,
+    uraian: cleanUraian,
+    tahunAnggaran: cleanTahun,
+    paguAnggaran: cleanPagu,
+    dibuatOlehId: cleanCreatorId,
+    dibuatOlehNama: cleanCreatorNama,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (cleanCatatan) {
+    payload.catatan = cleanCatatan;
+  }
+
+  try {
+    await setDoc(doc(db, 'rekeningAnggaran', id), payload);
+    const nowStamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    return {
+      id,
+      kodeRekening: cleanKode,
+      uraian: cleanUraian,
+      tahunAnggaran: cleanTahun,
+      paguAnggaran: cleanPagu,
+      catatan: cleanCatatan,
+      dibuatOlehId: cleanCreatorId,
+      dibuatOlehNama: cleanCreatorNama,
+      createdAt: nowStamp,
+      updatedAt: nowStamp,
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function updateRekeningAnggaranDb(
+  rekeningId: string,
+  input: RekeningAnggaranMutationPayload
+): Promise<void> {
+  const path = `rekeningAnggaran/${rekeningId}`;
+  const cleanKode = clampStr(input.kodeRekening, LIMITS.KODE_REKENING) || '-';
+  const cleanUraian = clampStr(input.uraian, LIMITS.URAIAN_REKENING) || '-';
+  const cleanTahun = Math.max(
+    2000,
+    Math.min(2100, Math.round(Number(input.tahunAnggaran) || new Date().getFullYear()))
+  );
+  const cleanPagu = clampMoney(input.paguAnggaran) ?? 0;
+
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'rekeningAnggaran', rekeningId), {
+      kodeRekening: cleanKode,
+      uraian: cleanUraian,
+      tahunAnggaran: cleanTahun,
+      paguAnggaran: cleanPagu,
+      catatan: input.catatan?.trim()
+        ? clampStr(input.catatan, LIMITS.CATATAN_REKENING)
+        : deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const paketSnap = await getDocs(
+      query(collection(db, 'paketPekerjaan'), where('ownerId', '==', INTERNAL_WORKSPACE_ID))
+    );
+    for (const docSnap of paketSnap.docs) {
+      if (docSnap.data().rekeningId === rekeningId) {
+        batch.update(docSnap.ref, {
+          kodeRekening: cleanKode,
+          namaRekening: cleanUraian,
+          tahunAnggaran: cleanTahun,
+          nilaiAnggaran: cleanPagu,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteRekeningAnggaranDb(rekeningId: string): Promise<void> {
+  const path = `rekeningAnggaran/${rekeningId}`;
+  try {
+    await deleteDoc(doc(db, 'rekeningAnggaran', rekeningId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export interface PaketPekerjaanMutationPayload {
+  rekeningId?: string;
+  kodeRekening?: string;
+  namaRekening?: string;
   namaKegiatan: string;
   subKegiatan: string;
   pekerjaan?: string;
@@ -1648,6 +1826,7 @@ export interface PaketPekerjaanMutationPayload {
   skemaKontrak?: PaketPekerjaan['skemaKontrak'];
   tahunAnggaran?: number;
   nilaiAnggaran: number;
+  hps?: number;
   nilaiKontrak?: number;
   tanggalMulai: string;
   durasiHariKerja?: number;
@@ -1677,6 +1856,7 @@ export async function createPaketPekerjaanDb(
   const id = `paket-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const path = `paketPekerjaan/${id}`;
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
+  const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
@@ -1702,6 +1882,15 @@ export async function createPaketPekerjaanDb(
     updatedAt: serverTimestamp(),
   };
 
+  if (input.rekeningId?.trim()) {
+    payload.rekeningId = clampStr(input.rekeningId, LIMITS.ID);
+  }
+  if (input.kodeRekening?.trim()) {
+    payload.kodeRekening = clampStr(input.kodeRekening, LIMITS.KODE_REKENING);
+  }
+  if (input.namaRekening?.trim()) {
+    payload.namaRekening = clampStr(input.namaRekening, LIMITS.URAIAN_REKENING);
+  }
   if (input.pekerjaan?.trim()) {
     payload.pekerjaan = clampStr(input.pekerjaan, LIMITS.KEGIATAN_NAMA);
   }
@@ -1710,6 +1899,9 @@ export async function createPaketPekerjaanDb(
   }
   if (cleanTahun !== undefined) {
     payload.tahunAnggaran = cleanTahun;
+  }
+  if (cleanHps !== undefined) {
+    payload.hps = cleanHps;
   }
   if (cleanNilaiKontrak !== undefined) {
     payload.nilaiKontrak = cleanNilaiKontrak;
@@ -1766,6 +1958,7 @@ export async function updatePaketPekerjaanDb(
 ): Promise<void> {
   const path = `paketPekerjaan/${paketId}`;
   const cleanBudget = clampMoney(input.nilaiAnggaran) ?? 0;
+  const cleanHps = clampMoney(input.hps);
   const cleanNilaiKontrak = clampMoney(input.nilaiKontrak);
   const cleanDurasi =
     typeof input.durasiHariKerja === 'number' && Number.isFinite(input.durasiHariKerja)
@@ -1782,6 +1975,15 @@ export async function updatePaketPekerjaanDb(
     input.terminPencairan.length > 0;
 
   const updatePayload: Record<string, unknown> = {
+    rekeningId: input.rekeningId?.trim()
+      ? clampStr(input.rekeningId, LIMITS.ID)
+      : deleteField(),
+    kodeRekening: input.kodeRekening?.trim()
+      ? clampStr(input.kodeRekening, LIMITS.KODE_REKENING)
+      : deleteField(),
+    namaRekening: input.namaRekening?.trim()
+      ? clampStr(input.namaRekening, LIMITS.URAIAN_REKENING)
+      : deleteField(),
     namaKegiatan: clampStr(input.namaKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
     subKegiatan: clampStr(input.subKegiatan, LIMITS.KEGIATAN_NAMA) || '-',
     pekerjaan: input.pekerjaan?.trim()
@@ -1791,7 +1993,7 @@ export async function updatePaketPekerjaanDb(
     skemaKontrak: input.skemaKontrak ? input.skemaKontrak : deleteField(),
     tahunAnggaran: cleanTahun !== undefined ? cleanTahun : deleteField(),
     nilaiAnggaran: cleanBudget,
-    hps: deleteField(),
+    hps: cleanHps !== undefined ? cleanHps : deleteField(),
     nilaiKontrak: cleanNilaiKontrak !== undefined ? cleanNilaiKontrak : deleteField(),
     tanggalMulai: clampStr(input.tanggalMulai, LIMITS.DATE_STR),
     durasiHariKerja: cleanDurasi !== undefined ? cleanDurasi : deleteField(),

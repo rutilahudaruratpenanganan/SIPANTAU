@@ -213,15 +213,31 @@ export interface TahapPekerjaan {
   diperbaruiPada?: string;
 }
 
+export interface RekeningAnggaran {
+  id: string;
+  kodeRekening: string;
+  uraian: string;
+  tahunAnggaran: number;
+  paguAnggaran: number;
+  catatan?: string;
+  dibuatOlehId: string;
+  dibuatOlehNama: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PaketPekerjaan {
   id: string;
+  rekeningId?: string;
+  kodeRekening?: string;
+  namaRekening?: string;
   namaKegiatan: string;
   subKegiatan: string;
   pekerjaan?: string;
   jenisPelaksanaan: JenisPelaksanaan;
   skemaKontrak?: SkemaKontrak;
   tahunAnggaran?: number; // Tahun anggaran kegiatan (mis. 2026)
-  nilaiAnggaran: number; // Pagu Anggaran (Rp)
+  nilaiAnggaran: number; // Pagu Anggaran Rekening (Rp)
   hps?: number; // Legacy optional field for backward compatibility
   nilaiKontrak?: number; // Nilai Kontrak / Realisasi (Rp)
   tanggalMulai: string; // YYYY-MM-DD

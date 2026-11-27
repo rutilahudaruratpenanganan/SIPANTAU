@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   BriefcaseBusiness,
   Check,
+  Landmark,
   Plus,
   RotateCcw,
   Trash2,
@@ -15,6 +17,7 @@ import {
   MekanismePencairan,
   PaketPekerjaan,
   Personel,
+  RekeningAnggaran,
   SkemaKontrak,
   SkemaPembayaran,
   StatusPencairan,
@@ -22,7 +25,10 @@ import {
   TahapPekerjaan,
   TerminPekerjaan,
 } from '../types';
-import { PaketPekerjaanMutationPayload } from '../services/firestoreService';
+import {
+  PaketPekerjaanMutationPayload,
+  RekeningAnggaranMutationPayload,
+} from '../services/firestoreService';
 import {
   JENIS_PELAKSANAAN_LIST,
   MAX_DURASI_HARI_KERJA,
@@ -47,10 +53,13 @@ import {
   normalizeTahapanOrder,
   normalizeTerminOrder,
   parseRupiahInput,
+  resolvePaketPaguInfo,
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
+  summarizeRekeningAnggaran,
   summarizeTerminPencairan,
   validatePaketPekerjaanInput,
+  validateRekeningAnggaranInput,
 } from '../utils/pekerjaanLogic';
 
 interface ModalPaketPekerjaanProps {
@@ -58,6 +67,11 @@ interface ModalPaketPekerjaanProps {
   onClose: () => void;
   initialPaket: PaketPekerjaan | null;
   personelList: Personel[];
+  rekeningList: RekeningAnggaran[];
+  paketList?: PaketPekerjaan[];
+  onCreateRekening?: (
+    payload: RekeningAnggaranMutationPayload
+  ) => Promise<RekeningAnggaran>;
   onSave: (payload: PaketPekerjaanMutationPayload, editingId?: string) => Promise<void>;
   onDeletePaket?: (paketId: string) => Promise<void>;
 }
@@ -67,6 +81,9 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   onClose,
   initialPaket,
   personelList,
+  rekeningList,
+  paketList = [],
+  onCreateRekening,
   onSave,
   onDeletePaket,
 }) => {
@@ -82,6 +99,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   );
   const [nilaiAnggaran, setNilaiAnggaran] = useState<number>(0);
   const [nilaiAnggaranText, setNilaiAnggaranText] = useState<string>('');
+  const [hps, setHps] = useState<number | undefined>(undefined);
+  const [hpsText, setHpsText] = useState<string>('');
   const [nilaiKontrak, setNilaiKontrak] = useState<number | undefined>(undefined);
   const [nilaiKontrakText, setNilaiKontrakText] = useState<string>('');
   const [tanggalMulai, setTanggalMulai] = useState(getTodayLocalIso());
@@ -99,6 +118,19 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     buildTemplateTahapan('Perorangan')
   );
   const [hasCustomWorkflowEdit, setHasCustomWorkflowEdit] = useState(false);
+
+  const [selectedRekeningId, setSelectedRekeningId] = useState<string>('');
+  const [showInlineNewRekening, setShowInlineNewRekening] = useState(false);
+  const [newRekKode, setNewRekKode] = useState('');
+  const [newRekUraian, setNewRekUraian] = useState('');
+  const [newRekTahunText, setNewRekTahunText] = useState<string>(() =>
+    String(new Date().getFullYear())
+  );
+  const [newRekPagu, setNewRekPagu] = useState<number>(0);
+  const [newRekPaguText, setNewRekPaguText] = useState('');
+  const [inlineRekError, setInlineRekError] = useState('');
+  const [isCreatingRek, setIsCreatingRek] = useState(false);
+  const [justCreatedRekening, setJustCreatedRekening] = useState<RekeningAnggaran | null>(null);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -119,12 +151,24 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setPekerjaan(initialPaket.pekerjaan || '');
       setJenisPelaksanaan(initialPaket.jenisPelaksanaan);
       setSkemaKontrak(initialPaket.skemaKontrak || '');
-      setTahunAnggaranText(String(getPaketTahunAnggaran(initialPaket)));
-      setNilaiAnggaran(initialPaket.nilaiAnggaran || 0);
+      const matchedRek = resolvePaketPaguInfo(initialPaket, rekeningList).rekening;
+      setSelectedRekeningId(matchedRek ? matchedRek.id : '');
+      const effectiveTa = matchedRek
+        ? matchedRek.tahunAnggaran
+        : getPaketTahunAnggaran(initialPaket);
+      const effectivePagu = matchedRek
+        ? matchedRek.paguAnggaran
+        : initialPaket.nilaiAnggaran || 0;
+      setTahunAnggaranText(String(effectiveTa));
+      setNilaiAnggaran(effectivePagu);
       setNilaiAnggaranText(
-        initialPaket.nilaiAnggaran > 0
-          ? initialPaket.nilaiAnggaran.toLocaleString('id-ID')
-          : '0'
+        effectivePagu > 0 ? effectivePagu.toLocaleString('id-ID') : '0'
+      );
+      setHps(initialPaket.hps);
+      setHpsText(
+        typeof initialPaket.hps === 'number'
+          ? initialPaket.hps.toLocaleString('id-ID')
+          : ''
       );
       setNilaiKontrak(initialPaket.nilaiKontrak);
       setNilaiKontrakText(
@@ -159,6 +203,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setHasCustomWorkflowEdit(true);
     } else {
       const today = getTodayLocalIso();
+      setSelectedRekeningId('');
       setNamaKegiatan('');
       setSubKegiatan('');
       setPekerjaan('');
@@ -167,6 +212,8 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setTahunAnggaranText(today.slice(0, 4));
       setNilaiAnggaran(0);
       setNilaiAnggaranText('');
+      setHps(undefined);
+      setHpsText('');
       setNilaiKontrak(undefined);
       setNilaiKontrakText('');
       setTanggalMulai(today);
@@ -183,13 +230,122 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       setTahapan(buildTemplateTahapan('Perorangan'));
       setHasCustomWorkflowEdit(false);
     }
+    setShowInlineNewRekening(false);
+    setNewRekKode('');
+    setNewRekUraian('');
+    setNewRekTahunText(String(new Date().getFullYear()));
+    setNewRekPagu(0);
+    setNewRekPaguText('');
+    setInlineRekError('');
+    setIsCreatingRek(false);
+    setJustCreatedRekening(null);
     setErrorMessage('');
     setIsSaving(false);
     setConfirmDelete(false);
     setIsDeleting(false);
   }, [isOpen, initialPaket]);
 
+  const effectiveRekeningList = useMemo(
+    () =>
+      justCreatedRekening && !rekeningList.some((r) => r.id === justCreatedRekening.id)
+        ? [justCreatedRekening, ...rekeningList]
+        : rekeningList,
+    [rekeningList, justCreatedRekening]
+  );
+
+  const selectedRekening = useMemo(
+    () => effectiveRekeningList.find((r) => r.id === selectedRekeningId) || null,
+    [effectiveRekeningList, selectedRekeningId]
+  );
+
+  const rekeningSummariesMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof summarizeRekeningAnggaran>[number]>();
+    for (const s of summarizeRekeningAnggaran(effectiveRekeningList, paketList)) {
+      map.set(s.rekening.id, s);
+    }
+    return map;
+  }, [effectiveRekeningList, paketList]);
+
+  const sharedRekeningUsage = useMemo(() => {
+    if (!selectedRekening) return null;
+    const otherPackets = paketList.filter(
+      (p) =>
+        p.id !== initialPaket?.id &&
+        resolvePaketPaguInfo(p, effectiveRekeningList).rekening?.id === selectedRekening.id
+    );
+    const otherKontrakTotal = otherPackets.reduce(
+      (sum, p) => sum + (typeof p.nilaiKontrak === 'number' ? p.nilaiKontrak : 0),
+      0
+    );
+    const currentKontrak = typeof nilaiKontrak === 'number' ? nilaiKontrak : 0;
+    const totalKontrak = otherKontrakTotal + currentKontrak;
+    const sisaPagu = selectedRekening.paguAnggaran - totalKontrak;
+    return {
+      otherCount: otherPackets.length,
+      otherKontrakTotal,
+      totalKontrak,
+      sisaPagu,
+      isOverBudget: totalKontrak > selectedRekening.paguAnggaran,
+    };
+  }, [selectedRekening, paketList, effectiveRekeningList, initialPaket?.id, nilaiKontrak]);
+
   if (!isOpen) return null;
+
+  const handleSelectRekening = (nextId: string) => {
+    setSelectedRekeningId(nextId);
+    if (!nextId) return;
+    const found = effectiveRekeningList.find((r) => r.id === nextId);
+    if (found) {
+      setNilaiAnggaran(found.paguAnggaran);
+      setNilaiAnggaranText(found.paguAnggaran.toLocaleString('id-ID'));
+      setTahunAnggaranText(String(found.tahunAnggaran));
+    }
+  };
+
+  const handleInlineCreateRekening = async () => {
+    if (!onCreateRekening) return;
+    const parsedTa = Number(newRekTahunText.trim());
+    const validationErr = validateRekeningAnggaranInput(
+      {
+        kodeRekening: newRekKode,
+        uraian: newRekUraian,
+        tahunAnggaran: Number.isInteger(parsedTa) ? parsedTa : NaN,
+        paguAnggaran: newRekPagu,
+      },
+      effectiveRekeningList
+    );
+    if (validationErr) {
+      setInlineRekError(validationErr);
+      return;
+    }
+
+    setInlineRekError('');
+    setIsCreatingRek(true);
+    try {
+      const created = await onCreateRekening({
+        kodeRekening: newRekKode.trim(),
+        uraian: newRekUraian.trim(),
+        tahunAnggaran: parsedTa,
+        paguAnggaran: newRekPagu,
+      });
+      setJustCreatedRekening(created);
+      setSelectedRekeningId(created.id);
+      setNilaiAnggaran(created.paguAnggaran);
+      setNilaiAnggaranText(created.paguAnggaran.toLocaleString('id-ID'));
+      setTahunAnggaranText(String(created.tahunAnggaran));
+      setShowInlineNewRekening(false);
+      setNewRekKode('');
+      setNewRekUraian('');
+      setNewRekPagu(0);
+      setNewRekPaguText('');
+    } catch (err) {
+      setInlineRekError(
+        err instanceof Error ? err.message : 'Gagal membuat Kode Rekening baru.'
+      );
+    } finally {
+      setIsCreatingRek(false);
+    }
+  };
 
   const handleChangeJenisPelaksanaan = (nextJenis: JenisPelaksanaan) => {
     setJenisPelaksanaan(nextJenis);
@@ -207,9 +363,21 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
   };
 
   const handleAnggaranInputChange = (raw: string) => {
+    if (selectedRekening) return;
     const parsed = parseRupiahInput(raw);
     setNilaiAnggaran(parsed);
     setNilaiAnggaranText(raw.trim() === '' ? '' : parsed.toLocaleString('id-ID'));
+  };
+
+  const handleHpsInputChange = (raw: string) => {
+    if (raw.trim() === '') {
+      setHps(undefined);
+      setHpsText('');
+      return;
+    }
+    const parsed = parseRupiahInput(raw);
+    setHps(parsed);
+    setHpsText(parsed.toLocaleString('id-ID'));
   };
 
   const handleNilaiKontrakInputChange = (raw: string) => {
@@ -369,6 +537,7 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     skemaPembayaran,
     statusPencairan,
     terminPencairan,
+    nilaiKontrak,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -386,13 +555,21 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
       initialPaket?.tanggalSelesai,
       getTodayLocalIso()
     );
+    const effectiveTahunAnggaran = selectedRekening
+      ? selectedRekening.tahunAnggaran
+      : tahunAnggaran;
+    const effectiveNilaiAnggaran = selectedRekening
+      ? selectedRekening.paguAnggaran
+      : nilaiAnggaran;
+
     const validationErr = validatePaketPekerjaanInput({
       namaKegiatan,
       subKegiatan,
       jenisPelaksanaan,
       skemaKontrak: skemaKontrak || undefined,
-      tahunAnggaran,
-      nilaiAnggaran,
+      tahunAnggaran: effectiveTahunAnggaran,
+      nilaiAnggaran: effectiveNilaiAnggaran,
+      hps,
       nilaiKontrak,
       tanggalMulai,
       durasiHariKerja,
@@ -415,13 +592,17 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
     try {
       await onSave(
         {
+          rekeningId: selectedRekening ? selectedRekening.id : undefined,
+          kodeRekening: selectedRekening ? selectedRekening.kodeRekening : undefined,
+          namaRekening: selectedRekening ? selectedRekening.uraian : undefined,
           namaKegiatan: namaKegiatan.trim(),
           subKegiatan: subKegiatan.trim(),
           pekerjaan: pekerjaan.trim() || undefined,
           jenisPelaksanaan,
           skemaKontrak: skemaKontrak || undefined,
-          tahunAnggaran,
-          nilaiAnggaran,
+          tahunAnggaran: effectiveTahunAnggaran,
+          nilaiAnggaran: effectiveNilaiAnggaran,
+          hps,
           nilaiKontrak,
           tanggalMulai: tanggalMulai.trim(),
           durasiHariKerja,
@@ -500,6 +681,239 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
             <h3 className="text-xs font-bold text-slate-900 border-b border-slate-200 pb-2">
               1. Informasi Paket Pekerjaan
             </h3>
+
+            {/* Pemilih Kode Rekening & 1 Pagu Anggaran */}
+            <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Landmark className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <div>
+                    <label
+                      htmlFor="paket-kode-rekening"
+                      className="block font-bold text-slate-900"
+                    >
+                      Kode Rekening &amp; Pagu Anggaran (1 Rekening = 1 Pagu)
+                    </label>
+                    <p className="text-[11px] text-slate-600">
+                      Pilih Kode Rekening yang telah terdaftar agar beberapa kegiatan berbagi 1 pagu tanpa terhitung ganda.
+                    </p>
+                  </div>
+                </div>
+                {onCreateRekening && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInlineNewRekening((v) => !v);
+                      setInlineRekError('');
+                      setNewRekTahunText(
+                        tahunAnggaranText || String(new Date().getFullYear())
+                      );
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-semibold transition-colors whitespace-nowrap self-start sm:self-auto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>
+                      {showInlineNewRekening
+                        ? 'Tutup Form Rekening'
+                        : 'Input Kode Rekening Baru'}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              <select
+                id="paket-kode-rekening"
+                value={selectedRekeningId}
+                onChange={(e) => handleSelectRekening(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="">
+                  -- Pilih Kode Rekening Terdaftar (atau isi manual untuk data tanpa rekening) --
+                </option>
+                {effectiveRekeningList.map((rek) => {
+                  const sum = rekeningSummariesMap.get(rek.id);
+                  const sisaLabel = sum
+                    ? `Sisa ${sum.isOverBudget ? '-' : ''}${formatRupiah(Math.abs(sum.sisaPagu))}`
+                    : '';
+                  return (
+                    <option key={rek.id} value={rek.id}>
+                      {rek.kodeRekening} — {rek.uraian} (TA {rek.tahunAnggaran} · Pagu{' '}
+                      {formatRupiah(rek.paguAnggaran)}
+                      {sum ? ` · ${sum.jumlahPaket} keg · ${sisaLabel}` : ''})
+                    </option>
+                  );
+                })}
+              </select>
+
+              {selectedRekening && sharedRekeningUsage && (
+                <div
+                  className={`p-2.5 rounded-lg border text-[11px] space-y-1 ${
+                    sharedRekeningUsage.isOverBudget
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : 'bg-white border-emerald-200 text-slate-700'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-900">
+                      <span className="font-mono">{selectedRekening.kodeRekening}</span> ·{' '}
+                      {selectedRekening.uraian} (TA {selectedRekening.tahunAnggaran})
+                    </span>
+                    <span className="font-mono font-bold text-slate-900 tabular-nums">
+                      Pagu Rekening (1x): {formatRupiah(selectedRekening.paguAnggaran)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 tabular-nums">
+                    <span>
+                      Kegiatan lain pada rekening ini:{' '}
+                      <strong>{sharedRekeningUsage.otherCount}</strong> (Kontrak{' '}
+                      {formatRupiah(sharedRekeningUsage.otherKontrakTotal)})
+                    </span>
+                    <span>·</span>
+                    <span
+                      className={`font-semibold ${
+                        sharedRekeningUsage.isOverBudget ? 'text-rose-700' : 'text-emerald-700'
+                      }`}
+                    >
+                      Sisa Pagu setelah kegiatan ini:{' '}
+                      {sharedRekeningUsage.isOverBudget ? '-' : ''}
+                      {formatRupiah(Math.abs(sharedRekeningUsage.sisaPagu))}
+                    </span>
+                  </div>
+                  {sharedRekeningUsage.isOverBudget && (
+                    <div className="flex items-center gap-1.5 text-rose-700 font-semibold pt-0.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        Perhatian: Akumulasi nilai kontrak melebihi pagu anggaran kode rekening ini.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {showInlineNewRekening && onCreateRekening && (
+                <div
+                  data-testid="inline-rekening-form"
+                  className="p-3 rounded-xl border border-emerald-300 bg-white space-y-2.5"
+                >
+                  <div className="font-bold text-slate-900 text-[11px]">
+                    Tambah Master Kode Rekening Baru
+                  </div>
+                  {inlineRekError && (
+                    <div
+                      role="alert"
+                      className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-medium"
+                    >
+                      {inlineRekError}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                    <div className="sm:col-span-4">
+                      <label
+                        htmlFor="inline-rek-kode"
+                        className="block text-[11px] font-semibold text-slate-700 mb-1"
+                      >
+                        Kode Rekening *
+                      </label>
+                      <input
+                        id="inline-rek-kode"
+                        type="text"
+                        maxLength={100}
+                        value={newRekKode}
+                        onChange={(e) => setNewRekKode(e.target.value)}
+                        placeholder="5.1.02.02.01.0029"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono text-slate-900"
+                      />
+                    </div>
+                    <div className="sm:col-span-5">
+                      <label
+                        htmlFor="inline-rek-uraian"
+                        className="block text-[11px] font-semibold text-slate-700 mb-1"
+                      >
+                        Uraian Rekening *
+                      </label>
+                      <input
+                        id="inline-rek-uraian"
+                        type="text"
+                        maxLength={300}
+                        value={newRekUraian}
+                        onChange={(e) => setNewRekUraian(e.target.value)}
+                        placeholder="Belanja Jasa Konsultansi..."
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label
+                        htmlFor="inline-rek-tahun"
+                        className="block text-[11px] font-semibold text-slate-700 mb-1"
+                      >
+                        Tahun *
+                      </label>
+                      <input
+                        id="inline-rek-tahun"
+                        type="number"
+                        min={MIN_TAHUN_ANGGARAN}
+                        max={MAX_TAHUN_ANGGARAN}
+                        value={newRekTahunText}
+                        onChange={(e) => setNewRekTahunText(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-slate-900"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label
+                        htmlFor="inline-rek-pagu"
+                        className="block text-[11px] font-semibold text-slate-700 mb-1"
+                      >
+                        Pagu Anggaran (Rp) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold text-[11px]">
+                          Rp
+                        </span>
+                        <input
+                          id="inline-rek-pagu"
+                          type="text"
+                          inputMode="numeric"
+                          value={newRekPaguText}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw.trim() === '') {
+                              setNewRekPagu(0);
+                              setNewRekPaguText('');
+                              return;
+                            }
+                            const parsed = parseRupiahInput(raw);
+                            setNewRekPagu(parsed);
+                            setNewRekPaguText(parsed.toLocaleString('id-ID'));
+                          }}
+                          placeholder="0"
+                          className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-300 font-mono tabular-nums text-slate-900"
+                        />
+                      </div>
+                    </div>
+                    <div className="sm:col-span-5 flex items-end justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowInlineNewRekening(false)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-semibold"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleInlineCreateRekening}
+                        disabled={isCreatingRek}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>
+                          {isCreatingRek ? 'Menyimpan...' : 'Simpan & Pilih Rekening'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -655,10 +1069,16 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                     step={1}
                     list="tahun-anggaran-presets"
                     required
+                    readOnly={Boolean(selectedRekening)}
+                    aria-readonly={Boolean(selectedRekening)}
                     value={tahunAnggaranText}
                     onChange={(e) => setTahunAnggaranText(e.target.value)}
                     placeholder={String(currentYear)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
+                    className={`w-full pl-9 pr-3 py-2 rounded-lg border font-mono tabular-nums focus:outline-none ${
+                      selectedRekening
+                        ? 'border-slate-200 bg-slate-100 text-slate-700 cursor-not-allowed'
+                        : 'border-slate-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900'
+                    }`}
                   />
                   <datalist id="tahun-anggaran-presets">
                     {presetYears.map((yr) => (
@@ -667,7 +1087,9 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                   </datalist>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Dasar pengelompokan rekap tahunan.
+                  {selectedRekening
+                    ? 'Mengikuti tahun Kode Rekening terpilih.'
+                    : 'Dasar pengelompokan rekap tahunan.'}
                 </p>
               </div>
             </div>
@@ -727,13 +1149,14 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label
                   htmlFor="paket-nilai-anggaran"
                   className="block font-semibold text-slate-700 mb-1"
                 >
-                  Pagu Anggaran (Rp) <span className="text-rose-600">*</span>
+                  Pagu Anggaran {selectedRekening ? 'Rekening (1x)' : '(Rp)'}{' '}
+                  <span className="text-rose-600">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
@@ -744,14 +1167,50 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                     type="text"
                     inputMode="numeric"
                     required
+                    readOnly={Boolean(selectedRekening)}
+                    aria-readonly={Boolean(selectedRekening)}
                     value={nilaiAnggaranText}
                     onChange={(e) => handleAnggaranInputChange(e.target.value)}
+                    placeholder="0"
+                    className={`w-full pl-9 pr-3 py-2 rounded-lg border font-mono tabular-nums focus:outline-none ${
+                      selectedRekening
+                        ? 'border-slate-200 bg-slate-100 text-slate-800 font-semibold cursor-not-allowed'
+                        : 'border-slate-300 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900'
+                    }`}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
+                  {selectedRekening
+                    ? `Otomatis dari ${selectedRekening.kodeRekening}: ${formatRupiah(selectedRekening.paguAnggaran)}`
+                    : `Terbaca: ${formatRupiah(nilaiAnggaran)}`}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="paket-hps"
+                  className="block font-semibold text-slate-700 mb-1"
+                >
+                  Harga Perkiraan Sendiri / HPS (Rp)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-semibold">
+                    Rp
+                  </span>
+                  <input
+                    id="paket-hps"
+                    type="text"
+                    inputMode="numeric"
+                    value={hpsText}
+                    onChange={(e) => handleHpsInputChange(e.target.value)}
                     placeholder="0"
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-slate-900"
                   />
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
-                  Terbaca: {formatRupiah(nilaiAnggaran)}
+                  {hps !== undefined
+                    ? `Terbaca: ${formatRupiah(hps)}`
+                    : 'Opsional (Rp)'}
                 </p>
               </div>
 
@@ -1017,6 +1476,15 @@ export const ModalPaketPekerjaan: React.FC<ModalPaketPekerjaanProps> = ({
                         {terminSummary.summaryLabel}
                       </span>{' '}
                       · Akumulasi cair {terminSummary.totalPersenCair}%
+                      {terminSummary.sudahCount > 0 && terminSummary.hasNominalCair && (
+                        <>
+                          {' '}
+                          ·{' '}
+                          <span className="font-mono font-bold text-emerald-700">
+                            Sudah Dibayar: {formatRupiah(terminSummary.totalNilaiCair)}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                   <button

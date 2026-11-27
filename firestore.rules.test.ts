@@ -387,8 +387,74 @@ test('NotifikasiDisposisi enforces recipientId, workspace binding, bounds, allow
   assert.equal(markReadKeys.has('createdAt'), false);
 });
 
+const REKENING_ALLOWED_KEYS = new Set([
+  'ownerId', 'kodeRekening', 'uraian', 'tahunAnggaran', 'paguAnggaran',
+  'catatan', 'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt',
+]);
+
+function evaluateRekeningCreate(
+  docId: string,
+  payload: Record<string, unknown>,
+  usesServerTime: boolean
+): 'ALLOW' | 'PERMISSION_DENIED' {
+  if (!docId || docId.length > 128 || !VALID_ID_REGEX.test(docId)) return 'PERMISSION_DENIED';
+  if (!usesServerTime) return 'PERMISSION_DENIED';
+  for (const key of Object.keys(payload)) {
+    if (!REKENING_ALLOWED_KEYS.has(key)) return 'PERMISSION_DENIED';
+  }
+  if (payload.ownerId !== INTERNAL_WORKSPACE_ID) return 'PERMISSION_DENIED';
+  if (typeof payload.kodeRekening !== 'string' || payload.kodeRekening.length < 1 || payload.kodeRekening.length > 100) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.uraian !== 'string' || payload.uraian.length < 1 || payload.uraian.length > 300) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    typeof payload.tahunAnggaran !== 'number' ||
+    !Number.isInteger(payload.tahunAnggaran) ||
+    payload.tahunAnggaran < 2000 ||
+    payload.tahunAnggaran > 2100
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (typeof payload.paguAnggaran !== 'number' || payload.paguAnggaran < 0 || payload.paguAnggaran > 1000000000000) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.catatan !== undefined &&
+    (typeof payload.catatan !== 'string' || payload.catatan.length > 1000)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  return 'ALLOW';
+}
+
+test('RekeningAnggaran enforces workspace binding, bounds, allowed keys, and immutable fields', () => {
+  const validRek: Record<string, unknown> = {
+    ownerId: INTERNAL_WORKSPACE_ID,
+    kodeRekening: '5.1.02.02.01.0029',
+    uraian: 'Belanja Jasa Tenaga Ahli',
+    tahunAnggaran: 2026,
+    paguAnggaran: 141670000,
+    dibuatOlehId: 'internal_wasdal_p-ketua',
+    dibuatOlehNama: 'Yuliani, ST',
+    createdAt: 'SERVER_TIME',
+    updatedAt: 'SERVER_TIME',
+  };
+
+  assert.equal(evaluateRekeningCreate('rek-170000-ab12', validRek, true), 'ALLOW');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, ownerId: 'other' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, ghostFlag: true }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, kodeRekening: '' }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, kodeRekening: '1'.repeat(101) }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, paguAnggaran: -100 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', { ...validRek, tahunAnggaran: 1998 }, true), 'PERMISSION_DENIED');
+  assert.equal(evaluateRekeningCreate('rek-1', validRek, false), 'PERMISSION_DENIED');
+});
+
 const PAKET_ALLOWED_KEYS = new Set([
-  'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
+  'ownerId', 'rekeningId', 'kodeRekening', 'namaRekening',
+  'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
   'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
   'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
   'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
@@ -430,6 +496,24 @@ function evaluatePaketCreate(
     if (!PAKET_ALLOWED_KEYS.has(key)) return 'PERMISSION_DENIED';
   }
   if (payload.ownerId !== INTERNAL_WORKSPACE_ID) return 'PERMISSION_DENIED';
+  if (
+    payload.rekeningId !== undefined &&
+    (typeof payload.rekeningId !== 'string' || payload.rekeningId.length > 128 || !VALID_ID_REGEX.test(payload.rekeningId))
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.kodeRekening !== undefined &&
+    (typeof payload.kodeRekening !== 'string' || payload.kodeRekening.length > 100)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
+  if (
+    payload.namaRekening !== undefined &&
+    (typeof payload.namaRekening !== 'string' || payload.namaRekening.length > 300)
+  ) {
+    return 'PERMISSION_DENIED';
+  }
   if (typeof payload.namaKegiatan !== 'string' || payload.namaKegiatan.length < 1 || payload.namaKegiatan.length > 300) {
     return 'PERMISSION_DENIED';
   }
@@ -587,8 +671,26 @@ test('PaketPekerjaan enforces workspace binding, allowlists (jenis, skema, pemba
     'ALLOW'
   );
   assert.equal(
-    evaluatePaketCreate('paket-170000-ab15', { ...validPaket, skemaKontrak: 'Katalog' }, true),
+    evaluatePaketCreate(
+      'paket-170000-ab15',
+      {
+        ...validPaket,
+        skemaKontrak: 'Katalog',
+        rekeningId: 'rek-170000-ab12',
+        kodeRekening: '5.1.02.02.01.0029',
+        namaRekening: 'Belanja Jasa Tenaga Ahli',
+      },
+      true
+    ),
     'ALLOW'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, rekeningId: 'bad/id' }, true),
+    'PERMISSION_DENIED'
+  );
+  assert.equal(
+    evaluatePaketCreate('paket-1', { ...validPaket, kodeRekening: '5'.repeat(101) }, true),
+    'PERMISSION_DENIED'
   );
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, ownerId: 'other' }, true), 'PERMISSION_DENIED');
   assert.equal(evaluatePaketCreate('paket-1', { ...validPaket, shadowField: 123 }, true), 'PERMISSION_DENIED');

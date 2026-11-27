@@ -471,6 +471,51 @@ service cloud.firestore {
       allow delete: if isValidId(notifId) && isInternalWorkspaceDoc(resource.data);
     }
 
+    function isValidRekeningAnggaran(data) {
+      return data.keys().hasAll([
+          'ownerId', 'kodeRekening', 'uraian', 'tahunAnggaran', 'paguAnggaran',
+          'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'kodeRekening', 'uraian', 'tahunAnggaran', 'paguAnggaran',
+          'catatan', 'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == 'internal_wasdal'
+        && data.kodeRekening is string && data.kodeRekening.size() >= 1 && data.kodeRekening.size() <= 100
+        && data.uraian is string && data.uraian.size() >= 1 && data.uraian.size() <= 300
+        && data.tahunAnggaran is int && data.tahunAnggaran >= 2000 && data.tahunAnggaran <= 2100
+        && (data.paguAnggaran is int || data.paguAnggaran is float)
+        && data.paguAnggaran >= 0 && data.paguAnggaran <= 1000000000000
+        && (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 1000))
+        && data.dibuatOlehId is string && data.dibuatOlehId.size() >= 1 && data.dibuatOlehId.size() <= 128
+        && data.dibuatOlehNama is string && data.dibuatOlehNama.size() >= 1 && data.dibuatOlehNama.size() <= 150
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 8. Master Kode Rekening & 1 Pagu Anggaran
+    match /rekeningAnggaran/{rekeningId} {
+      allow get: if isValidId(rekeningId) && isInternalWorkspaceDoc(resource.data);
+      allow list: if isInternalWorkspaceDoc(resource.data);
+      allow create: if isValidId(rekeningId)
+        && isValidRekeningAnggaran(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isValidId(rekeningId)
+        && isInternalWorkspaceDoc(resource.data)
+        && isValidRekeningAnggaran(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.dibuatOlehId == resource.data.dibuatOlehId
+        && request.resource.data.dibuatOlehNama == resource.data.dibuatOlehNama
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'kodeRekening', 'uraian', 'tahunAnggaran', 'paguAnggaran', 'catatan', 'updatedAt'
+        ]);
+      allow delete: if isValidId(rekeningId) && isInternalWorkspaceDoc(resource.data);
+    }
+
     function isValidPaketPekerjaan(data) {
       return data.keys().hasAll([
           'ownerId', 'namaKegiatan', 'subKegiatan', 'jenisPelaksanaan',
@@ -478,7 +523,8 @@ service cloud.firestore {
           'dibuatOlehId', 'dibuatOlehNama', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'ownerId', 'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
+          'ownerId', 'rekeningId', 'kodeRekening', 'namaRekening',
+          'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
           'skemaPembayaran', 'terminPencairan', 'statusPencairan', 'mekanismePencairan',
@@ -487,6 +533,9 @@ service cloud.firestore {
         ])
         && isValidId(data.ownerId)
         && data.ownerId == 'internal_wasdal'
+        && (!('rekeningId' in data) || isValidId(data.rekeningId))
+        && (!('kodeRekening' in data) || (data.kodeRekening is string && data.kodeRekening.size() <= 100))
+        && (!('namaRekening' in data) || (data.namaRekening is string && data.namaRekening.size() <= 300))
         && data.namaKegiatan is string && data.namaKegiatan.size() >= 1 && data.namaKegiatan.size() <= 300
         && data.subKegiatan is string && data.subKegiatan.size() >= 1 && data.subKegiatan.size() <= 300
         && (!('pekerjaan' in data) || (data.pekerjaan is string && data.pekerjaan.size() <= 300))
@@ -542,6 +591,7 @@ service cloud.firestore {
 
     function isAllowedPaketPekerjaanUpdateAction(affected) {
       return affected.hasOnly([
+          'rekeningId', 'kodeRekening', 'namaRekening',
           'namaKegiatan', 'subKegiatan', 'pekerjaan', 'jenisPelaksanaan', 'skemaKontrak',
           'tahunAnggaran', 'nilaiAnggaran', 'hps', 'nilaiKontrak',
           'tanggalMulai', 'durasiHariKerja', 'tenggatWaktu', 'tanggalSelesai',
@@ -549,19 +599,23 @@ service cloud.firestore {
           'kodeRup', 'nomorKontrak', 'penyedia', 'picNama', 'catatan', 'tahapan', 'updatedAt'
         ])
         || affected.hasOnly([
+          'kodeRekening', 'namaRekening', 'tahunAnggaran', 'nilaiAnggaran', 'updatedAt'
+        ])
+        || affected.hasOnly([
           'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',
           'statusPencairan', 'mekanismePencairan', 'updatedAt'
         ]);
     }
 
-    // 8. Pemantauan Kegiatan & Pekerjaan
+    // 9. Pemantauan Kegiatan & Pekerjaan
     match /paketPekerjaan/{paketId} {
       allow get: if isValidId(paketId) && isInternalWorkspaceDoc(resource.data);
       allow list: if isInternalWorkspaceDoc(resource.data);
       allow create: if isValidId(paketId)
         && isValidPaketPekerjaan(request.resource.data)
         && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && (!('rekeningId' in request.resource.data) || exists(/databases/$(database)/documents/rekeningAnggaran/$(request.resource.data.rekeningId)));
       allow update: if isValidId(paketId)
         && isInternalWorkspaceDoc(resource.data)
         && request.resource.data.ownerId == resource.data.ownerId
@@ -571,7 +625,10 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && isAllowedPaketPekerjaanUpdateAction(request.resource.data.diff(resource.data).affectedKeys())
         && (
-          isValidPaketPekerjaan(request.resource.data)
+          (
+            isValidPaketPekerjaan(request.resource.data)
+            && (!('rekeningId' in request.resource.data) || exists(/databases/$(database)/documents/rekeningAnggaran/$(request.resource.data.rekeningId)))
+          )
           || (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'tahapan', 'tanggalSelesai', 'skemaPembayaran', 'terminPencairan',

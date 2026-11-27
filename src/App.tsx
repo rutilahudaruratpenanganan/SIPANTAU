@@ -29,12 +29,14 @@ import {
   ModalCetakPekerjaan,
   ModalCetakPekerjaanInitialState,
 } from './components/ModalCetakPekerjaan';
+import { ModalKodeRekening } from './components/ModalKodeRekening';
 import { 
   AgendaEvent,
   AkunKredensial,
   LoginAccount,
   NotifikasiDisposisi,
   PaketPekerjaan,
+  RekeningAnggaran,
   SuratMasuk, 
   Personel, 
   PejabatConfig, 
@@ -79,14 +81,17 @@ import {
   AgendaMutationPayload,
   AgendaReschedulePayload,
   PaketPekerjaanMutationPayload,
+  RekeningAnggaranMutationPayload,
   cancelAgendaEventDb,
   createAgendaEventDb,
   createPaketPekerjaanDb,
   createPersonelDb,
+  createRekeningAnggaranDb,
   createSuratMasukDb,
   deleteAgendaEventDb,
   deletePaketPekerjaanDb,
   deletePersonelDb,
+  deleteRekeningAnggaranDb,
   deleteSuratDb,
   ensureWorkspaceInitialized,
   isChunkedPdfUrl,
@@ -101,6 +106,7 @@ import {
   subscribeNotifikasiDisposisi,
   subscribePaketPekerjaan,
   subscribePersonel,
+  subscribeRekeningAnggaran,
   subscribeSuratMasuk,
   subscribeWorkspace,
   syncDisposisiNotificationsDb,
@@ -109,6 +115,7 @@ import {
   updatePaketPekerjaanDb,
   updatePaketPekerjaanTahapanDb,
   updatePersonelDb,
+  updateRekeningAnggaranDb,
   updateStageOrCatatanDb,
   updateStatusSelesaiDb,
   updateSuratMasukDb,
@@ -133,6 +140,7 @@ export default function App() {
   const [suratList, setSuratList] = useState<SuratMasuk[]>([]);
   const [agendaList, setAgendaList] = useState<AgendaEvent[]>([]);
   const [paketPekerjaanList, setPaketPekerjaanList] = useState<PaketPekerjaan[]>([]);
+  const [rekeningList, setRekeningList] = useState<RekeningAnggaran[]>([]);
   const [notifikasiList, setNotifikasiList] = useState<NotifikasiDisposisi[]>([]);
   const [personelList, setPersonelList] = useState<Personel[]>(INITIAL_PERSONEL);
   const [pejabatConfig, setPejabatConfig] = useState<PejabatConfig>(INITIAL_PEJABAT);
@@ -270,6 +278,7 @@ export default function App() {
   const [cetakPekerjaanInit, setCetakPekerjaanInit] = useState<
     ModalCetakPekerjaanInitialState | undefined
   >(undefined);
+  const [isModalKodeRekeningOpen, setIsModalKodeRekeningOpen] = useState(false);
 
   const selectedSuratForEdit = suratList.find((s) => s.id === selectedSuratForEditId) || null;
   const selectedSuratForDisposisi = suratList.find((s) => s.id === selectedSuratForDisposisiId) || null;
@@ -318,6 +327,7 @@ export default function App() {
     let unsubSurat: (() => void) | undefined;
     let unsubAgenda: (() => void) | undefined;
     let unsubPekerjaan: (() => void) | undefined;
+    let unsubRekening: (() => void) | undefined;
     let unsubNotifikasi: (() => void) | undefined;
 
     const readyFlags = {
@@ -326,6 +336,7 @@ export default function App() {
       akun: false,
       agenda: false,
       pekerjaan: false,
+      rekening: false,
       surat: false,
       notifikasi: false,
     };
@@ -338,6 +349,7 @@ export default function App() {
         readyFlags.akun &&
         readyFlags.agenda &&
         readyFlags.pekerjaan &&
+        readyFlags.rekening &&
         readyFlags.surat &&
         readyFlags.notifikasi
       ) {
@@ -385,6 +397,13 @@ export default function App() {
           },
           (err) => setAsyncError(err)
         );
+        unsubRekening = subscribeRekeningAnggaran(
+          (list) => {
+            setRekeningList(list);
+            markReady('rekening');
+          },
+          (err) => setAsyncError(err)
+        );
         unsubSurat = subscribeSuratMasuk(
           (list) => {
             setSuratList(list);
@@ -413,6 +432,7 @@ export default function App() {
       unsubAkun?.();
       unsubAgenda?.();
       unsubPekerjaan?.();
+      unsubRekening?.();
       unsubSurat?.();
       unsubNotifikasi?.();
     };
@@ -996,6 +1016,9 @@ export default function App() {
     setSelectedPaketForEditId(null);
     setIsModalWorkflowOpen(false);
     setSelectedPaketForWorkflowId(null);
+    setIsModalCetakPekerjaanOpen(false);
+    setCetakPekerjaanInit(undefined);
+    setIsModalKodeRekeningOpen(false);
     if (reason === 'idle') {
       setSessionNotice(IDLE_EXPIRED_NOTICE);
       showToast('Sesi Anda berakhir. Silakan masuk kembali.');
@@ -1205,6 +1228,44 @@ export default function App() {
     if (!target) return;
     await deletePaketPekerjaanDb(paketId);
     showToast(`Paket pekerjaan "${target.subKegiatan}" berhasil dihapus.`);
+  };
+
+  const handleCreateRekeningInline = async (
+    payload: RekeningAnggaranMutationPayload
+  ): Promise<RekeningAnggaran> => {
+    const created = await createRekeningAnggaranDb(payload, {
+      id: currentUser.id,
+      nama: currentUser.nama,
+    });
+    showToast(`Kode Rekening "${created.kodeRekening}" berhasil ditambahkan.`);
+    return created;
+  };
+
+  const handleSaveRekeningAnggaran = async (
+    payload: RekeningAnggaranMutationPayload,
+    editingId?: string
+  ) => {
+    if (editingId) {
+      await updateRekeningAnggaranDb(editingId, payload);
+      showToast(
+        `Kode Rekening "${payload.kodeRekening}" dan pagu kegiatan terkait berhasil diperbarui.`
+      );
+    } else {
+      await handleCreateRekeningInline(payload);
+    }
+  };
+
+  const handleDeleteRekeningAnggaran = async (rekeningId: string) => {
+    if (paketPekerjaanList.some((p) => p.rekeningId === rekeningId)) {
+      throw new Error(
+        'Kode Rekening masih digunakan oleh paket kegiatan. Lepas tautan terlebih dahulu.'
+      );
+    }
+    const target = rekeningList.find((r) => r.id === rekeningId);
+    await deleteRekeningAnggaranDb(rekeningId);
+    showToast(
+      `Kode Rekening ${target ? `"${target.kodeRekening}"` : ''} berhasil dihapus.`
+    );
   };
 
   const handleSaveNewPassword = async (accountId: string, newHash: string) => {
@@ -1683,6 +1744,7 @@ export default function App() {
         {activeTab === 'pekerjaan' && (
           <PekerjaanView
             paketList={paketPekerjaanList}
+            rekeningList={rekeningList}
             personelList={personelList}
             currentUser={currentUser}
             currentRole={currentRole}
@@ -1698,10 +1760,12 @@ export default function App() {
               setSelectedPaketForWorkflowId(paket.id);
               setIsModalWorkflowOpen(true);
             }}
+            onOpenKelolaRekening={() => setIsModalKodeRekeningOpen(true)}
             onOpenPrint={(opts) => {
               setCetakPekerjaanInit({
                 mode: opts.selectedPaketId ? 'kartu' : 'rekap',
                 selectedPaketId: opts.selectedPaketId || 'all',
+                kodeRekening: opts.kodeRekening,
                 tahunAnggaran: opts.tahunAnggaran,
                 jenisPelaksanaan: opts.jenisPelaksanaan,
                 skemaPembayaran: opts.skemaPembayaran,
@@ -1888,6 +1952,9 @@ export default function App() {
           }}
           initialPaket={selectedPaketForEdit}
           personelList={personelList}
+          rekeningList={rekeningList}
+          paketList={paketPekerjaanList}
+          onCreateRekening={handleCreateRekeningInline}
           onSave={handleSavePaketPekerjaan}
           onDeletePaket={handleDeletePaketPekerjaan}
         />
@@ -1902,6 +1969,8 @@ export default function App() {
             setSelectedPaketForWorkflowId(null);
           }}
           paket={selectedPaketForWorkflow}
+          rekeningList={rekeningList}
+          paketList={paketPekerjaanList}
           currentUser={currentUser}
           onSaveProgress={handleSavePaketTahapan}
           onOpenEditPaket={(paket) => {
@@ -1920,9 +1989,22 @@ export default function App() {
             setCetakPekerjaanInit(undefined);
           }}
           paketList={paketPekerjaanList}
+          rekeningList={rekeningList}
           pejabatConfig={pejabatConfig}
           initialState={cetakPekerjaanInit}
           onNotify={showToast}
+        />
+      )}
+
+      {/* 13. Modal Master Kode Rekening & Pagu Anggaran */}
+      {isModalKodeRekeningOpen && (
+        <ModalKodeRekening
+          isOpen={isModalKodeRekeningOpen}
+          onClose={() => setIsModalKodeRekeningOpen(false)}
+          rekeningList={rekeningList}
+          paketList={paketPekerjaanList}
+          onSaveRekening={handleSaveRekeningAnggaran}
+          onDeleteRekening={handleDeleteRekeningAnggaran}
         />
       )}
 

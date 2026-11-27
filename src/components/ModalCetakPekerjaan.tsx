@@ -13,6 +13,7 @@ import {
   MekanismePencairan,
   PaketPekerjaan,
   PejabatConfig,
+  RekeningAnggaran,
   SkemaKontrak,
   SkemaPembayaran,
   StatusPencairan,
@@ -31,12 +32,16 @@ import {
   formatRupiah,
   formatTanggalDdMmYyyy,
   formatTanggalDisplay,
+  getAvailableKodeRekeningOptions,
   getAvailablePicNames,
   getAvailableTahunAnggaran,
   getPaketTahunAnggaran,
   getTodayLocalIso,
+  resolvePaketPaguInfo,
+  resolveTerminNominal,
   summarizePaketByJenis,
   summarizePaketByTahunAnggaran,
+  summarizeRekeningAnggaran,
   summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
 
@@ -45,6 +50,7 @@ export type PrintPekerjaanMode = 'rekap' | 'kartu';
 export interface ModalCetakPekerjaanInitialState {
   mode?: PrintPekerjaanMode;
   selectedPaketId?: string | 'all';
+  kodeRekening?: string | 'all';
   tahunAnggaran?: number | 'all';
   jenisPelaksanaan?: JenisPelaksanaan | 'all';
   skemaKontrak?: SkemaKontrak | 'all';
@@ -60,6 +66,7 @@ interface ModalCetakPekerjaanProps {
   isOpen: boolean;
   onClose: () => void;
   paketList: PaketPekerjaan[];
+  rekeningList?: RekeningAnggaran[];
   pejabatConfig: PejabatConfig;
   initialState?: ModalCetakPekerjaanInitialState;
   onNotify?: (msg: string) => void;
@@ -69,6 +76,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   isOpen,
   onClose,
   paketList,
+  rekeningList = [],
   pejabatConfig,
   initialState,
   onNotify,
@@ -77,6 +85,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
 
   const [printMode, setPrintMode] = useState<PrintPekerjaanMode>('rekap');
   const [selectedPaketId, setSelectedPaketId] = useState<string | 'all'>('all');
+  const [kodeRekening, setKodeRekening] = useState<string | 'all'>('all');
   const [tahunAnggaran, setTahunAnggaran] = useState<number | 'all'>('all');
   const [jenisPelaksanaan, setJenisPelaksanaan] = useState<JenisPelaksanaan | 'all'>('all');
   const [skemaKontrak, setSkemaKontrak] = useState<SkemaKontrak | 'all'>('all');
@@ -94,6 +103,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
     if (!isOpen) return;
     setPrintMode(initialState?.mode || (initialState?.selectedPaketId ? 'kartu' : 'rekap'));
     setSelectedPaketId(initialState?.selectedPaketId || 'all');
+    setKodeRekening(initialState?.kodeRekening ?? 'all');
     setTahunAnggaran(initialState?.tahunAnggaran ?? 'all');
     setJenisPelaksanaan(initialState?.jenisPelaksanaan ?? 'all');
     setSkemaKontrak(initialState?.skemaKontrak ?? 'all');
@@ -107,12 +117,17 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
 
   const availableYears = useMemo(() => getAvailableTahunAnggaran(paketList), [paketList]);
   const availablePics = useMemo(() => getAvailablePicNames(paketList), [paketList]);
+  const rekeningFilterOptions = useMemo(
+    () => getAvailableKodeRekeningOptions(paketList, rekeningList),
+    [paketList, rekeningList]
+  );
 
   const filteredList = useMemo(
     () =>
       filterPaketPekerjaan(
         paketList,
         {
+          kodeRekening,
           tahunAnggaran,
           jenisPelaksanaan,
           skemaKontrak,
@@ -123,10 +138,13 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
           picNama,
           searchQuery,
         },
-        todayIso
+        todayIso,
+        rekeningList
       ),
     [
       paketList,
+      rekeningList,
+      kodeRekening,
       tahunAnggaran,
       jenisPelaksanaan,
       skemaKontrak,
@@ -150,21 +168,37 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
 
   const activeItems = printMode === 'kartu' ? printableKartuList : filteredList;
   const stats = useMemo(
-    () => calculatePekerjaanStats(activeItems, todayIso),
-    [activeItems, todayIso]
+    () => calculatePekerjaanStats(activeItems, todayIso, rekeningList),
+    [activeItems, todayIso, rekeningList]
   );
   const tahunSummaries = useMemo(
-    () => summarizePaketByTahunAnggaran(paketList, todayIso),
-    [paketList, todayIso]
+    () => summarizePaketByTahunAnggaran(paketList, todayIso, rekeningList),
+    [paketList, todayIso, rekeningList]
   );
   const jenisSummaries = useMemo(
-    () => summarizePaketByJenis(filteredList, todayIso),
-    [filteredList, todayIso]
+    () => summarizePaketByJenis(filteredList, todayIso, rekeningList),
+    [filteredList, todayIso, rekeningList]
   );
+  const rekeningPrintSummaries = useMemo(
+    () =>
+      summarizeRekeningAnggaran(rekeningList, activeItems, todayIso).filter(
+        (s) => s.jumlahPaket > 0
+      ),
+    [rekeningList, activeItems, todayIso]
+  );
+  const sharedCountByDedupeKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of activeItems) {
+      const info = resolvePaketPaguInfo(p, rekeningList);
+      counts.set(info.dedupeKey, (counts.get(info.dedupeKey) || 0) + 1);
+    }
+    return counts;
+  }, [activeItems, rekeningList]);
 
   if (!isOpen) return null;
 
   const hasActiveFilters =
+    kodeRekening !== 'all' ||
     tahunAnggaran !== 'all' ||
     jenisPelaksanaan !== 'all' ||
     skemaKontrak !== 'all' ||
@@ -178,6 +212,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
 
   const handleResetFilters = () => {
     setSelectedPaketId('all');
+    setKodeRekening('all');
     setTahunAnggaran('all');
     setJenisPelaksanaan('all');
     setSkemaKontrak('all');
@@ -204,6 +239,9 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
       | 'selesai'
   ) => {
     setSelectedPaketId('all');
+    if (preset === 'all') {
+      setKodeRekening('all');
+    }
     setJenisPelaksanaan('all');
     setMekanismePencairan('all');
     setPicNama('all');
@@ -237,6 +275,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   };
 
   const activeFilterLabels: string[] = [];
+  if (kodeRekening !== 'all') {
+    const matchedOpt = rekeningFilterOptions.find((o) => o.key === kodeRekening);
+    activeFilterLabels.push(
+      `Kode Rekening: ${matchedOpt?.kodeRekening || kodeRekening}`
+    );
+  }
   if (tahunAnggaran !== 'all') activeFilterLabels.push(`TA ${tahunAnggaran}`);
   if (jenisPelaksanaan !== 'all') activeFilterLabels.push(`Pelaksanaan: ${jenisPelaksanaan}`);
   if (skemaKontrak !== 'all') activeFilterLabels.push(`Skema Kontrak: ${skemaKontrak}`);
@@ -266,7 +310,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
   };
 
   const handleExportCsv = () => {
-    const csv = buildPekerjaanCsvContent(activeItems, todayIso);
+    const csv = buildPekerjaanCsvContent(activeItems, todayIso, rekeningList);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -509,7 +553,27 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
             })}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {rekeningFilterOptions.length > 0 && (
+              <select
+                aria-label="Filter cetak kode rekening"
+                value={kodeRekening}
+                onChange={(e) => {
+                  setSelectedPaketId('all');
+                  setKodeRekening(e.target.value);
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-medium text-slate-800"
+              >
+                <option value="all">Semua Kode Rekening</option>
+                {rekeningFilterOptions.map((opt) => (
+                  <option key={opt.key} value={opt.key}>
+                    {opt.kodeRekening}
+                    {opt.uraian ? ` — ${opt.uraian}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               aria-label="Filter cetak tahun anggaran"
               value={tahunAnggaran === 'all' ? 'all' : String(tahunAnggaran)}
@@ -797,6 +861,81 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                     </div>
                   )}
 
+                  {rekeningPrintSummaries.length > 0 && (
+                    <div className="space-y-1.5 print:break-inside-avoid">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-wide">
+                          Ringkasan Pagu Per Kode Rekening (1 Rekening = 1 Pagu Anggaran)
+                        </h4>
+                        <span className="text-[10px] text-slate-500">
+                          Pagu dihitung 1x per kode rekening meskipun dipakai beberapa kegiatan
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto border border-slate-800">
+                        <table className="w-full text-left border-collapse text-[10px]">
+                          <thead>
+                            <tr className="bg-slate-100 border-b border-slate-800 font-bold text-slate-900 uppercase">
+                              <th className="border-r border-slate-800 py-1.5 px-2.5">
+                                Kode Rekening &amp; Uraian
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2 text-center">
+                                TA
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2 text-right">
+                                Kegiatan
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Pagu (1x)
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Total Kontrak
+                              </th>
+                              <th className="border-r border-slate-800 py-1.5 px-2.5 text-right">
+                                Sisa Pagu
+                              </th>
+                              <th className="py-1.5 px-2 text-right">Serapan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-300">
+                            {rekeningPrintSummaries.map((row) => (
+                              <tr key={row.rekening.id}>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5">
+                                  <span className="font-mono font-bold text-slate-900">
+                                    {row.rekening.kodeRekening}
+                                  </span>{' '}
+                                  — <span className="text-slate-700">{row.rekening.uraian}</span>
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2 text-center font-mono tabular-nums">
+                                  {row.rekening.tahunAnggaran}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2 text-right font-mono tabular-nums">
+                                  {row.jumlahPaket}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono font-bold tabular-nums whitespace-nowrap">
+                                  {formatRupiah(row.rekening.paguAnggaran)}
+                                </td>
+                                <td className="border-r border-slate-800 py-1.5 px-2.5 text-right font-mono text-emerald-800 tabular-nums whitespace-nowrap">
+                                  {formatRupiah(row.totalNilaiKontrak)}
+                                </td>
+                                <td
+                                  className={`border-r border-slate-800 py-1.5 px-2.5 text-right font-mono font-semibold tabular-nums whitespace-nowrap ${
+                                    row.isOverBudget ? 'text-rose-700' : 'text-slate-900'
+                                  }`}
+                                >
+                                  {row.isOverBudget ? '-' : ''}
+                                  {formatRupiah(Math.abs(row.sisaPagu))}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono font-semibold tabular-nums">
+                                  {row.serapanPersen}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   {filteredList.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 print:grid-cols-2 print:break-inside-avoid">
                       {jenisSummaries.map((item) => (
@@ -850,6 +989,8 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                     {activeItems.map((paket, idx) => {
                       const progress = computePaketProgress(paket, todayIso);
                       const terminInfo = summarizeTerminPencairan(paket);
+                      const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+                      const sharedCount = sharedCountByDedupeKey.get(paguInfo.dedupeKey) || 1;
                       return (
                         <React.Fragment key={paket.id}>
                           <tr className="align-top print:break-inside-avoid">
@@ -860,6 +1001,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               {getPaketTahunAnggaran(paket)}
                             </td>
                             <td className="border border-slate-800 p-2">
+                              {paguInfo.hasRekening && paguInfo.kodeRekening && (
+                                <div className="font-mono text-[9px] font-bold text-emerald-900 mb-0.5">
+                                  Rek: {paguInfo.kodeRekening}
+                                  {paguInfo.namaRekening ? ` (${paguInfo.namaRekening})` : ''}
+                                </div>
+                              )}
                               <div className="font-bold text-slate-900">{paket.namaKegiatan}</div>
                               <div className="text-slate-700 mt-0.5">{paket.subKegiatan}</div>
                               {paket.pekerjaan && (
@@ -891,7 +1038,12 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               )}
                             </td>
                             <td className="border border-slate-800 p-2 text-right font-mono font-bold tabular-nums whitespace-nowrap">
-                              {formatRupiah(paket.nilaiAnggaran)}
+                              <div>{formatRupiah(paguInfo.paguAnggaran)}</div>
+                              {paguInfo.hasRekening && sharedCount > 1 && (
+                                <div className="font-sans text-[8px] font-medium text-slate-600">
+                                  Pagu Bersama ({sharedCount} keg.)
+                                </div>
+                              )}
                             </td>
                             <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                               {typeof paket.nilaiKontrak === 'number'
@@ -902,6 +1054,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               <div className="font-bold whitespace-nowrap">
                                 {terminInfo.summaryLabel}
                               </div>
+                              {terminInfo.sudahCount > 0 && terminInfo.hasNominalCair && (
+                                <div className="font-mono text-[9px] font-bold text-emerald-800 mt-0.5 tabular-nums whitespace-nowrap">
+                                  Sudah Dibayar: {formatRupiah(terminInfo.totalNilaiCair)}
+                                </div>
+                              )}
                               <div className="text-[9px] text-slate-700 mt-0.5">
                                 {terminInfo.skemaPembayaran}
                                 {paket.mekanismePencairan ? ` · ${paket.mekanismePencairan}` : ''}
@@ -910,15 +1067,21 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                                 Array.isArray(paket.terminPencairan) &&
                                 paket.terminPencairan.length > 0 && (
                                   <div className="mt-1 space-y-0.5 text-[9px] text-slate-700">
-                                    {paket.terminPencairan.map((tr) => (
-                                      <div key={tr.id} className="leading-tight">
-                                        {tr.urutan}. {tr.nama}:{' '}
-                                        <span className="font-semibold">{tr.status}</span>
-                                        {typeof tr.persentase === 'number'
-                                          ? ` (${tr.persentase}%)`
-                                          : ''}
-                                      </div>
-                                    ))}
+                                    {paket.terminPencairan.map((tr) => {
+                                      const nom = resolveTerminNominal(tr, paket.nilaiKontrak);
+                                      return (
+                                        <div key={tr.id} className="leading-tight">
+                                          {tr.urutan}. {tr.nama}:{' '}
+                                          <span className="font-semibold">{tr.status}</span>
+                                          {typeof tr.persentase === 'number'
+                                            ? ` (${tr.persentase}%)`
+                                            : ''}
+                                          {tr.status === 'Sudah' && nom !== undefined
+                                            ? ` · ${formatRupiah(nom)}`
+                                            : ''}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
                             </td>
@@ -966,7 +1129,11 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                   <tfoot>
                     <tr className="bg-slate-100 font-bold text-slate-900">
                       <td colSpan={4} className="border border-slate-800 p-2 text-right uppercase">
-                        Jumlah Total ({stats.totalPaket} Paket)
+                        Jumlah Total ({stats.totalPaket} Kegiatan
+                        {stats.jumlahRekeningUnik > 0
+                          ? ` · ${stats.jumlahRekeningUnik} Rekening Unik`
+                          : ''}
+                        )
                       </td>
                       <td className="border border-slate-800 p-2 text-right font-mono tabular-nums whitespace-nowrap">
                         {formatRupiah(stats.totalAnggaran)}
@@ -975,9 +1142,31 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                         {stats.totalNilaiKontrak > 0 ? formatRupiah(stats.totalNilaiKontrak) : '-'}
                       </td>
                       <td colSpan={3} className="border border-slate-800 p-2 font-mono tabular-nums">
-                        Sudah Cair: {stats.sudahCairCount} · Belum: {stats.belumCairCount}
+                        <div>
+                          Sudah Cair: {stats.sudahCairCount} · Belum: {stats.belumCairCount}
+                        </div>
+                        {stats.totalNilaiSudahCair > 0 && (
+                          <div className="text-[9px] text-emerald-800 mt-0.5">
+                            Total Sudah Dibayar: {formatRupiah(stats.totalNilaiSudahCair)}
+                          </div>
+                        )}
                       </td>
                     </tr>
+                    {stats.jumlahRekeningUnik > 0 && (
+                      <tr className="bg-slate-50 text-[9px] text-slate-700">
+                        <td colSpan={9} className="border border-slate-800 px-2.5 py-1.5">
+                          <span className="font-semibold">Catatan Perhitungan Pagu:</span> Total Pagu
+                          Anggaran ({formatRupiah(stats.totalAnggaran)}) dihitung 1x per Kode
+                          Rekening dan tidak digandakan untuk kegiatan yang berbagi rekening yang
+                          sama. Sisa Pagu Total:{' '}
+                          <span className="font-mono font-bold">
+                            {stats.sisaPaguTotal < 0 ? '-' : ''}
+                            {formatRupiah(Math.abs(stats.sisaPaguTotal))}
+                          </span>
+                          .
+                        </td>
+                      </tr>
+                    )}
                   </tfoot>
                 </table>
               </div>
@@ -1027,6 +1216,7 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
               {activeItems.map((paket, cardIdx) => {
                 const progress = computePaketProgress(paket, todayIso);
                 const terminInfo = summarizeTerminPencairan(paket);
+                const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
 
                 return (
                   <div
@@ -1069,16 +1259,28 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                       <tbody>
                         <tr>
                           <td className="border border-slate-800 p-2 font-bold bg-slate-50 w-1/5">
+                            Kode Rekening
+                          </td>
+                          <td colSpan={3} className="border border-slate-800 p-2 font-mono">
+                            {paguInfo.hasRekening && paguInfo.kodeRekening
+                              ? `${paguInfo.kodeRekening}${
+                                  paguInfo.namaRekening ? ` — ${paguInfo.namaRekening}` : ''
+                                }`
+                              : '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-800 p-2 font-bold bg-slate-50 w-1/5">
                             Nama Kegiatan
                           </td>
                           <td className="border border-slate-800 p-2 w-[30%] font-semibold">
                             {paket.namaKegiatan}
                           </td>
                           <td className="border border-slate-800 p-2 font-bold bg-slate-50 w-1/5">
-                            Pagu Anggaran
+                            Pagu Anggaran Rekening
                           </td>
                           <td className="border border-slate-800 p-2 w-[30%] font-mono font-bold tabular-nums">
-                            {formatRupiah(paket.nilaiAnggaran)}
+                            {formatRupiah(paguInfo.paguAnggaran)}
                           </td>
                         </tr>
                         <tr>
@@ -1124,6 +1326,9 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                           </td>
                           <td className="border border-slate-800 p-2 font-semibold">
                             {terminInfo.summaryLabel}
+                            {terminInfo.sudahCount > 0 && terminInfo.hasNominalCair
+                              ? ` · Dibayar ${formatRupiah(terminInfo.totalNilaiCair)}`
+                              : ''}
                             {paket.mekanismePencairan ? ` · ${paket.mekanismePencairan}` : ''}
                           </td>
                         </tr>
@@ -1160,9 +1365,16 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                       Array.isArray(paket.terminPencairan) &&
                       paket.terminPencairan.length > 0 && (
                         <div className="space-y-1.5 print:break-inside-avoid">
-                          <div className="text-[11px] font-bold uppercase text-slate-900">
-                            Rincian Termin Pembayaran ({terminInfo.sudahCount}/
-                            {terminInfo.totalTermin} Termin Cair)
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold uppercase text-slate-900">
+                            <span>
+                              Rincian Termin Pembayaran ({terminInfo.sudahCount}/
+                              {terminInfo.totalTermin} Termin Cair)
+                            </span>
+                            {terminInfo.sudahCount > 0 && terminInfo.hasNominalCair && (
+                              <span className="font-mono text-emerald-800">
+                                Total Sudah Dibayar: {formatRupiah(terminInfo.totalNilaiCair)}
+                              </span>
+                            )}
                           </div>
                           <table className="w-full border-collapse border border-slate-800 text-[10px]">
                             <thead>
@@ -1185,34 +1397,51 @@ export const ModalCetakPekerjaan: React.FC<ModalCetakPekerjaanProps> = ({
                               </tr>
                             </thead>
                             <tbody>
-                              {paket.terminPencairan.map((tr) => (
-                                <tr key={tr.id}>
-                                  <td className="border border-slate-800 p-1.5 text-center font-mono">
-                                    {tr.urutan}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 font-medium">
-                                    {tr.nama}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
-                                    {typeof tr.persentase === 'number' ? `${tr.persentase}%` : '-'}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
-                                    {typeof tr.nilaiRupiah === 'number'
-                                      ? formatRupiah(tr.nilaiRupiah)
-                                      : '-'}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 text-center font-mono">
-                                    {tr.tanggalCair ? formatTanggalDdMmYyyy(tr.tanggalCair) : '-'}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 text-center font-bold">
-                                    {tr.status}
-                                  </td>
-                                  <td className="border border-slate-800 p-1.5 text-slate-700">
-                                    {tr.catatan || '-'}
-                                  </td>
-                                </tr>
-                              ))}
+                              {paket.terminPencairan.map((tr) => {
+                                const trNominal = resolveTerminNominal(tr, paket.nilaiKontrak);
+                                return (
+                                  <tr key={tr.id}>
+                                    <td className="border border-slate-800 p-1.5 text-center font-mono">
+                                      {tr.urutan}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 font-medium">
+                                      {tr.nama}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
+                                      {typeof tr.persentase === 'number' ? `${tr.persentase}%` : '-'}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
+                                      {trNominal !== undefined ? formatRupiah(trNominal) : '-'}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 text-center font-mono">
+                                      {tr.tanggalCair ? formatTanggalDdMmYyyy(tr.tanggalCair) : '-'}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 text-center font-bold">
+                                      {tr.status}
+                                    </td>
+                                    <td className="border border-slate-800 p-1.5 text-slate-700">
+                                      {tr.catatan || '-'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-100 font-bold text-slate-900">
+                                <td colSpan={2} className="border border-slate-800 p-1.5 text-right uppercase">
+                                  Total Sudah Dibayar ({terminInfo.sudahCount}/{terminInfo.totalTermin} Termin)
+                                </td>
+                                <td className="border border-slate-800 p-1.5 text-right font-mono tabular-nums">
+                                  {terminInfo.totalPersenCair > 0 ? `${terminInfo.totalPersenCair}%` : '-'}
+                                </td>
+                                <td className="border border-slate-800 p-1.5 text-right font-mono text-emerald-800 tabular-nums">
+                                  {terminInfo.hasNominalCair
+                                    ? formatRupiah(terminInfo.totalNilaiCair)
+                                    : '-'}
+                                </td>
+                                <td colSpan={3} className="border border-slate-800 p-1.5" />
+                              </tr>
+                            </tfoot>
                           </table>
                         </div>
                       )}

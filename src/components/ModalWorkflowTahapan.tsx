@@ -17,6 +17,7 @@ import {
   MekanismePencairan,
   PaketPekerjaan,
   Personel,
+  RekeningAnggaran,
   SkemaPembayaran,
   StatusPencairan,
   StatusTahapPekerjaan,
@@ -39,8 +40,10 @@ import {
   normalizeTahapanOrder,
   normalizeTerminOrder,
   parseRupiahInput,
+  resolvePaketPaguInfo,
   resolvePaketTanggalSelesai,
   resolveStatusPencairanFromTermin,
+  summarizeRekeningAnggaran,
   summarizeTerminPencairan,
 } from '../utils/pekerjaanLogic';
 
@@ -48,6 +51,8 @@ interface ModalWorkflowTahapanProps {
   isOpen: boolean;
   onClose: () => void;
   paket: PaketPekerjaan | null;
+  rekeningList?: RekeningAnggaran[];
+  paketList?: PaketPekerjaan[];
   currentUser: Personel;
   onSaveProgress: (
     paketId: string,
@@ -67,6 +72,8 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
   isOpen,
   onClose,
   paket,
+  rekeningList = [],
+  paketList = [],
   currentUser,
   onSaveProgress,
   onOpenEditPaket,
@@ -110,6 +117,10 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
   if (!isOpen || !paket) return null;
 
   const todayIso = getTodayLocalIso();
+  const paguInfo = resolvePaketPaguInfo(paket, rekeningList);
+  const rekeningSummary = paguInfo.rekening
+    ? summarizeRekeningAnggaran([paguInfo.rekening], paketList, todayIso)[0] || null
+    : null;
   const liveProgress = computePaketProgress(
     {
       tahapan,
@@ -251,6 +262,7 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
     skemaPembayaran,
     statusPencairan,
     terminPencairan,
+    nilaiKontrak: paket.nilaiKontrak,
   });
 
   const handleSave = async () => {
@@ -342,6 +354,16 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
         <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-2.5 shrink-0 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600">
+              {paguInfo.hasRekening && paguInfo.kodeRekening && (
+                <>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 font-mono font-semibold text-emerald-800">
+                    {paguInfo.kodeRekening}
+                  </span>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                </>
+              )}
               <span className="font-semibold text-slate-900">{paket.jenisPelaksanaan}</span>
               {paket.skemaKontrak && (
                 <>
@@ -369,8 +391,33 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                 ·
               </span>
               <span className="font-mono font-bold text-slate-900 tabular-nums">
-                Pagu: {formatRupiah(paket.nilaiAnggaran)}
+                Pagu: {formatRupiah(paguInfo.paguAnggaran)}
               </span>
+              {rekeningSummary && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${
+                      rekeningSummary.isOverBudget ? 'text-rose-700' : 'text-emerald-700'
+                    }`}
+                  >
+                    Sisa Pagu Rek: {rekeningSummary.isOverBudget ? '-' : ''}
+                    {formatRupiah(Math.abs(rekeningSummary.sisaPagu))}
+                  </span>
+                </>
+              )}
+              {typeof paket.hps === 'number' && (
+                <>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  <span className="font-mono font-semibold text-slate-800 tabular-nums">
+                    HPS: {formatRupiah(paket.hps)}
+                  </span>
+                </>
+              )}
               {typeof paket.nilaiKontrak === 'number' && (
                 <>
                   <span aria-hidden="true" className="text-slate-300">
@@ -493,7 +540,14 @@ export const ModalWorkflowTahapan: React.FC<ModalWorkflowTahapanProps> = ({
                     Ringkasan Termin Cair
                   </div>
                   <div className="px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 font-semibold text-xs tabular-nums">
-                    {terminSummary.summaryLabel} ({terminSummary.totalPersenCair}%)
+                    <div>
+                      {terminSummary.summaryLabel} ({terminSummary.totalPersenCair}%)
+                    </div>
+                    {terminSummary.sudahCount > 0 && terminSummary.hasNominalCair && (
+                      <div className="font-mono text-[11px] text-emerald-700 mt-0.5">
+                        Sudah Dibayar: {formatRupiah(terminSummary.totalNilaiCair)}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
